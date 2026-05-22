@@ -1,4 +1,4 @@
-"""Talk to Your Data Slackbot package."""
+"""Data Assistant package."""
 
 __version__ = "0.1.0"
 

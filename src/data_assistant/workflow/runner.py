@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import duckdb
 
-import data_slackbot.data_assistant.data_preparation as data_preparation
-import data_slackbot.data_assistant.query_planner as query_planner
-import data_slackbot.data_assistant.question_interpreter as question_interpreter
-import data_slackbot.data_assistant.reasoning_layer as reasoning_layer
-import data_slackbot.data_assistant.response_composer as response_composer
-import data_slackbot.data_assistant.semantic_layer.loader as semantic_layer_loader
-import data_slackbot.data_assistant.semantic_layer.schema as schema
-import data_slackbot.data_assistant.semantic_router as semantic_router
-import data_slackbot.data_assistant.workflow.contracts as contracts
+import data_assistant.data_preparation as data_preparation
+import data_assistant.query_planner as query_planner
+import data_assistant.question_interpreter as question_interpreter
+import data_assistant.reasoning_layer as reasoning_layer
+import data_assistant.response_composer as response_composer
+import data_assistant.semantic_layer.loader as semantic_layer_loader
+import data_assistant.semantic_layer.schema as schema
+import data_assistant.semantic_router as semantic_router
+import data_assistant.workflow.contracts as contracts
 
 
 def run_data_assistant(

@@ -1,7 +1,7 @@
 import duckdb
 
-import data_slackbot.data_assistant.workflow.contracts as contracts
-import data_slackbot.data_assistant.workflow.runner as workflow_runner
+import data_assistant.workflow.contracts as contracts
+import data_assistant.workflow.runner as workflow_runner
 
 
 def test_response_composer_returns_plain_text_with_trust_summary(

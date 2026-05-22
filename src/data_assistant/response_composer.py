@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import decimal
 
-import data_slackbot.data_assistant.workflow.contracts as contracts
+import data_assistant.workflow.contracts as contracts
 
 
 def compose_final_response(

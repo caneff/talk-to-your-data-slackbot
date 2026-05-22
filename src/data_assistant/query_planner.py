@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import data_slackbot.data_assistant.semantic_layer.loader as semantic_layer_loader
-import data_slackbot.data_assistant.semantic_layer.schema as schema
-import data_slackbot.data_assistant.workflow.contracts as contracts
+import data_assistant.semantic_layer.loader as semantic_layer_loader
+import data_assistant.semantic_layer.schema as schema
+import data_assistant.workflow.contracts as contracts
 
 
 def create_data_request(

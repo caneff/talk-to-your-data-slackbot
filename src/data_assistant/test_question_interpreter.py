@@ -1,8 +1,8 @@
 import datetime
 
-import data_slackbot.data_assistant.question_interpreter as question_interpreter
-import data_slackbot.data_assistant.semantic_layer.schema as schema
-import data_slackbot.data_assistant.workflow.contracts as contracts
+import data_assistant.question_interpreter as question_interpreter
+import data_assistant.semantic_layer.schema as schema
+import data_assistant.workflow.contracts as contracts
 
 
 def test_canonical_data_question_creates_business_question_frame(

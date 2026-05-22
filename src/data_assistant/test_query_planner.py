@@ -1,8 +1,8 @@
 import datetime
 
-import data_slackbot.data_assistant.query_planner as query_planner
-import data_slackbot.data_assistant.semantic_layer.schema as schema
-import data_slackbot.data_assistant.workflow.contracts as contracts
+import data_assistant.query_planner as query_planner
+import data_assistant.semantic_layer.schema as schema
+import data_assistant.workflow.contracts as contracts
 
 
 def test_data_request_asks_for_total_revenue_grouped_by_region(

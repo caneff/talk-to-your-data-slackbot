@@ -6,7 +6,7 @@ import decimal
 
 import duckdb
 
-import data_slackbot.data_assistant.workflow.contracts as contracts
+import data_assistant.workflow.contracts as contracts
 
 
 def prepare_data(
