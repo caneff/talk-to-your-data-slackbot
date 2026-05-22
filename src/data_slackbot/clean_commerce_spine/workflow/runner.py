@@ -4,17 +4,13 @@ from __future__ import annotations
 
 import duckdb
 
-from data_slackbot.clean_commerce_spine import (
-    data_preparation,
-    query_planner,
-    question_interpreter,
-    reasoning_layer,
-    response_composer,
-    semantic_router,
-)
-from data_slackbot.clean_commerce_spine import (
-    semantic_layer as semantic_layer_module,
-)
+import data_slackbot.clean_commerce_spine.data_preparation as data_preparation
+import data_slackbot.clean_commerce_spine.query_planner as query_planner
+import data_slackbot.clean_commerce_spine.question_interpreter as question_interpreter
+import data_slackbot.clean_commerce_spine.reasoning_layer as reasoning_layer
+import data_slackbot.clean_commerce_spine.response_composer as response_composer
+import data_slackbot.clean_commerce_spine.semantic_layer as semantic_layer_module
+import data_slackbot.clean_commerce_spine.semantic_router as semantic_router
 from data_slackbot.clean_commerce_spine.semantic_layer import schema
 from data_slackbot.clean_commerce_spine.workflow.contracts import (
     DataAssistantRun,
