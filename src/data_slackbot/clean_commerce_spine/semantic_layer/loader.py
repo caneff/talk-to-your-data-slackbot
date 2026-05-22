@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import collections.abc
-import datetime
 import pathlib
-import typing
 
 import yaml
 
 from data_slackbot.clean_commerce_spine.semantic_layer import schema
 
 DEFAULT_SEMANTIC_LAYER_PATH = pathlib.Path("semantic_layer")
-YamlMapping: typing.TypeAlias = collections.abc.Mapping[str, object]
 
 
 def load_semantic_layer(
@@ -78,114 +74,12 @@ def tables_for_dataset(
 
 
 def _load_dataset(path: pathlib.Path) -> schema.CuratedDataset:
-    data = _load_yaml_mapping(path)
-    freshness = _required_mapping(data, "freshness")
-    return schema.CuratedDataset(
-        dataset_id=_required_str(data, "id"),
-        name=_required_str(data, "name"),
-        tables=_required_str_tuple(data, "tables"),
-        information_types=_required_str_tuple(data, "information_types"),
-        freshness=schema.Freshness(
-            as_of=_required_date(freshness, "as_of"),
-            description=_required_str(freshness, "description"),
-        ),
-        example_questions=_required_str_tuple(data, "example_questions"),
-    )
+    return schema.CuratedDataset.model_validate(_load_yaml(path))
 
 
 def _load_table(path: pathlib.Path) -> schema.DatasetTable:
-    data = _load_yaml_mapping(path)
-    return schema.DatasetTable(
-        table_id=_required_str(data, "id"),
-        dataset_id=_required_str(data, "dataset_id"),
-        description=_required_str(data, "description"),
-        date_column=_required_str(data, "date_column"),
-        columns=tuple(
-            schema.TableColumn(
-                column_id=_required_str(column, "id"),
-                data_type=_required_str(column, "type"),
-                semantic_role=_optional_str(column, "semantic_role"),
-            )
-            for column in _required_mapping_tuple(data, "columns")
-        ),
-        metrics=tuple(
-            schema.Metric(
-                metric_id=_required_str(metric, "id"),
-                label=_required_str(metric, "label"),
-                expression=_required_str(metric, "expression"),
-            )
-            for metric in _required_mapping_tuple(data, "metrics")
-        ),
-        dimensions=tuple(
-            schema.Dimension(
-                dimension_id=_required_str(dimension, "id"),
-                label=_required_str(dimension, "label"),
-                column=_required_str(dimension, "column"),
-            )
-            for dimension in _required_mapping_tuple(data, "dimensions")
-        ),
-    )
+    return schema.DatasetTable.model_validate(_load_yaml(path))
 
 
-def _load_yaml_mapping(path: pathlib.Path) -> YamlMapping:
-    loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if not isinstance(loaded, collections.abc.Mapping):
-        msg = f"Expected YAML mapping in {path}"
-        raise ValueError(msg)
-    return typing.cast(YamlMapping, loaded)
-
-
-def _required_mapping(data: YamlMapping, key: str) -> YamlMapping:
-    value = data.get(key)
-    if not isinstance(value, collections.abc.Mapping):
-        msg = f"Expected mapping for {key}"
-        raise ValueError(msg)
-    return typing.cast(YamlMapping, value)
-
-
-def _required_mapping_tuple(data: YamlMapping, key: str) -> tuple[YamlMapping, ...]:
-    values = _required_sequence(data, key)
-    mappings: list[YamlMapping] = []
-    for value in values:
-        if not isinstance(value, collections.abc.Mapping):
-            msg = f"Expected mappings in {key}"
-            raise ValueError(msg)
-        mappings.append(typing.cast(YamlMapping, value))
-    return tuple(mappings)
-
-
-def _required_str_tuple(data: YamlMapping, key: str) -> tuple[str, ...]:
-    values = _required_sequence(data, key)
-    if not all(isinstance(value, str) for value in values):
-        msg = f"Expected strings in {key}"
-        raise ValueError(msg)
-    return tuple(typing.cast(collections.abc.Sequence[str], values))
-
-
-def _required_sequence(data: YamlMapping, key: str) -> collections.abc.Sequence[object]:
-    value = data.get(key)
-    if not isinstance(value, collections.abc.Sequence) or isinstance(value, str):
-        msg = f"Expected sequence for {key}"
-        raise ValueError(msg)
-    return typing.cast(collections.abc.Sequence[object], value)
-
-
-def _required_str(data: YamlMapping, key: str) -> str:
-    value = data.get(key)
-    if not isinstance(value, str):
-        msg = f"Expected string for {key}"
-        raise ValueError(msg)
-    return value
-
-
-def _optional_str(data: YamlMapping, key: str) -> str | None:
-    value = data.get(key)
-    if value is None or isinstance(value, str):
-        return value
-    msg = f"Expected optional string for {key}"
-    raise ValueError(msg)
-
-
-def _required_date(data: YamlMapping, key: str) -> datetime.date:
-    value = _required_str(data, key)
-    return datetime.date.fromisoformat(value)
+def _load_yaml(path: pathlib.Path) -> object:
+    return yaml.safe_load(path.read_text(encoding="utf-8"))

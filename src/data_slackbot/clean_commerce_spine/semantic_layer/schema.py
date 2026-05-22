@@ -2,23 +2,26 @@
 
 from __future__ import annotations
 
-import dataclasses
 import datetime
 
+import pydantic
 
-@dataclasses.dataclass(frozen=True)
-class Freshness:
+
+class _SemanticLayerModel(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(frozen=True, populate_by_name=True)
+
+
+class Freshness(_SemanticLayerModel):
     """Freshness context for a Curated Dataset."""
 
     as_of: datetime.date
     description: str
 
 
-@dataclasses.dataclass(frozen=True)
-class CuratedDataset:
+class CuratedDataset(_SemanticLayerModel):
     """Approved business data product available through the Semantic Layer."""
 
-    dataset_id: str
+    dataset_id: str = pydantic.Field(validation_alias="id")
     name: str
     tables: tuple[str, ...]
     information_types: tuple[str, ...]
@@ -26,38 +29,34 @@ class CuratedDataset:
     example_questions: tuple[str, ...]
 
 
-@dataclasses.dataclass(frozen=True)
-class TableColumn:
+class TableColumn(_SemanticLayerModel):
     """Physical column available in a Dataset Table."""
 
-    column_id: str
-    data_type: str
-    semantic_role: str | None
+    column_id: str = pydantic.Field(validation_alias="id")
+    data_type: str = pydantic.Field(validation_alias="type")
+    semantic_role: str | None = None
 
 
-@dataclasses.dataclass(frozen=True)
-class Metric:
+class Metric(_SemanticLayerModel):
     """Business metric defined on a Dataset Table."""
 
-    metric_id: str
+    metric_id: str = pydantic.Field(validation_alias="id")
     label: str
     expression: str
 
 
-@dataclasses.dataclass(frozen=True)
-class Dimension:
+class Dimension(_SemanticLayerModel):
     """Business dimension defined on a Dataset Table."""
 
-    dimension_id: str
+    dimension_id: str = pydantic.Field(validation_alias="id")
     label: str
     column: str
 
 
-@dataclasses.dataclass(frozen=True)
-class DatasetTable:
+class DatasetTable(_SemanticLayerModel):
     """Dataset Table definition loaded from the Semantic Layer."""
 
-    table_id: str
+    table_id: str = pydantic.Field(validation_alias="id")
     dataset_id: str
     description: str
     date_column: str
@@ -66,8 +65,7 @@ class DatasetTable:
     dimensions: tuple[Dimension, ...]
 
 
-@dataclasses.dataclass(frozen=True)
-class SemanticLayer:
+class SemanticLayer(_SemanticLayerModel):
     """Semantic Layer definitions loaded from versioned config."""
 
     datasets: tuple[CuratedDataset, ...]
