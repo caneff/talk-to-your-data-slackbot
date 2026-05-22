@@ -21,7 +21,7 @@ def prepare_data(
             sum({_quote_identifier(metric_column)}) as total_revenue
         from {_quote_identifier(data_request.table_id)}
         where {_quote_identifier(data_request.date_column)} >= ?
-          and {_quote_identifier(data_request.date_column)} < ?
+          and {_quote_identifier(data_request.date_column)} <= ?
         group by {_quote_identifier(data_request.dimension_column)}
         order by total_revenue desc, region asc
         limit ?
@@ -30,21 +30,21 @@ def prepare_data(
         select count(*)
         from {_quote_identifier(data_request.table_id)}
         where {_quote_identifier(data_request.date_column)} >= ?
-          and {_quote_identifier(data_request.date_column)} < ?
+          and {_quote_identifier(data_request.date_column)} <= ?
     """
     grouped_results = connection.execute(
         grouped_query,
         (
-            data_request.time_range.start,
-            data_request.time_range.exclusive_end,
+            data_request.time_range.start_date,
+            data_request.time_range.end_date,
             data_request.result_limit,
         ),
     ).fetchall()
     source_row_count = connection.execute(
         count_query,
         (
-            data_request.time_range.start,
-            data_request.time_range.exclusive_end,
+            data_request.time_range.start_date,
+            data_request.time_range.end_date,
         ),
     ).fetchone()
 

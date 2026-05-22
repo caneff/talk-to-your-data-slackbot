@@ -14,12 +14,12 @@ class TimeRange:
     """Business time range used by a Question Frame and Data Request."""
 
     label: str
-    start: datetime.date
-    exclusive_end: datetime.date
+    start_date: datetime.date
+    end_date: datetime.date
 
     def contains(self, value: datetime.date) -> bool:
         """Return whether a date is inside the bounded time range."""
-        return self.start <= value < self.exclusive_end
+        return self.start_date <= value <= self.end_date
 
 
 @dataclasses.dataclass(frozen=True)

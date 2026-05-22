@@ -21,8 +21,8 @@ def interpret_question(question: str) -> contracts.QuestionFrame:
         dimension="region",
         time_range=contracts.TimeRange(
             label="January 2026",
-            start=datetime.date(2026, 1, 1),
-            exclusive_end=datetime.date(2026, 2, 1),
+            start_date=datetime.date(2026, 1, 1),
+            end_date=datetime.date(2026, 1, 31),
         ),
         filters=(),
         unresolved_ambiguities=(),

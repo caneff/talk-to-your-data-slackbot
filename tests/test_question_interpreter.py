@@ -13,8 +13,8 @@ def test_canonical_data_question_creates_business_question_frame(
     assert question_frame.metric == "total revenue"
     assert question_frame.dimension == "region"
     assert question_frame.time_range.label == "January 2026"
-    assert question_frame.time_range.start == datetime.date(2026, 1, 1)
-    assert question_frame.time_range.exclusive_end == datetime.date(2026, 2, 1)
+    assert question_frame.time_range.start_date == datetime.date(2026, 1, 1)
+    assert question_frame.time_range.end_date == datetime.date(2026, 1, 31)
     assert question_frame.filters == ()
     assert question_frame.unresolved_ambiguities == ()
 
