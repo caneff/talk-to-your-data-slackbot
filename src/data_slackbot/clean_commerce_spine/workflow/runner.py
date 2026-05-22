@@ -16,14 +16,18 @@ from data_slackbot.clean_commerce_spine import (
     semantic_layer as semantic_layer_module,
 )
 from data_slackbot.clean_commerce_spine.semantic_layer import schema
-from data_slackbot.clean_commerce_spine.workflow import contracts
+from data_slackbot.clean_commerce_spine.workflow.contracts import (
+    DataAssistantRun,
+    NonAnswer,
+    WorkflowResult,
+)
 
 
 def run_clean_commerce_spine(
     connection: duckdb.DuckDBPyConnection,
     question: str,
     semantic_layer: schema.SemanticLayer | None = None,
-) -> contracts.WorkflowResult:
+) -> WorkflowResult:
     """Run the canonical clean Data Assistant path end to end."""
     active_semantic_layer = (
         semantic_layer or semantic_layer_module.load_semantic_layer()
@@ -32,7 +36,7 @@ def run_clean_commerce_spine(
         question,
         active_semantic_layer,
     )
-    if isinstance(question_frame_result, contracts.NonAnswer):
+    if isinstance(question_frame_result, NonAnswer):
         return question_frame_result
     question_frame = question_frame_result.value
 
@@ -40,7 +44,7 @@ def run_clean_commerce_spine(
         question_frame,
         active_semantic_layer,
     )
-    if isinstance(dataset_selection_result, contracts.NonAnswer):
+    if isinstance(dataset_selection_result, NonAnswer):
         return dataset_selection_result
     dataset_selection = dataset_selection_result.value
 
@@ -49,7 +53,7 @@ def run_clean_commerce_spine(
         dataset_selection,
         active_semantic_layer,
     )
-    if isinstance(data_request_result, contracts.NonAnswer):
+    if isinstance(data_request_result, NonAnswer):
         return data_request_result
     data_request = data_request_result.value
 
@@ -57,7 +61,7 @@ def run_clean_commerce_spine(
     answer_draft = reasoning_layer.draft_answer(prepared_data, active_semantic_layer)
     final_response = response_composer.compose_final_response(answer_draft)
 
-    return contracts.DataAssistantRun(
+    return DataAssistantRun(
         question_frame=question_frame,
         dataset_selection=dataset_selection,
         data_request=data_request,
