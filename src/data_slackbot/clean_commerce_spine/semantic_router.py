@@ -49,12 +49,20 @@ def _dataset_supports_question_frame(
     question_frame: contracts.QuestionFrame,
     semantic_layer: schema.SemanticLayer,
 ) -> bool:
-    try:
-        semantic_layer_module.find_table_for_question_frame(
-            dataset,
-            question_frame,
-            semantic_layer,
+    return any(
+        _table_supports_question_frame(table, question_frame)
+        for table in semantic_layer_module.tables_for_dataset(
+            dataset, semantic_layer
         )
-    except ValueError:
-        return False
-    return True
+    )
+
+
+def _table_supports_question_frame(
+    table: schema.DatasetTable,
+    question_frame: contracts.QuestionFrame,
+) -> bool:
+    has_metric = any(metric.label == question_frame.metric for metric in table.metrics)
+    has_dimension = any(
+        dimension.label == question_frame.dimension for dimension in table.dimensions
+    )
+    return has_metric and has_dimension

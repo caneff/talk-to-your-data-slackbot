@@ -14,9 +14,6 @@ from data_slackbot.clean_commerce_spine.semantic_layer import schema
 DEFAULT_SEMANTIC_LAYER_PATH = pathlib.Path("semantic_layer")
 YamlMapping: typing.TypeAlias = collections.abc.Mapping[str, object]
 
-if typing.TYPE_CHECKING:
-    from data_slackbot.clean_commerce_spine.workflow import contracts
-
 
 def load_semantic_layer(
     path: pathlib.Path = DEFAULT_SEMANTIC_LAYER_PATH,
@@ -80,25 +77,6 @@ def tables_for_dataset(
     )
 
 
-def find_table_for_question_frame(
-    dataset: schema.CuratedDataset,
-    question_frame: contracts.QuestionFrame,
-    semantic_layer: schema.SemanticLayer,
-) -> tuple[schema.DatasetTable, schema.Metric, schema.Dimension]:
-    """Find the table-level metric and dimension for a Question Frame."""
-    for table in tables_for_dataset(dataset, semantic_layer):
-        metric = _find_metric(question_frame.metric, table)
-        dimension = _find_dimension(question_frame.dimension, table)
-        if metric is not None and dimension is not None:
-            return table, metric, dimension
-
-    msg = (
-        f"No Dataset Table in {dataset.dataset_id} supports "
-        f"{question_frame.metric} by {question_frame.dimension}."
-    )
-    raise ValueError(msg)
-
-
 def _load_dataset(path: pathlib.Path) -> schema.CuratedDataset:
     data = _load_yaml_mapping(path)
     freshness = _required_mapping(data, "freshness")
@@ -146,30 +124,6 @@ def _load_table(path: pathlib.Path) -> schema.DatasetTable:
             )
             for dimension in _required_mapping_tuple(data, "dimensions")
         ),
-    )
-
-
-def _find_metric(
-    metric_label: str,
-    table: schema.DatasetTable,
-) -> schema.Metric | None:
-    return next(
-        (metric for metric in table.metrics if metric.label == metric_label),
-        None,
-    )
-
-
-def _find_dimension(
-    dimension_label: str,
-    table: schema.DatasetTable,
-) -> schema.Dimension | None:
-    return next(
-        (
-            dimension
-            for dimension in table.dimensions
-            if dimension.label == dimension_label
-        ),
-        None,
     )
 
 

@@ -4,7 +4,6 @@ from data_slackbot.clean_commerce_spine.semantic_layer.loader import (
     DEFAULT_SEMANTIC_LAYER_PATH,
     find_dataset,
     find_table,
-    find_table_for_question_frame,
     load_semantic_layer,
     tables_for_dataset,
 )
@@ -29,7 +28,6 @@ __all__ = [
     "TableColumn",
     "find_dataset",
     "find_table",
-    "find_table_for_question_frame",
     "load_semantic_layer",
     "tables_for_dataset",
 ]
