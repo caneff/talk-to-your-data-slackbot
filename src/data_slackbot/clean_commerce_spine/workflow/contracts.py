@@ -5,8 +5,11 @@ from __future__ import annotations
 import dataclasses
 import datetime
 import decimal
+import typing
 
 from data_slackbot.clean_commerce_spine.semantic_layer import schema
+
+T = typing.TypeVar("T")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -32,6 +35,26 @@ class QuestionFrame:
     time_range: TimeRange
     filters: tuple[str, ...]
     unresolved_ambiguities: tuple[str, ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class Success(typing.Generic[T]):
+    """Successful stage result."""
+
+    value: T
+
+
+@dataclasses.dataclass(frozen=True)
+class NonAnswer:
+    """Workflow short-circuit when a stage cannot safely proceed."""
+
+    stage: str
+    reason: str
+    unresolved_ambiguities: tuple[str, ...]
+    next_step: str
+
+
+StageResult: typing.TypeAlias = Success[T] | NonAnswer
 
 
 @dataclasses.dataclass(frozen=True)
@@ -108,3 +131,6 @@ class DataAssistantRun:
     prepared_data: PreparedData
     answer_draft: AnswerDraft
     final_response: FinalResponse
+
+
+WorkflowResult: typing.TypeAlias = DataAssistantRun | NonAnswer

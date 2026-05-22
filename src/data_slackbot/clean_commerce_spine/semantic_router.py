@@ -10,7 +10,7 @@ from data_slackbot.clean_commerce_spine.workflow import contracts
 def select_dataset(
     question_frame: contracts.QuestionFrame,
     semantic_layer: schema.SemanticLayer,
-) -> contracts.DatasetSelection:
+) -> contracts.StageResult[contracts.DatasetSelection]:
     """Choose the Curated Dataset that can answer the Question Frame."""
     matches = tuple(
         dataset
@@ -18,15 +18,28 @@ def select_dataset(
         if _dataset_supports_question_frame(dataset, question_frame, semantic_layer)
     )
 
-    if len(matches) != 1:
-        msg = "Expected exactly one matching Curated Dataset."
-        raise ValueError(msg)
+    if not matches:
+        return contracts.NonAnswer(
+            stage="semantic_router",
+            reason="No Curated Dataset safely matches the Question Frame.",
+            unresolved_ambiguities=("curated dataset",),
+            next_step="Ask which approved business data should be used.",
+        )
+    if len(matches) > 1:
+        return contracts.NonAnswer(
+            stage="semantic_router",
+            reason="Multiple Curated Datasets match the Question Frame.",
+            unresolved_ambiguities=("curated dataset",),
+            next_step="Ask which Curated Dataset should be used.",
+        )
 
-    return contracts.DatasetSelection(
-        selected_datasets=matches,
-        match_rationale=(
-            "Commerce Revenue contains the total revenue metric and region "
-            "dimension needed for the January 2026 question."
+    return contracts.Success(
+        contracts.DatasetSelection(
+            selected_datasets=matches,
+            match_rationale=(
+                "Commerce Revenue contains the total revenue metric and region "
+                "dimension needed for the January 2026 question."
+            ),
         ),
     )
 

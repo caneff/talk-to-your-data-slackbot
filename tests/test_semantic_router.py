@@ -1,3 +1,7 @@
+import datetime
+
+from data_slackbot.clean_commerce_spine import semantic_router
+from data_slackbot.clean_commerce_spine.semantic_layer import schema
 from data_slackbot.clean_commerce_spine.workflow import contracts
 
 
@@ -8,4 +12,30 @@ def test_dataset_selection_chooses_one_curated_dataset_with_rationale(
     assert dataset_selection.selected_datasets[0].dataset_id == "commerce"
     assert "total revenue metric and region dimension" in (
         dataset_selection.match_rationale
+    )
+
+
+def test_semantic_router_returns_non_answer_when_no_dataset_matches(
+    active_semantic_layer: schema.SemanticLayer,
+) -> None:
+    question_frame = contracts.QuestionFrame(
+        intent="summarize",
+        metric="gross bookings",
+        dimension="region",
+        time_range=contracts.TimeRange(
+            label="January 2026",
+            start_date=datetime.date(2026, 1, 1),
+            end_date=datetime.date(2026, 1, 31),
+        ),
+        filters=(),
+        unresolved_ambiguities=(),
+    )
+
+    result = semantic_router.select_dataset(question_frame, active_semantic_layer)
+
+    assert result == contracts.NonAnswer(
+        stage="semantic_router",
+        reason="No Curated Dataset safely matches the Question Frame.",
+        unresolved_ambiguities=("curated dataset",),
+        next_step="Ask which approved business data should be used.",
     )

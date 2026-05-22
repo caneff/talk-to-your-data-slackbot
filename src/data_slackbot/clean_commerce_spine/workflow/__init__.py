@@ -6,26 +6,32 @@ from data_slackbot.clean_commerce_spine.workflow.contracts import (
     DataRequest,
     DatasetSelection,
     FinalResponse,
+    NonAnswer,
     PreparedData,
     PreparedRevenueByRegion,
     QuestionFrame,
+    StageResult,
+    Success,
     TimeRange,
+    WorkflowResult,
 )
 from data_slackbot.clean_commerce_spine.workflow.runner import (
-    CANONICAL_DATA_QUESTION,
     run_clean_commerce_spine,
 )
 
 __all__ = [
     "AnswerDraft",
-    "CANONICAL_DATA_QUESTION",
     "DataAssistantRun",
     "DataRequest",
     "DatasetSelection",
     "FinalResponse",
+    "NonAnswer",
     "PreparedData",
     "PreparedRevenueByRegion",
     "QuestionFrame",
+    "StageResult",
+    "Success",
     "TimeRange",
+    "WorkflowResult",
     "run_clean_commerce_spine",
 ]

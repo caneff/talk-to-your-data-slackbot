@@ -1,13 +1,16 @@
 import duckdb
 
 from data_slackbot.clean_commerce_spine import workflow
+from data_slackbot.clean_commerce_spine.workflow import contracts
 
 
 def test_response_composer_returns_plain_text_with_trust_summary(
     commerce_connection: duckdb.DuckDBPyConnection,
+    canonical_question: str,
 ) -> None:
-    run = workflow.run_clean_commerce_spine(commerce_connection)
+    run = workflow.run_clean_commerce_spine(commerce_connection, canonical_question)
 
+    assert isinstance(run, contracts.DataAssistantRun)
     assert run.final_response.text == (
         "Total revenue in January 2026 was $4,900.00, grouped across 4 regions."
         "\n\n"

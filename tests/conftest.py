@@ -1,4 +1,5 @@
 import collections.abc
+import typing
 
 import duckdb
 import pytest
@@ -12,6 +13,15 @@ from data_slackbot.clean_commerce_spine import (
 )
 from data_slackbot.clean_commerce_spine.semantic_layer import schema
 from data_slackbot.clean_commerce_spine.workflow import contracts
+
+CANONICAL_DATA_QUESTION = "What was total revenue by region in January 2026?"
+T = typing.TypeVar("T")
+
+
+def unwrap_stage_result(result: contracts.StageResult[T]) -> T:
+    if isinstance(result, contracts.NonAnswer):
+        raise AssertionError(result)
+    return result.value
 
 
 @pytest.fixture
@@ -46,9 +56,20 @@ def commerce_connection() -> collections.abc.Iterator[duckdb.DuckDBPyConnection]
 
 
 @pytest.fixture
-def question_frame() -> contracts.QuestionFrame:
-    return question_interpreter.interpret_question(
-        question_interpreter.CANONICAL_DATA_QUESTION,
+def canonical_question() -> str:
+    return CANONICAL_DATA_QUESTION
+
+
+@pytest.fixture
+def question_frame(
+    canonical_question: str,
+    active_semantic_layer: schema.SemanticLayer,
+) -> contracts.QuestionFrame:
+    return unwrap_stage_result(
+        question_interpreter.interpret_question(
+            canonical_question,
+            active_semantic_layer,
+        ),
     )
 
 
@@ -57,7 +78,9 @@ def dataset_selection(
     question_frame: contracts.QuestionFrame,
     active_semantic_layer: schema.SemanticLayer,
 ) -> contracts.DatasetSelection:
-    return semantic_router.select_dataset(question_frame, active_semantic_layer)
+    return unwrap_stage_result(
+        semantic_router.select_dataset(question_frame, active_semantic_layer)
+    )
 
 
 @pytest.fixture
@@ -66,10 +89,12 @@ def data_request(
     dataset_selection: contracts.DatasetSelection,
     active_semantic_layer: schema.SemanticLayer,
 ) -> contracts.DataRequest:
-    return query_planner.create_data_request(
-        question_frame,
-        dataset_selection,
-        active_semantic_layer,
+    return unwrap_stage_result(
+        query_planner.create_data_request(
+            question_frame,
+            dataset_selection,
+            active_semantic_layer,
+        ),
     )
 
 
