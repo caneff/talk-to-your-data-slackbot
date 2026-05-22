@@ -7,7 +7,7 @@ import datetime
 import decimal
 import typing
 
-from data_slackbot.clean_commerce_spine.semantic_layer import schema
+import data_slackbot.clean_commerce_spine.semantic_layer.schema as schema
 
 T = typing.TypeVar("T")
 

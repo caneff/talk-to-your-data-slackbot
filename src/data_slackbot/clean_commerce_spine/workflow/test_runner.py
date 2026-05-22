@@ -1,14 +1,17 @@
 import duckdb
 
-from data_slackbot.clean_commerce_spine import workflow
-from data_slackbot.clean_commerce_spine.workflow import contracts
+import data_slackbot.clean_commerce_spine.workflow.contracts as contracts
+import data_slackbot.clean_commerce_spine.workflow.runner as workflow_runner
 
 
 def test_clean_commerce_spine_runs_end_to_end(
     commerce_connection: duckdb.DuckDBPyConnection,
     canonical_question: str,
 ) -> None:
-    run = workflow.run_clean_commerce_spine(commerce_connection, canonical_question)
+    run = workflow_runner.run_clean_commerce_spine(
+        commerce_connection,
+        canonical_question,
+    )
 
     assert isinstance(run, contracts.DataAssistantRun)
     assert run.question_frame.unresolved_ambiguities == ()
@@ -21,7 +24,7 @@ def test_clean_commerce_spine_runs_end_to_end(
 def test_clean_commerce_spine_short_circuits_question_ambiguity(
     commerce_connection: duckdb.DuckDBPyConnection,
 ) -> None:
-    result = workflow.run_clean_commerce_spine(
+    result = workflow_runner.run_clean_commerce_spine(
         commerce_connection,
         "What was total revenue by region?",
     )

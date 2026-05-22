@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import decimal
 
-from data_slackbot.clean_commerce_spine import (
-    semantic_layer as semantic_layer_module,
-)
-from data_slackbot.clean_commerce_spine.semantic_layer import schema
-from data_slackbot.clean_commerce_spine.workflow import contracts
+import data_slackbot.clean_commerce_spine.semantic_layer.loader as semantic_layer_loader
+import data_slackbot.clean_commerce_spine.semantic_layer.schema as schema
+import data_slackbot.clean_commerce_spine.workflow.contracts as contracts
 
 
 def draft_answer(
@@ -16,7 +14,7 @@ def draft_answer(
     semantic_layer: schema.SemanticLayer,
 ) -> contracts.AnswerDraft:
     """Produce an Answer Draft from Prepared Data."""
-    dataset = semantic_layer_module.find_dataset(
+    dataset = semantic_layer_loader.find_dataset(
         prepared_data.request.curated_dataset_id,
         semantic_layer,
     )

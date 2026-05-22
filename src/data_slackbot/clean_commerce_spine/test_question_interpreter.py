@@ -1,8 +1,8 @@
 import datetime
 
-from data_slackbot.clean_commerce_spine import question_interpreter
-from data_slackbot.clean_commerce_spine.semantic_layer import schema
-from data_slackbot.clean_commerce_spine.workflow import contracts
+import data_slackbot.clean_commerce_spine.question_interpreter as question_interpreter
+import data_slackbot.clean_commerce_spine.semantic_layer.schema as schema
+import data_slackbot.clean_commerce_spine.workflow.contracts as contracts
 
 
 def test_canonical_data_question_creates_business_question_frame(

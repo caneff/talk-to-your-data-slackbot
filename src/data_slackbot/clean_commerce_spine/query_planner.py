@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from data_slackbot.clean_commerce_spine import semantic_layer as semantic_layer_module
-from data_slackbot.clean_commerce_spine.semantic_layer import schema
-from data_slackbot.clean_commerce_spine.workflow import contracts
+import data_slackbot.clean_commerce_spine.semantic_layer.loader as semantic_layer_loader
+import data_slackbot.clean_commerce_spine.semantic_layer.schema as schema
+import data_slackbot.clean_commerce_spine.workflow.contracts as contracts
 
 
 def create_data_request(
@@ -67,7 +67,7 @@ def _table_options_for_question_frame(
     semantic_layer: schema.SemanticLayer,
 ) -> tuple[tuple[schema.DatasetTable, schema.Metric, schema.Dimension], ...]:
     options: list[tuple[schema.DatasetTable, schema.Metric, schema.Dimension]] = []
-    for table in semantic_layer_module.tables_for_dataset(dataset, semantic_layer):
+    for table in semantic_layer_loader.tables_for_dataset(dataset, semantic_layer):
         metric = _find_metric(question_frame.metric, table)
         dimension = _find_dimension(question_frame.dimension, table)
         if metric is not None and dimension is not None:

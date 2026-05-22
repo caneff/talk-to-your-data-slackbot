@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from data_slackbot.clean_commerce_spine import semantic_layer as semantic_layer_module
-from data_slackbot.clean_commerce_spine.semantic_layer import schema
-from data_slackbot.clean_commerce_spine.workflow import contracts
+import data_slackbot.clean_commerce_spine.semantic_layer.loader as semantic_layer_loader
+import data_slackbot.clean_commerce_spine.semantic_layer.schema as schema
+import data_slackbot.clean_commerce_spine.workflow.contracts as contracts
 
 
 def select_dataset(
@@ -51,7 +51,7 @@ def _dataset_supports_question_frame(
 ) -> bool:
     return any(
         _table_supports_question_frame(table, question_frame)
-        for table in semantic_layer_module.tables_for_dataset(
+        for table in semantic_layer_loader.tables_for_dataset(
             dataset, semantic_layer
         )
     )

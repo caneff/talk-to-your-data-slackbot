@@ -6,7 +6,7 @@ import pathlib
 
 import yaml
 
-from data_slackbot.clean_commerce_spine.semantic_layer import schema
+import data_slackbot.clean_commerce_spine.semantic_layer.schema as schema
 
 DEFAULT_SEMANTIC_LAYER_PATH = pathlib.Path("semantic_layer")
 

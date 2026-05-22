@@ -4,15 +4,13 @@ import typing
 import duckdb
 import pytest
 
-from data_slackbot.clean_commerce_spine import (
-    data_preparation,
-    query_planner,
-    question_interpreter,
-    semantic_layer,
-    semantic_router,
-)
-from data_slackbot.clean_commerce_spine.semantic_layer import schema
-from data_slackbot.clean_commerce_spine.workflow import contracts
+import data_slackbot.clean_commerce_spine.data_preparation as data_preparation
+import data_slackbot.clean_commerce_spine.query_planner as query_planner
+import data_slackbot.clean_commerce_spine.question_interpreter as question_interpreter
+import data_slackbot.clean_commerce_spine.semantic_layer.loader as semantic_layer_loader
+import data_slackbot.clean_commerce_spine.semantic_layer.schema as schema
+import data_slackbot.clean_commerce_spine.semantic_router as semantic_router
+import data_slackbot.clean_commerce_spine.workflow.contracts as contracts
 
 CANONICAL_DATA_QUESTION = "What was total revenue by region in January 2026?"
 T = typing.TypeVar("T")
@@ -26,7 +24,7 @@ def unwrap_stage_result(result: contracts.StageResult[T]) -> T:
 
 @pytest.fixture
 def active_semantic_layer() -> schema.SemanticLayer:
-    return semantic_layer.load_semantic_layer()
+    return semantic_layer_loader.load_semantic_layer()
 
 
 @pytest.fixture
