@@ -17,7 +17,7 @@ build-backend = "hatchling.build"
 packages = ["src/data_slackbot"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["src"]
 
 [tool.ruff]
 line-length = 88
@@ -31,7 +31,7 @@ pythonVersion = "3.11"
 typeCheckingMode = "strict"
 venvPath = "."
 venv = ".venv"
-include = ["src", "tests"]
+include = ["src"]
 
 [dependency-groups]
 dev = [
