@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from data_slackbot.clean_commerce_spine import contracts
+from data_slackbot.clean_commerce_spine import semantic_layer as semantic_layer_module
 
 
 def select_dataset(
@@ -13,8 +14,7 @@ def select_dataset(
     matches = tuple(
         dataset
         for dataset in semantic_layer.datasets
-        if question_frame.metric in dataset.metrics
-        and question_frame.dimension in dataset.dimensions
+        if _dataset_supports_question_frame(dataset, question_frame, semantic_layer)
     )
 
     if len(matches) != 1:
@@ -28,3 +28,19 @@ def select_dataset(
             "dimension needed for the January 2026 question."
         ),
     )
+
+
+def _dataset_supports_question_frame(
+    dataset: contracts.CuratedDataset,
+    question_frame: contracts.QuestionFrame,
+    semantic_layer: contracts.SemanticLayer,
+) -> bool:
+    try:
+        semantic_layer_module.find_table_for_question_frame(
+            dataset,
+            question_frame,
+            semantic_layer,
+        )
+    except ValueError:
+        return False
+    return True

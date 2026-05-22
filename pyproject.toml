@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "A Slackbot for talking to your data."
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "duckdb>=1.5.3",
+    "pyyaml>=6.0.3",
+]
 
 [build-system]
 requires = ["hatchling"]

@@ -1,8 +1,12 @@
+import duckdb
+
 from data_slackbot.clean_commerce_spine import workflow
 
 
-def test_response_composer_returns_plain_text_with_trust_summary() -> None:
-    run = workflow.run_clean_commerce_spine()
+def test_response_composer_returns_plain_text_with_trust_summary(
+    commerce_connection: duckdb.DuckDBPyConnection,
+) -> None:
+    run = workflow.run_clean_commerce_spine(commerce_connection)
 
     assert run.final_response.text == (
         "Total revenue in January 2026 was $4,900.00, grouped across 4 regions."
@@ -15,6 +19,6 @@ def test_response_composer_returns_plain_text_with_trust_summary() -> None:
         "Trust Summary: Curated Dataset: Commerce Revenue. "
         "Time range: January 2026. "
         "Filters: none. "
-        "Caveats: Clean fixture rows only."
+        "Caveats: Clean fixture rows for January 2026."
     )
     assert run.final_response.trust_summary in run.final_response.text

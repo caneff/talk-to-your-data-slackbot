@@ -1,0 +1,21 @@
+id: orders
+dataset_id: commerce
+description: Clean commerce order facts.
+date_column: order_date
+columns:
+  - id: order_date
+    type: date
+  - id: region
+    type: string
+    semantic_role: dimension
+  - id: revenue
+    type: decimal
+    semantic_role: measure
+metrics:
+  - id: total_revenue
+    label: total revenue
+    expression: sum(revenue)
+dimensions:
+  - id: region
+    label: region
+    column: region

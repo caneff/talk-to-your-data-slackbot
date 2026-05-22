@@ -35,7 +35,7 @@ def draft_answer(
         datasets_used=(dataset.name,),
         time_range=prepared_data.request.time_range.label,
         filters=prepared_data.request.filters,
-        caveats=("Clean fixture rows only.",),
+        caveats=(dataset.freshness.description,),
     )
 
 
