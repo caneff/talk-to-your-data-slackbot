@@ -38,6 +38,13 @@ Question to a Final Response grounded in one approved Curated Dataset.
 
 ## Future Expansion
 
+### High Priority Follow-Ups
+
+- Replace the deterministic MVP Question Interpreter with an LLM-backed
+  interpreter once the Question Frame contract is stable.
+- Add Visual Payload support for compact Slack-friendly tables and simple chart
+  images once the plain-text Final Response contract is stable.
+
 ### Better Conversation Flow
 
 - Add bounded Clarification Loops for Material Ambiguity.

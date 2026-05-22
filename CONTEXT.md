@@ -46,9 +46,17 @@ configured hard timeout.
 _Avoid_: SLA, timeout constants, performance guarantee
 
 **Curated Dataset**:
-An approved dataset prepared for reliable answers, with known meaning, quality,
-and access boundaries.
+An approved business data product prepared for reliable answers, with known
+meaning, quality, and access boundaries. A **Curated Dataset** may contain one
+or more **Dataset Tables**.
 _Avoid_: Raw table, arbitrary database, dashboard data
+
+**Dataset Table**:
+A table-like component inside a **Curated Dataset** that the **Data Assistant**
+may use when building a **Data Request**. A **Dataset Table** can be available
+inside a selected **Curated Dataset** without being used for a specific **Data
+Question**.
+_Avoid_: Raw table, database table, dataset
 
 **Semantic Layer**:
 The business-facing definition layer that describes **Curated Datasets**,
@@ -125,8 +133,8 @@ _Avoid_: Row permission, output permission, visibility
 
 **Data Request**:
 The constrained request for data prepared for retrieval, including selected
-datasets, approved metrics, dimensions, filters, time range, limits, join paths,
-privacy constraints, and expected output shape.
+datasets, selected **Dataset Tables**, approved metrics, dimensions, filters,
+time range, limits, join paths, privacy constraints, and expected output shape.
 _Avoid_: SQL, query, dataframe
 
 **Prepared Data**:
