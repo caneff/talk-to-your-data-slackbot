@@ -33,6 +33,7 @@ typeCheckingMode = "strict"
 venvPath = "."
 venv = ".venv"
 include = ["src"]
+extraPaths = ["src"]
 
 [dependency-groups]
 dev = [
