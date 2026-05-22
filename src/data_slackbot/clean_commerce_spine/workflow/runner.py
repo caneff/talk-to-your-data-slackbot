@@ -21,37 +21,51 @@ def run_clean_commerce_spine(
     semantic_layer: schema.SemanticLayer | None = None,
 ) -> contracts.WorkflowResult:
     """Run the canonical clean Data Assistant path end to end."""
-    active_semantic_layer = (
-        semantic_layer or semantic_layer_loader.load_semantic_layer()
-    )
+    active_semantic_layer: schema.SemanticLayer
+    if semantic_layer is None:
+        active_semantic_layer = semantic_layer_loader.load_semantic_layer()
+    else:
+        active_semantic_layer = semantic_layer
+
+    question_frame_result: contracts.StageResult[contracts.QuestionFrame]
     question_frame_result = question_interpreter.interpret_question(
-        question,
-        active_semantic_layer,
+        question=question,
+        semantic_layer=active_semantic_layer,
     )
     if isinstance(question_frame_result, contracts.NonAnswer):
         return question_frame_result
-    question_frame = question_frame_result.value
+    question_frame: contracts.QuestionFrame = question_frame_result.value
 
+    dataset_selection_result: contracts.StageResult[contracts.DatasetSelection]
     dataset_selection_result = semantic_router.select_dataset(
-        question_frame,
-        active_semantic_layer,
+        question_frame=question_frame,
+        semantic_layer=active_semantic_layer,
     )
     if isinstance(dataset_selection_result, contracts.NonAnswer):
         return dataset_selection_result
-    dataset_selection = dataset_selection_result.value
+    dataset_selection: contracts.DatasetSelection = dataset_selection_result.value
 
+    data_request_result: contracts.StageResult[contracts.DataRequest]
     data_request_result = query_planner.create_data_request(
-        question_frame,
-        dataset_selection,
-        active_semantic_layer,
+        question_frame=question_frame,
+        dataset_selection=dataset_selection,
+        semantic_layer=active_semantic_layer,
     )
     if isinstance(data_request_result, contracts.NonAnswer):
         return data_request_result
-    data_request = data_request_result.value
+    data_request: contracts.DataRequest = data_request_result.value
 
-    prepared_data = data_preparation.prepare_data(data_request, connection)
-    answer_draft = reasoning_layer.draft_answer(prepared_data, active_semantic_layer)
-    final_response = response_composer.compose_final_response(answer_draft)
+    prepared_data: contracts.PreparedData = data_preparation.prepare_data(
+        data_request=data_request,
+        connection=connection,
+    )
+    answer_draft: contracts.AnswerDraft = reasoning_layer.draft_answer(
+        prepared_data=prepared_data,
+        semantic_layer=active_semantic_layer,
+    )
+    final_response: contracts.FinalResponse = (
+        response_composer.compose_final_response(answer_draft=answer_draft)
+    )
 
     return contracts.DataAssistantRun(
         question_frame=question_frame,
