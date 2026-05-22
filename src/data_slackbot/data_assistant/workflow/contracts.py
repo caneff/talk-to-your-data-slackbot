@@ -1,4 +1,4 @@
-"""Pipeline handoff contracts for the clean commerce Data Assistant spine."""
+"""Pipeline handoff contracts for the Data Assistant."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import datetime
 import decimal
 import typing
 
-import data_slackbot.clean_commerce_spine.semantic_layer.schema as schema
+import data_slackbot.data_assistant.semantic_layer.schema as schema
 
 T = typing.TypeVar("T")
 
@@ -123,7 +123,7 @@ class FinalResponse:
 
 @dataclasses.dataclass(frozen=True)
 class DataAssistantRun:
-    """Trace of the clean Data Assistant path for the canonical question."""
+    """Trace of the Data Assistant path for the canonical question."""
 
     question_frame: QuestionFrame
     dataset_selection: DatasetSelection

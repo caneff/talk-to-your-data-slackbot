@@ -1,8 +1,8 @@
 import datetime
 
-import data_slackbot.clean_commerce_spine.semantic_layer.schema as schema
-import data_slackbot.clean_commerce_spine.semantic_router as semantic_router
-import data_slackbot.clean_commerce_spine.workflow.contracts as contracts
+import data_slackbot.data_assistant.semantic_layer.schema as schema
+import data_slackbot.data_assistant.semantic_router as semantic_router
+import data_slackbot.data_assistant.workflow.contracts as contracts
 
 
 def test_dataset_selection_chooses_one_curated_dataset_with_rationale(

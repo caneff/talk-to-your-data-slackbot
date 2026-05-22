@@ -1,6 +1,6 @@
 import decimal
 
-import data_slackbot.clean_commerce_spine.workflow.contracts as contracts
+import data_slackbot.data_assistant.workflow.contracts as contracts
 
 
 def test_prepared_data_contains_bounded_grouped_revenue_results(

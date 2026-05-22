@@ -1,10 +1,10 @@
-"""Query Planner step for clean commerce Data Request creation."""
+"""Query Planner step for Data Assistant Data Request creation."""
 
 from __future__ import annotations
 
-import data_slackbot.clean_commerce_spine.semantic_layer.loader as semantic_layer_loader
-import data_slackbot.clean_commerce_spine.semantic_layer.schema as schema
-import data_slackbot.clean_commerce_spine.workflow.contracts as contracts
+import data_slackbot.data_assistant.semantic_layer.loader as semantic_layer_loader
+import data_slackbot.data_assistant.semantic_layer.schema as schema
+import data_slackbot.data_assistant.workflow.contracts as contracts
 
 
 def create_data_request(

@@ -1,14 +1,14 @@
 import duckdb
 
-import data_slackbot.clean_commerce_spine.workflow.contracts as contracts
-import data_slackbot.clean_commerce_spine.workflow.runner as workflow_runner
+import data_slackbot.data_assistant.workflow.contracts as contracts
+import data_slackbot.data_assistant.workflow.runner as workflow_runner
 
 
-def test_clean_commerce_spine_runs_end_to_end(
+def test_data_assistant_runs_end_to_end(
     commerce_connection: duckdb.DuckDBPyConnection,
     canonical_question: str,
 ) -> None:
-    run = workflow_runner.run_clean_commerce_spine(
+    run = workflow_runner.run_data_assistant(
         commerce_connection,
         canonical_question,
     )
@@ -21,10 +21,10 @@ def test_clean_commerce_spine_runs_end_to_end(
     assert "Trust Summary:" in run.final_response.text
 
 
-def test_clean_commerce_spine_short_circuits_question_ambiguity(
+def test_data_assistant_short_circuits_question_ambiguity(
     commerce_connection: duckdb.DuckDBPyConnection,
 ) -> None:
-    result = workflow_runner.run_clean_commerce_spine(
+    result = workflow_runner.run_data_assistant(
         commerce_connection,
         "What was total revenue by region?",
     )

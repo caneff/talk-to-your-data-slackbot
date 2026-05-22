@@ -1,4 +1,4 @@
-"""Prepared Data step for clean commerce revenue by region."""
+"""Prepared Data step for Data Assistant revenue by region."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import decimal
 
 import duckdb
 
-import data_slackbot.clean_commerce_spine.workflow.contracts as contracts
+import data_slackbot.data_assistant.workflow.contracts as contracts
 
 
 def prepare_data(

@@ -4,13 +4,13 @@ import typing
 import duckdb
 import pytest
 
-import data_slackbot.clean_commerce_spine.data_preparation as data_preparation
-import data_slackbot.clean_commerce_spine.query_planner as query_planner
-import data_slackbot.clean_commerce_spine.question_interpreter as question_interpreter
-import data_slackbot.clean_commerce_spine.semantic_layer.loader as semantic_layer_loader
-import data_slackbot.clean_commerce_spine.semantic_layer.schema as schema
-import data_slackbot.clean_commerce_spine.semantic_router as semantic_router
-import data_slackbot.clean_commerce_spine.workflow.contracts as contracts
+import data_slackbot.data_assistant.data_preparation as data_preparation
+import data_slackbot.data_assistant.query_planner as query_planner
+import data_slackbot.data_assistant.question_interpreter as question_interpreter
+import data_slackbot.data_assistant.semantic_layer.loader as semantic_layer_loader
+import data_slackbot.data_assistant.semantic_layer.schema as schema
+import data_slackbot.data_assistant.semantic_router as semantic_router
+import data_slackbot.data_assistant.workflow.contracts as contracts
 
 CANONICAL_DATA_QUESTION = "What was total revenue by region in January 2026?"
 T = typing.TypeVar("T")

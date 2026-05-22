@@ -1,4 +1,4 @@
-import data_slackbot.clean_commerce_spine.semantic_layer.loader as semantic_layer_loader
+import data_slackbot.data_assistant.semantic_layer.loader as semantic_layer_loader
 
 
 def test_semantic_layer_loads_dataset_table_relationship() -> None:

@@ -1,10 +1,10 @@
-"""Response Composer for clean commerce Answer Drafts."""
+"""Response Composer for Data Assistant Answer Drafts."""
 
 from __future__ import annotations
 
 import decimal
 
-import data_slackbot.clean_commerce_spine.workflow.contracts as contracts
+import data_slackbot.data_assistant.workflow.contracts as contracts
 
 
 def compose_final_response(

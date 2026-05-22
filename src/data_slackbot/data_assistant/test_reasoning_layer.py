@@ -1,14 +1,14 @@
 import duckdb
 
-import data_slackbot.clean_commerce_spine.workflow.contracts as contracts
-import data_slackbot.clean_commerce_spine.workflow.runner as workflow_runner
+import data_slackbot.data_assistant.workflow.contracts as contracts
+import data_slackbot.data_assistant.workflow.runner as workflow_runner
 
 
 def test_reasoning_layer_produces_answer_draft_from_prepared_data(
     commerce_connection: duckdb.DuckDBPyConnection,
     canonical_question: str,
 ) -> None:
-    run = workflow_runner.run_clean_commerce_spine(
+    run = workflow_runner.run_data_assistant(
         commerce_connection,
         canonical_question,
     )

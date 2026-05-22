@@ -5,8 +5,8 @@ from __future__ import annotations
 import datetime
 import re
 
-import data_slackbot.clean_commerce_spine.semantic_layer.schema as schema
-import data_slackbot.clean_commerce_spine.workflow.contracts as contracts
+import data_slackbot.data_assistant.semantic_layer.schema as schema
+import data_slackbot.data_assistant.workflow.contracts as contracts
 
 _MONTHS_BY_NAME = {
     "january": 1,

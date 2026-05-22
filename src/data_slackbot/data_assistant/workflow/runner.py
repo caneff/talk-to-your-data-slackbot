@@ -1,26 +1,26 @@
-"""Thin workflow runner for the clean commerce Data Assistant spine."""
+"""Thin workflow runner for the Data Assistant."""
 
 from __future__ import annotations
 
 import duckdb
 
-import data_slackbot.clean_commerce_spine.data_preparation as data_preparation
-import data_slackbot.clean_commerce_spine.query_planner as query_planner
-import data_slackbot.clean_commerce_spine.question_interpreter as question_interpreter
-import data_slackbot.clean_commerce_spine.reasoning_layer as reasoning_layer
-import data_slackbot.clean_commerce_spine.response_composer as response_composer
-import data_slackbot.clean_commerce_spine.semantic_layer.loader as semantic_layer_loader
-import data_slackbot.clean_commerce_spine.semantic_layer.schema as schema
-import data_slackbot.clean_commerce_spine.semantic_router as semantic_router
-import data_slackbot.clean_commerce_spine.workflow.contracts as contracts
+import data_slackbot.data_assistant.data_preparation as data_preparation
+import data_slackbot.data_assistant.query_planner as query_planner
+import data_slackbot.data_assistant.question_interpreter as question_interpreter
+import data_slackbot.data_assistant.reasoning_layer as reasoning_layer
+import data_slackbot.data_assistant.response_composer as response_composer
+import data_slackbot.data_assistant.semantic_layer.loader as semantic_layer_loader
+import data_slackbot.data_assistant.semantic_layer.schema as schema
+import data_slackbot.data_assistant.semantic_router as semantic_router
+import data_slackbot.data_assistant.workflow.contracts as contracts
 
 
-def run_clean_commerce_spine(
+def run_data_assistant(
     connection: duckdb.DuckDBPyConnection,
     question: str,
     semantic_layer: schema.SemanticLayer | None = None,
 ) -> contracts.WorkflowResult:
-    """Run the canonical clean Data Assistant path end to end."""
+    """Run the canonical Data Assistant path end to end."""
     active_semantic_layer: schema.SemanticLayer
     if semantic_layer is None:
         active_semantic_layer = semantic_layer_loader.load_semantic_layer()
