@@ -18,4 +18,6 @@ def test_reasoning_layer_produces_answer_draft_from_prepared_data(
     assert run.answer_draft.datasets_used == ("Commerce Revenue",)
     assert run.answer_draft.time_range == "January 2026"
     assert run.answer_draft.filters == ()
-    assert run.answer_draft.caveats == ("Clean fixture rows for January 2026.",)
+    assert run.answer_draft.caveats == (
+        "Commerce order data refreshed through 2026-01-31.",
+    )

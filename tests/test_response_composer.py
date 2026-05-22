@@ -22,6 +22,6 @@ def test_response_composer_returns_plain_text_with_trust_summary(
         "Trust Summary: Curated Dataset: Commerce Revenue. "
         "Time range: January 2026. "
         "Filters: none. "
-        "Caveats: Clean fixture rows for January 2026."
+        "Caveats: Commerce order data refreshed through 2026-01-31."
     )
     assert run.final_response.trust_summary in run.final_response.text
