@@ -1,4 +1,4 @@
-from talk_to_your_data_slackbot.clean_commerce_spine import workflow
+from data_slackbot.clean_commerce_spine import workflow
 
 
 def test_reasoning_layer_produces_answer_draft_from_prepared_data() -> None:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from talk_to_your_data_slackbot.clean_commerce_spine import (
+from data_slackbot.clean_commerce_spine import (
     contracts,
     data_preparation,
     query_planner,
@@ -11,7 +11,7 @@ from talk_to_your_data_slackbot.clean_commerce_spine import (
     response_composer,
     semantic_router,
 )
-from talk_to_your_data_slackbot.clean_commerce_spine import (
+from data_slackbot.clean_commerce_spine import (
     semantic_layer as semantic_layer_module,
 )
 

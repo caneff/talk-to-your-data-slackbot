@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime
 
-from talk_to_your_data_slackbot.clean_commerce_spine import contracts
+from data_slackbot.clean_commerce_spine import contracts
 
 CANONICAL_DATA_QUESTION = "What was total revenue by region in January 2026?"
 

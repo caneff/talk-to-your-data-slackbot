@@ -2,7 +2,7 @@ import datetime
 
 import pytest
 
-from talk_to_your_data_slackbot.clean_commerce_spine import (
+from data_slackbot.clean_commerce_spine import (
     contracts,
     question_interpreter,
 )

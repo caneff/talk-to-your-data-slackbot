@@ -1,4 +1,4 @@
-from talk_to_your_data_slackbot.clean_commerce_spine import workflow
+from data_slackbot.clean_commerce_spine import workflow
 
 
 def test_clean_commerce_spine_runs_end_to_end() -> None:

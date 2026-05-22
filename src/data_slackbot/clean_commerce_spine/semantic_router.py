@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from talk_to_your_data_slackbot.clean_commerce_spine import contracts
+from data_slackbot.clean_commerce_spine import contracts
 
 
 def select_dataset(

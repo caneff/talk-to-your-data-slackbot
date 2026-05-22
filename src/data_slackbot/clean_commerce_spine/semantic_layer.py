@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import decimal
 
-from talk_to_your_data_slackbot.clean_commerce_spine import contracts
+from data_slackbot.clean_commerce_spine import contracts
 
 
 def default_semantic_layer() -> contracts.SemanticLayer:

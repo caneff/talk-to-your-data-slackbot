@@ -11,7 +11,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/talk_to_your_data_slackbot"]
+packages = ["src/data_slackbot"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

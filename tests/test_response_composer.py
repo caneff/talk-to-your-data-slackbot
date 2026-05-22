@@ -1,4 +1,4 @@
-from talk_to_your_data_slackbot.clean_commerce_spine import workflow
+from data_slackbot.clean_commerce_spine import workflow
 
 
 def test_response_composer_returns_plain_text_with_trust_summary() -> None:

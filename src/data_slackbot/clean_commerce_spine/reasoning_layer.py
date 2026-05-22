@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import decimal
 
-from talk_to_your_data_slackbot.clean_commerce_spine import contracts
-from talk_to_your_data_slackbot.clean_commerce_spine import (
+from data_slackbot.clean_commerce_spine import contracts
+from data_slackbot.clean_commerce_spine import (
     semantic_layer as semantic_layer_module,
 )
 
