@@ -8,7 +8,7 @@ import pydantic
 
 
 class _SemanticLayerModel(pydantic.BaseModel):
-    model_config = pydantic.ConfigDict(frozen=True, populate_by_name=True)
+    model_config = pydantic.ConfigDict(frozen=True)
 
 
 class Freshness(_SemanticLayerModel):
@@ -21,7 +21,7 @@ class Freshness(_SemanticLayerModel):
 class CuratedDataset(_SemanticLayerModel):
     """Approved business data product available through the Semantic Layer."""
 
-    dataset_id: str = pydantic.Field(validation_alias="id")
+    dataset_id: str
     name: str
     tables: tuple[str, ...]
     information_types: tuple[str, ...]
@@ -32,15 +32,15 @@ class CuratedDataset(_SemanticLayerModel):
 class TableColumn(_SemanticLayerModel):
     """Physical column available in a Dataset Table."""
 
-    column_id: str = pydantic.Field(validation_alias="id")
-    data_type: str = pydantic.Field(validation_alias="type")
+    column_id: str
+    data_type: str
     semantic_role: str | None = None
 
 
 class Metric(_SemanticLayerModel):
     """Business metric defined on a Dataset Table."""
 
-    metric_id: str = pydantic.Field(validation_alias="id")
+    metric_id: str
     label: str
     expression: str
 
@@ -48,7 +48,7 @@ class Metric(_SemanticLayerModel):
 class Dimension(_SemanticLayerModel):
     """Business dimension defined on a Dataset Table."""
 
-    dimension_id: str = pydantic.Field(validation_alias="id")
+    dimension_id: str
     label: str
     column: str
 
@@ -56,7 +56,7 @@ class Dimension(_SemanticLayerModel):
 class DatasetTable(_SemanticLayerModel):
     """Dataset Table definition loaded from the Semantic Layer."""
 
-    table_id: str = pydantic.Field(validation_alias="id")
+    table_id: str
     dataset_id: str
     description: str
     date_column: str

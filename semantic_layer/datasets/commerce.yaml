@@ -1,4 +1,4 @@
-id: commerce
+dataset_id: commerce
 name: Commerce Revenue
 tables:
   - orders
