@@ -1,4 +1,4 @@
-from data_slackbot.clean_commerce_spine import contracts
+from data_slackbot.clean_commerce_spine.workflow import contracts
 
 
 def test_dataset_selection_chooses_one_curated_dataset_with_rationale(

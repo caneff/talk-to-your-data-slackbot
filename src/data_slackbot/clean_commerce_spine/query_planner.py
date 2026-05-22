@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from data_slackbot.clean_commerce_spine import contracts
 from data_slackbot.clean_commerce_spine import semantic_layer as semantic_layer_module
+from data_slackbot.clean_commerce_spine.semantic_layer import schema
+from data_slackbot.clean_commerce_spine.workflow import contracts
 
 
 def create_data_request(
     question_frame: contracts.QuestionFrame,
     dataset_selection: contracts.DatasetSelection,
-    semantic_layer: contracts.SemanticLayer,
+    semantic_layer: schema.SemanticLayer,
 ) -> contracts.DataRequest:
     """Create the Data Request for revenue grouped by region."""
     if len(dataset_selection.selected_datasets) != 1:

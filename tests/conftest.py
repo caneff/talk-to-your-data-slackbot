@@ -4,17 +4,18 @@ import duckdb
 import pytest
 
 from data_slackbot.clean_commerce_spine import (
-    contracts,
     data_preparation,
     query_planner,
     question_interpreter,
     semantic_layer,
     semantic_router,
 )
+from data_slackbot.clean_commerce_spine.semantic_layer import schema
+from data_slackbot.clean_commerce_spine.workflow import contracts
 
 
 @pytest.fixture
-def active_semantic_layer() -> contracts.SemanticLayer:
+def active_semantic_layer() -> schema.SemanticLayer:
     return semantic_layer.load_semantic_layer()
 
 
@@ -54,7 +55,7 @@ def question_frame() -> contracts.QuestionFrame:
 @pytest.fixture
 def dataset_selection(
     question_frame: contracts.QuestionFrame,
-    active_semantic_layer: contracts.SemanticLayer,
+    active_semantic_layer: schema.SemanticLayer,
 ) -> contracts.DatasetSelection:
     return semantic_router.select_dataset(question_frame, active_semantic_layer)
 
@@ -63,7 +64,7 @@ def dataset_selection(
 def data_request(
     question_frame: contracts.QuestionFrame,
     dataset_selection: contracts.DatasetSelection,
-    active_semantic_layer: contracts.SemanticLayer,
+    active_semantic_layer: schema.SemanticLayer,
 ) -> contracts.DataRequest:
     return query_planner.create_data_request(
         question_frame,

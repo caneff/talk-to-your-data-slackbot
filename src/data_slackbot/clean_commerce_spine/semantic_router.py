@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from data_slackbot.clean_commerce_spine import contracts
 from data_slackbot.clean_commerce_spine import semantic_layer as semantic_layer_module
+from data_slackbot.clean_commerce_spine.semantic_layer import schema
+from data_slackbot.clean_commerce_spine.workflow import contracts
 
 
 def select_dataset(
     question_frame: contracts.QuestionFrame,
-    semantic_layer: contracts.SemanticLayer,
+    semantic_layer: schema.SemanticLayer,
 ) -> contracts.DatasetSelection:
     """Choose the Curated Dataset that can answer the Question Frame."""
     matches = tuple(
@@ -31,9 +32,9 @@ def select_dataset(
 
 
 def _dataset_supports_question_frame(
-    dataset: contracts.CuratedDataset,
+    dataset: schema.CuratedDataset,
     question_frame: contracts.QuestionFrame,
-    semantic_layer: contracts.SemanticLayer,
+    semantic_layer: schema.SemanticLayer,
 ) -> bool:
     try:
         semantic_layer_module.find_table_for_question_frame(

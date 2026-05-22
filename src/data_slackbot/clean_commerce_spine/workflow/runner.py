@@ -5,7 +5,6 @@ from __future__ import annotations
 import duckdb
 
 from data_slackbot.clean_commerce_spine import (
-    contracts,
     data_preparation,
     query_planner,
     question_interpreter,
@@ -16,6 +15,8 @@ from data_slackbot.clean_commerce_spine import (
 from data_slackbot.clean_commerce_spine import (
     semantic_layer as semantic_layer_module,
 )
+from data_slackbot.clean_commerce_spine.semantic_layer import schema
+from data_slackbot.clean_commerce_spine.workflow import contracts
 
 CANONICAL_DATA_QUESTION = question_interpreter.CANONICAL_DATA_QUESTION
 
@@ -23,7 +24,7 @@ CANONICAL_DATA_QUESTION = question_interpreter.CANONICAL_DATA_QUESTION
 def run_clean_commerce_spine(
     connection: duckdb.DuckDBPyConnection,
     question: str = CANONICAL_DATA_QUESTION,
-    semantic_layer: contracts.SemanticLayer | None = None,
+    semantic_layer: schema.SemanticLayer | None = None,
 ) -> contracts.DataAssistantRun:
     """Run the canonical clean Data Assistant path end to end."""
     active_semantic_layer = (

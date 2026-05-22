@@ -2,10 +2,8 @@ import datetime
 
 import pytest
 
-from data_slackbot.clean_commerce_spine import (
-    contracts,
-    question_interpreter,
-)
+from data_slackbot.clean_commerce_spine import question_interpreter
+from data_slackbot.clean_commerce_spine.workflow import contracts
 
 
 def test_canonical_data_question_creates_business_question_frame(

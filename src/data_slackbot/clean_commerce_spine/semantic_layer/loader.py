@@ -9,15 +9,18 @@ import typing
 
 import yaml
 
-from data_slackbot.clean_commerce_spine import contracts
+from data_slackbot.clean_commerce_spine.semantic_layer import schema
 
 DEFAULT_SEMANTIC_LAYER_PATH = pathlib.Path("semantic_layer")
 YamlMapping: typing.TypeAlias = collections.abc.Mapping[str, object]
 
+if typing.TYPE_CHECKING:
+    from data_slackbot.clean_commerce_spine.workflow import contracts
+
 
 def load_semantic_layer(
     path: pathlib.Path = DEFAULT_SEMANTIC_LAYER_PATH,
-) -> contracts.SemanticLayer:
+) -> schema.SemanticLayer:
     """Load Semantic Layer dataset and table definitions from YAML files."""
     datasets_path = path / "datasets"
     tables_path = path / "tables"
@@ -36,13 +39,13 @@ def load_semantic_layer(
         msg = f"No Dataset Table YAML files found in {tables_path}"
         raise ValueError(msg)
 
-    return contracts.SemanticLayer(datasets=datasets, tables=tables)
+    return schema.SemanticLayer(datasets=datasets, tables=tables)
 
 
 def find_dataset(
     dataset_id: str,
-    semantic_layer: contracts.SemanticLayer,
-) -> contracts.CuratedDataset:
+    semantic_layer: schema.SemanticLayer,
+) -> schema.CuratedDataset:
     """Find a Curated Dataset by id."""
     for dataset in semantic_layer.datasets:
         if dataset.dataset_id == dataset_id:
@@ -54,8 +57,8 @@ def find_dataset(
 
 def find_table(
     table_id: str,
-    semantic_layer: contracts.SemanticLayer,
-) -> contracts.DatasetTable:
+    semantic_layer: schema.SemanticLayer,
+) -> schema.DatasetTable:
     """Find a Dataset Table by id."""
     for table in semantic_layer.tables:
         if table.table_id == table_id:
@@ -66,9 +69,9 @@ def find_table(
 
 
 def tables_for_dataset(
-    dataset: contracts.CuratedDataset,
-    semantic_layer: contracts.SemanticLayer,
-) -> tuple[contracts.DatasetTable, ...]:
+    dataset: schema.CuratedDataset,
+    semantic_layer: schema.SemanticLayer,
+) -> tuple[schema.DatasetTable, ...]:
     """Return Dataset Tables listed by a Curated Dataset."""
     return tuple(
         table
@@ -78,10 +81,10 @@ def tables_for_dataset(
 
 
 def find_table_for_question_frame(
-    dataset: contracts.CuratedDataset,
+    dataset: schema.CuratedDataset,
     question_frame: contracts.QuestionFrame,
-    semantic_layer: contracts.SemanticLayer,
-) -> tuple[contracts.DatasetTable, contracts.Metric, contracts.Dimension]:
+    semantic_layer: schema.SemanticLayer,
+) -> tuple[schema.DatasetTable, schema.Metric, schema.Dimension]:
     """Find the table-level metric and dimension for a Question Frame."""
     for table in tables_for_dataset(dataset, semantic_layer):
         metric = _find_metric(question_frame.metric, table)
@@ -96,15 +99,15 @@ def find_table_for_question_frame(
     raise ValueError(msg)
 
 
-def _load_dataset(path: pathlib.Path) -> contracts.CuratedDataset:
+def _load_dataset(path: pathlib.Path) -> schema.CuratedDataset:
     data = _load_yaml_mapping(path)
     freshness = _required_mapping(data, "freshness")
-    return contracts.CuratedDataset(
+    return schema.CuratedDataset(
         dataset_id=_required_str(data, "id"),
         name=_required_str(data, "name"),
         tables=_required_str_tuple(data, "tables"),
         information_types=_required_str_tuple(data, "information_types"),
-        freshness=contracts.Freshness(
+        freshness=schema.Freshness(
             as_of=_required_date(freshness, "as_of"),
             description=_required_str(freshness, "description"),
         ),
@@ -112,15 +115,15 @@ def _load_dataset(path: pathlib.Path) -> contracts.CuratedDataset:
     )
 
 
-def _load_table(path: pathlib.Path) -> contracts.DatasetTable:
+def _load_table(path: pathlib.Path) -> schema.DatasetTable:
     data = _load_yaml_mapping(path)
-    return contracts.DatasetTable(
+    return schema.DatasetTable(
         table_id=_required_str(data, "id"),
         dataset_id=_required_str(data, "dataset_id"),
         description=_required_str(data, "description"),
         date_column=_required_str(data, "date_column"),
         columns=tuple(
-            contracts.TableColumn(
+            schema.TableColumn(
                 column_id=_required_str(column, "id"),
                 data_type=_required_str(column, "type"),
                 semantic_role=_optional_str(column, "semantic_role"),
@@ -128,7 +131,7 @@ def _load_table(path: pathlib.Path) -> contracts.DatasetTable:
             for column in _required_mapping_tuple(data, "columns")
         ),
         metrics=tuple(
-            contracts.Metric(
+            schema.Metric(
                 metric_id=_required_str(metric, "id"),
                 label=_required_str(metric, "label"),
                 expression=_required_str(metric, "expression"),
@@ -136,7 +139,7 @@ def _load_table(path: pathlib.Path) -> contracts.DatasetTable:
             for metric in _required_mapping_tuple(data, "metrics")
         ),
         dimensions=tuple(
-            contracts.Dimension(
+            schema.Dimension(
                 dimension_id=_required_str(dimension, "id"),
                 label=_required_str(dimension, "label"),
                 column=_required_str(dimension, "column"),
@@ -148,8 +151,8 @@ def _load_table(path: pathlib.Path) -> contracts.DatasetTable:
 
 def _find_metric(
     metric_label: str,
-    table: contracts.DatasetTable,
-) -> contracts.Metric | None:
+    table: schema.DatasetTable,
+) -> schema.Metric | None:
     return next(
         (metric for metric in table.metrics if metric.label == metric_label),
         None,
@@ -158,8 +161,8 @@ def _find_metric(
 
 def _find_dimension(
     dimension_label: str,
-    table: contracts.DatasetTable,
-) -> contracts.Dimension | None:
+    table: schema.DatasetTable,
+) -> schema.Dimension | None:
     return next(
         (
             dimension

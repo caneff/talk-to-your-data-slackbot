@@ -1,4 +1,4 @@
-from data_slackbot.clean_commerce_spine import contracts
+from data_slackbot.clean_commerce_spine.workflow import contracts
 
 
 def test_data_request_asks_for_total_revenue_grouped_by_region(
