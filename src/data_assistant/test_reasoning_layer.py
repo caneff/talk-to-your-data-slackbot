@@ -28,6 +28,7 @@ def test_reasoning_layer_produces_answer_draft_from_prepared_data(
     )
     pd_testing.assert_frame_equal(run.answer_draft.key_data, run.prepared_data.data)
     assert run.answer_draft.datasets_used == ("Commerce Revenue",)
+    assert run.answer_draft.dataset_tables_used == ("orders",)
     assert run.answer_draft.time_range == "January 2026"
     assert run.answer_draft.filters == ()
     assert run.answer_draft.caveats == (
