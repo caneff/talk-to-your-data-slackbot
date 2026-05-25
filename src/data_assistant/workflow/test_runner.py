@@ -16,8 +16,8 @@ def test_data_assistant_runs_end_to_end(
     assert isinstance(run, contracts.DataAssistantRun)
     assert run.question_frame.unresolved_ambiguities == ()
     assert len(run.dataset_selection.selected_datasets) == 1
-    assert run.data_request.metric_label == "total revenue"
-    assert run.prepared_data.rows[0].region == "West"
+    assert run.data_request.metric.label == "total revenue"
+    assert run.prepared_data.data.loc[0, "dimension_value"] == "West"
     assert "Trust Summary:" in run.final_response.text
 
 

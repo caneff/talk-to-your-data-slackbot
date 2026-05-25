@@ -1,6 +1,6 @@
 import datetime
 
-import data_assistant.query_planner as query_planner
+import data_assistant.data_requester as data_requester
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
 
@@ -8,21 +8,21 @@ import data_assistant.workflow.contracts as contracts
 def test_data_request_asks_for_total_revenue_grouped_by_region(
     data_request: contracts.DataRequest,
 ) -> None:
-    assert data_request.curated_dataset_id == "commerce"
-    assert data_request.table_id == "orders"
-    assert data_request.metric_id == "total_revenue"
-    assert data_request.metric_label == "total revenue"
-    assert data_request.metric_expression == "sum(revenue)"
-    assert data_request.dimension_id == "region"
-    assert data_request.dimension_label == "region"
-    assert data_request.dimension_column == "region"
-    assert data_request.date_column == "order_date"
+    assert data_request.dataset.dataset_id == "commerce"
+    assert data_request.table.table_id == "orders"
+    assert data_request.metric.metric_id == "total_revenue"
+    assert data_request.metric.label == "total revenue"
+    assert data_request.metric.expression == "sum(revenue)"
+    assert data_request.dimension.dimension_id == "region"
+    assert data_request.dimension.label == "region"
+    assert data_request.dimension.column == "region"
+    assert data_request.table.date_column == "order_date"
     assert data_request.time_range.label == "January 2026"
     assert data_request.filters == ()
     assert data_request.output_shape == "total revenue grouped by region"
 
 
-def test_query_planner_returns_non_answer_for_ambiguous_tables() -> None:
+def test_data_requester_returns_non_answer_for_ambiguous_tables() -> None:
     freshness = schema.Freshness(
         as_of=datetime.date(2026, 1, 31),
         description="Clean fixture rows for January 2026.",
@@ -69,14 +69,14 @@ def test_query_planner_returns_non_answer_for_ambiguous_tables() -> None:
         match_rationale="test",
     )
 
-    result = query_planner.create_data_request(
+    result = data_requester.create_data_request(
         question_frame,
         dataset_selection,
         semantic_layer,
     )
 
     assert result == contracts.NonAnswer(
-        stage="query_planner",
+        stage="data_requester",
         reason="Multiple Dataset Tables can satisfy the Question Frame.",
         unresolved_ambiguities=("dataset table",),
         next_step="Ask which Dataset Table should be used.",
@@ -93,7 +93,11 @@ def _table(
         dataset_id="commerce",
         description="Test table.",
         date_column="order_date",
-        columns=(),
+        columns=(
+            schema.TableColumn(column_id="order_date", data_type="date"),
+            schema.TableColumn(column_id="region", data_type="string"),
+            schema.TableColumn(column_id="revenue", data_type="decimal"),
+        ),
         metrics=(metric,),
         dimensions=(dimension,),
     )

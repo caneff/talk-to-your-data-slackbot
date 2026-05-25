@@ -5,7 +5,7 @@ import duckdb
 import pytest
 
 import data_assistant.data_preparation as data_preparation
-import data_assistant.query_planner as query_planner
+import data_assistant.data_requester as data_requester
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.semantic_layer.schema as schema
@@ -88,7 +88,7 @@ def data_request(
     active_semantic_layer: schema.SemanticLayer,
 ) -> contracts.DataRequest:
     return unwrap_stage_result(
-        query_planner.create_data_request(
+        data_requester.create_data_request(
             question_frame,
             dataset_selection,
             active_semantic_layer,

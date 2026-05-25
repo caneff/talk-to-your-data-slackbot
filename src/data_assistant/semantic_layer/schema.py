@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import typing
 
 import pydantic
 
@@ -63,6 +64,18 @@ class DatasetTable(_SemanticLayerModel):
     columns: tuple[TableColumn, ...]
     metrics: tuple[Metric, ...]
     dimensions: tuple[Dimension, ...]
+
+    @pydantic.model_validator(mode="after")
+    def _validate_references(self) -> typing.Self:
+        column_ids = {column.column_id for column in self.columns}
+        if self.date_column not in column_ids:
+            msg = f"Date column is not listed in columns: {self.date_column}"
+            raise ValueError(msg)
+        for dimension in self.dimensions:
+            if dimension.column not in column_ids:
+                msg = f"Dimension column is not listed in columns: {dimension.column}"
+                raise ValueError(msg)
+        return self
 
 
 class SemanticLayer(_SemanticLayerModel):

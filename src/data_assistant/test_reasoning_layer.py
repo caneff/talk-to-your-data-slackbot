@@ -1,4 +1,5 @@
 import duckdb
+import pandas.testing as pd_testing
 
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
@@ -17,7 +18,7 @@ def test_reasoning_layer_produces_answer_draft_from_prepared_data(
     assert run.answer_draft.summary == (
         "Total revenue in January 2026 was $4,900.00, grouped across 4 regions."
     )
-    assert run.answer_draft.key_numbers == run.prepared_data.rows
+    pd_testing.assert_frame_equal(run.answer_draft.key_data, run.prepared_data.data)
     assert run.answer_draft.datasets_used == ("Commerce Revenue",)
     assert run.answer_draft.time_range == "January 2026"
     assert run.answer_draft.filters == ()

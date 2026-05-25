@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import decimal
-
 import data_assistant.workflow.contracts as contracts
 
 
@@ -11,9 +9,14 @@ def compose_final_response(
     answer_draft: contracts.AnswerDraft,
 ) -> contracts.FinalResponse:
     """Compose a concise plain-text Final Response with a Trust Summary."""
+    formatted_metric_values = answer_draft.key_data["metric_value"].astype(float).map(
+        _format_money,
+    )
     revenue_lines = "\n".join(
-        f"- {row.region}: {_format_money(row.total_revenue)}"
-        for row in answer_draft.key_numbers
+        "- "
+        + answer_draft.key_data["dimension_value"].astype(str)
+        + ": "
+        + formatted_metric_values,
     )
     filters = ", ".join(answer_draft.filters) if answer_draft.filters else "none"
     caveats = " ".join(answer_draft.caveats)
@@ -30,5 +33,5 @@ def compose_final_response(
     return contracts.FinalResponse(text=text, trust_summary=trust_summary)
 
 
-def _format_money(value: decimal.Decimal) -> str:
+def _format_money(value: float) -> str:
     return f"${value:,.2f}"

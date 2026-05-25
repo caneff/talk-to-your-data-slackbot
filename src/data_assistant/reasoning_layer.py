@@ -2,35 +2,28 @@
 
 from __future__ import annotations
 
-import decimal
+import textwrap
 
-import data_assistant.semantic_layer.loader as semantic_layer_loader
-import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
 
 
 def draft_answer(
     prepared_data: contracts.PreparedData,
-    semantic_layer: schema.SemanticLayer,
 ) -> contracts.AnswerDraft:
     """Produce an Answer Draft from Prepared Data."""
-    dataset = semantic_layer_loader.find_dataset(
-        prepared_data.request.curated_dataset_id,
-        semantic_layer,
-    )
-    total_revenue = sum(
-        (row.total_revenue for row in prepared_data.rows),
-        decimal.Decimal("0.00"),
-    )
-    summary = (
-        f"Total revenue in {prepared_data.request.time_range.label} was "
-        f"{_format_money(total_revenue)}, grouped across "
-        f"{len(prepared_data.rows)} regions."
-    )
+    dataset = prepared_data.request.dataset
+    summary = textwrap.dedent(
+        f"""
+        {prepared_data.request.metric.label.capitalize()} in
+        {prepared_data.request.time_range.label} was
+        {_format_money(float(prepared_data.data["metric_value"].sum()))}, grouped across
+        {len(prepared_data.data)} {_pluralize(prepared_data.request.dimension.label)}.
+        """,
+    ).strip().replace("\n", " ")
 
     return contracts.AnswerDraft(
         summary=summary,
-        key_numbers=prepared_data.rows,
+        key_data=prepared_data.data,
         datasets_used=(dataset.name,),
         time_range=prepared_data.request.time_range.label,
         filters=prepared_data.request.filters,
@@ -38,5 +31,11 @@ def draft_answer(
     )
 
 
-def _format_money(value: decimal.Decimal) -> str:
+def _format_money(value: float) -> str:
     return f"${value:,.2f}"
+
+
+def _pluralize(label: str) -> str:
+    if label.endswith("s"):
+        return label
+    return f"{label}s"

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import dataclasses
 import datetime
-import decimal
 import typing
+
+import pandas as pd
 
 import data_assistant.semantic_layer.schema as schema
 
@@ -69,15 +70,10 @@ class DatasetSelection:
 class DataRequest:
     """Constrained request for bounded Prepared Data."""
 
-    curated_dataset_id: str
-    table_id: str
-    metric_id: str
-    metric_label: str
-    metric_expression: str
-    dimension_id: str
-    dimension_label: str
-    dimension_column: str
-    date_column: str
+    dataset: schema.CuratedDataset
+    table: schema.DatasetTable
+    metric: schema.Metric
+    dimension: schema.Dimension
     time_range: TimeRange
     filters: tuple[str, ...]
     output_shape: str
@@ -85,19 +81,11 @@ class DataRequest:
 
 
 @dataclasses.dataclass(frozen=True)
-class PreparedRevenueByRegion:
-    """Grouped revenue result passed to the Reasoning Layer."""
-
-    region: str
-    total_revenue: decimal.Decimal
-
-
-@dataclasses.dataclass(frozen=True)
 class PreparedData:
     """Bounded result produced from a Data Request."""
 
     request: DataRequest
-    rows: tuple[PreparedRevenueByRegion, ...]
+    data: pd.DataFrame
     source_row_count: int
 
 
@@ -106,7 +94,7 @@ class AnswerDraft:
     """Reasoning Layer answer proposal based on Prepared Data."""
 
     summary: str
-    key_numbers: tuple[PreparedRevenueByRegion, ...]
+    key_data: pd.DataFrame
     datasets_used: tuple[str, ...]
     time_range: str
     filters: tuple[str, ...]
