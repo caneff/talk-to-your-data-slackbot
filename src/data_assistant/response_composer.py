@@ -21,9 +21,11 @@ def compose_final_response(
     filters = ", ".join(answer_draft.filters) if answer_draft.filters else "none"
     caveats = " ".join(answer_draft.caveats)
     datasets = ", ".join(answer_draft.datasets_used)
+    dataset_tables = ", ".join(answer_draft.dataset_tables_used)
     trust_summary = (
         "Trust Summary: "
         f"Curated Dataset: {datasets}. "
+        f"Dataset Table: {dataset_tables}. "
         f"Time range: {answer_draft.time_range}. "
         f"Filters: {filters}. "
         f"Caveats: {caveats}"

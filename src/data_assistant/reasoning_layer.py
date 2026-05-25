@@ -31,6 +31,7 @@ def draft_answer(
         summary=summary,
         key_data=prepared_data.data,
         datasets_used=(dataset.name,),
+        dataset_tables_used=(prepared_data.request.table.table_id,),
         time_range=prepared_data.request.time_range.label,
         filters=prepared_data.request.filters,
         caveats=(dataset.freshness.description,),

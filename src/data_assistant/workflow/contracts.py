@@ -95,6 +95,7 @@ class AnswerDraft:
     summary: str
     key_data: pd.DataFrame
     datasets_used: tuple[str, ...]
+    dataset_tables_used: tuple[str, ...]
     time_range: str
     filters: tuple[str, ...]
     caveats: tuple[str, ...]
