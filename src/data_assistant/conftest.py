@@ -1,15 +1,13 @@
-import collections.abc
 import typing
 
-import duckdb
 import pytest
 
-import data_assistant.data_preparation as data_preparation
 import data_assistant.data_requester as data_requester
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_router as semantic_router
+import data_assistant.testing_support as testing_support
 import data_assistant.workflow.contracts as contracts
 
 CANONICAL_DATA_QUESTION = "What was total revenue by region in January 2026?"
@@ -28,29 +26,8 @@ def active_semantic_layer() -> schema.SemanticLayer:
 
 
 @pytest.fixture
-def commerce_connection() -> collections.abc.Iterator[duckdb.DuckDBPyConnection]:
-    connection = duckdb.connect(":memory:")
-    connection.execute(
-        """
-        create table orders (
-            order_date date,
-            region varchar,
-            revenue decimal(12, 2)
-        )
-        """,
-    )
-    connection.executemany(
-        "insert into orders values (?, ?, ?)",
-        (
-            ("2026-01-03", "North", "1200.00"),
-            ("2026-01-08", "South", "850.00"),
-            ("2026-01-15", "West", "1600.00"),
-            ("2026-01-22", "North", "300.00"),
-            ("2026-01-28", "East", "950.00"),
-        ),
-    )
-    yield connection
-    connection.close()
+def connect_orders() -> testing_support.OrdersConnector:
+    return testing_support.connect_orders
 
 
 @pytest.fixture
@@ -94,11 +71,3 @@ def data_request(
             active_semantic_layer,
         ),
     )
-
-
-@pytest.fixture
-def prepared_data(
-    data_request: contracts.DataRequest,
-    commerce_connection: duckdb.DuckDBPyConnection,
-) -> contracts.PreparedData:
-    return data_preparation.prepare_data(data_request, commerce_connection)

@@ -1,17 +1,24 @@
-import duckdb
-
+import data_assistant.testing_support as testing_support
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
 
 
 def test_data_assistant_runs_end_to_end(
-    commerce_connection: duckdb.DuckDBPyConnection,
     canonical_question: str,
+    connect_orders: testing_support.OrdersConnector,
 ) -> None:
-    run = workflow_runner.run_data_assistant(
-        commerce_connection,
-        canonical_question,
+    order_rows = (
+        ("2026-01-03", "North", "1200.00"),
+        ("2026-01-08", "South", "850.00"),
+        ("2026-01-15", "West", "1600.00"),
+        ("2026-01-22", "North", "300.00"),
+        ("2026-01-28", "East", "950.00"),
     )
+    with connect_orders(order_rows) as connection:
+        run = workflow_runner.run_data_assistant(
+            connection,
+            canonical_question,
+        )
 
     assert isinstance(run, contracts.DataAssistantRun)
     assert run.question_frame.unresolved_ambiguities == ()
@@ -22,12 +29,16 @@ def test_data_assistant_runs_end_to_end(
 
 
 def test_data_assistant_short_circuits_question_ambiguity(
-    commerce_connection: duckdb.DuckDBPyConnection,
+    connect_orders: testing_support.OrdersConnector,
 ) -> None:
-    result = workflow_runner.run_data_assistant(
-        commerce_connection,
-        "What was total revenue by region?",
+    order_rows = (
+        ("2026-01-03", "North", "1200.00"),
     )
+    with connect_orders(order_rows) as connection:
+        result = workflow_runner.run_data_assistant(
+            connection,
+            "What was total revenue by region?",
+        )
 
     assert result == contracts.NonAnswer(
         stage="question_interpreter",

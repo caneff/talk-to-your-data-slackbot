@@ -2,26 +2,14 @@
 
 from __future__ import annotations
 
+import calendar
+import collections.abc
 import datetime
 import re
+import typing
 
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
-
-_MONTHS_BY_NAME = {
-    "january": 1,
-    "february": 2,
-    "march": 3,
-    "april": 4,
-    "may": 5,
-    "june": 6,
-    "july": 7,
-    "august": 8,
-    "september": 9,
-    "october": 10,
-    "november": 11,
-    "december": 12,
-}
 
 
 def interpret_question(
@@ -30,8 +18,14 @@ def interpret_question(
 ) -> contracts.StageResult[contracts.QuestionFrame]:
     """Create a Question Frame by matching Semantic Layer business labels."""
     normalized_question = _normalize(question)
-    metric = _find_one_metric_label(normalized_question, semantic_layer)
-    dimension = _find_one_dimension_label(normalized_question, semantic_layer)
+    metric = _find_one_label(
+        normalized_question,
+        (table.metrics for table in semantic_layer.tables),
+    )
+    dimension = _find_one_label(
+        normalized_question,
+        (table.dimensions for table in semantic_layer.tables),
+    )
     time_range = _find_month_year_time_range(normalized_question)
     unresolved_ambiguities = tuple(
         ambiguity
@@ -51,9 +45,11 @@ def interpret_question(
             next_step="Ask a clarification question before selecting data.",
         )
 
+    # Assert for type checker here.
     assert metric is not None
     assert dimension is not None
     assert time_range is not None
+
     return contracts.Success(
         contracts.QuestionFrame(
             intent="summarize",
@@ -66,61 +62,48 @@ def interpret_question(
     )
 
 
-def _find_one_metric_label(
-    normalized_question: str,
-    semantic_layer: schema.SemanticLayer,
-) -> str | None:
-    labels = {
-        metric.label
-        for table in semantic_layer.tables
-        for metric in table.metrics
-        if _normalize(metric.label) in normalized_question
-    }
-    return _one(labels)
-
-
-def _find_one_dimension_label(
-    normalized_question: str,
-    semantic_layer: schema.SemanticLayer,
-) -> str | None:
-    labels = {
-        dimension.label
-        for table in semantic_layer.tables
-        for dimension in table.dimensions
-        if _normalize(dimension.label) in normalized_question
-    }
-    return _one(labels)
-
-
 def _find_month_year_time_range(normalized_question: str) -> contracts.TimeRange | None:
-    match = re.search(
-        r"\b("
-        + "|".join(_MONTHS_BY_NAME)
-        + r")\s+([0-9]{4})\b",
-        normalized_question,
-    )
-    if match is None:
+    for match in re.finditer(r"\b[a-z]+\s+[0-9]{4}\b", normalized_question):
+        try:
+            start_date = datetime.datetime.strptime(
+                match.group(0),
+                "%B %Y",
+            ).date()
+        except ValueError:
+            continue
+
+        end_date = datetime.date(
+            start_date.year,
+            start_date.month,
+            calendar.monthrange(start_date.year, start_date.month)[1],
+        )
+        label = start_date.strftime("%B %Y")
+        return contracts.TimeRange(
+            label=label,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    return None
+
+
+class _SemanticLabel(typing.Protocol):
+    label: str
+
+
+def _find_one_label(
+    normalized_question: str,
+    label_groups: collections.abc.Iterable[collections.abc.Iterable[_SemanticLabel]],
+) -> str | None:
+    matching_labels = {
+        item.label
+        for label_group in label_groups
+        for item in label_group
+        if _normalize(item.label) in normalized_question
+    }
+    if len(matching_labels) != 1:
         return None
-
-    month_name = match.group(1)
-    year = int(match.group(2))
-    month = _MONTHS_BY_NAME[month_name]
-    start_date = datetime.date(year, month, 1)
-    end_date = _month_end_date(year, month)
-    label = f"{month_name.title()} {year}"
-    return contracts.TimeRange(label=label, start_date=start_date, end_date=end_date)
-
-
-def _month_end_date(year: int, month: int) -> datetime.date:
-    if month == 12:
-        return datetime.date(year, 12, 31)
-    return datetime.date(year, month + 1, 1) - datetime.timedelta(days=1)
-
-
-def _one(values: set[str]) -> str | None:
-    if len(values) != 1:
-        return None
-    return next(iter(values))
+    return next(iter(matching_labels))
 
 
 def _normalize(question: str) -> str:

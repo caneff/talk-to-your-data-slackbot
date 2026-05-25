@@ -86,7 +86,6 @@ class PreparedData:
 
     request: DataRequest
     data: pd.DataFrame
-    source_row_count: int
 
 
 @dataclasses.dataclass(frozen=True)
