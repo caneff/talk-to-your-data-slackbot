@@ -34,6 +34,27 @@ class RecordingSlackGateway:
         self.deliveries.append(delivery)
 
 
+def build_test_payload(
+    *,
+    event_id: str = "Ev123",
+    event_type: str = "message",
+    channel: str = "C123",
+    user: str = "U123",
+    text: str = "What was total revenue by region in January 2026?",
+    ts: str = "1710000000.123456",
+) -> slack_boundary.SlackEventPayload:
+    return {
+        "event_id": event_id,
+        "event": {
+            "type": event_type,
+            "channel": channel,
+            "user": user,
+            "text": text,
+            "ts": ts,
+        },
+    }
+
+
 def test_handle_slack_event_delivers_final_response_in_original_thread(
     canonical_question: str,
     connect_orders: testing_support.OrdersConnector,
@@ -43,16 +64,11 @@ def test_handle_slack_event_delivers_final_response_in_original_thread(
         text="Final answer text.",
         trust_summary="Trust Summary: fake answer path.",
     )
-    payload: slack_boundary.SlackEventPayload = {
-        "event_id": "Ev123",
-        "event": {
-            "type": "message",
-            "channel": "C123",
-            "user": "U123",
-            "text": canonical_question,
-            "ts": "1710000000.123456",
-        },
-    }
+    payload = build_test_payload(
+        channel="C-final",
+        text=canonical_question,
+        ts="1710000000.654321",
+    )
     order_rows = (("2026-01-03", "North", "1200.00"),)
 
     def answer_path(
@@ -72,8 +88,8 @@ def test_handle_slack_event_delivers_final_response_in_original_thread(
 
     assert len(gateway.deliveries) == 1
     delivery = gateway.deliveries[0]
-    assert delivery.channel == "C123"
-    assert delivery.thread_ts == "1710000000.123456"
+    assert delivery.channel == "C-final"
+    assert delivery.thread_ts == "1710000000.654321"
     assert delivery.text == final_response.text
 
 
@@ -82,24 +98,14 @@ def test_handle_slack_event_acknowledges_before_running_answer_path(
     connect_orders: testing_support.OrdersConnector,
 ) -> None:
     gateway = RecordingSlackGateway()
-    payload: slack_boundary.SlackEventPayload = {
-        "event_id": "Ev123",
-        "event": {
-            "type": "message",
-            "channel": "C123",
-            "user": "U123",
-            "text": canonical_question,
-            "ts": "1710000000.123456",
-        },
-    }
+    payload = build_test_payload(text=canonical_question)
     order_rows = (("2026-01-03", "North", "1200.00"),)
     calls: list[str] = []
 
     def answer_path(
-        connection: duckdb.DuckDBPyConnection,
+        _connection: duckdb.DuckDBPyConnection,
         question: str,
     ) -> slack_boundary.SlackWorkflowResult:
-        del connection
         assert question == canonical_question
         calls.append("answer_path")
         assert gateway.acknowledgements == 1
@@ -127,16 +133,7 @@ def test_handle_slack_event_delivers_non_answer_response(
     connect_orders: testing_support.OrdersConnector,
 ) -> None:
     gateway = RecordingSlackGateway()
-    payload: slack_boundary.SlackEventPayload = {
-        "event_id": "Ev123",
-        "event": {
-            "type": "message",
-            "channel": "C123",
-            "user": "U123",
-            "text": "What was total revenue by region?",
-            "ts": "1710000000.123456",
-        },
-    }
+    payload = build_test_payload(text="What was total revenue by region?")
     order_rows = (("2026-01-03", "North", "1200.00"),)
 
     with connect_orders(order_rows) as connection:
@@ -160,16 +157,7 @@ def test_handle_slack_event_returns_acknowledged_delivery_result(
     connect_orders: testing_support.OrdersConnector,
 ) -> None:
     gateway = RecordingSlackGateway()
-    payload: slack_boundary.SlackEventPayload = {
-        "event_id": "Ev123",
-        "event": {
-            "type": "message",
-            "channel": "C123",
-            "user": "U123",
-            "text": canonical_question,
-            "ts": "1710000000.123456",
-        },
-    }
+    payload = build_test_payload(text=canonical_question)
     order_rows = (("2026-01-03", "North", "1200.00"),)
 
     with connect_orders(order_rows) as connection:
