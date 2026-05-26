@@ -84,9 +84,12 @@ class _SocketModeSlackGateway:
     def __init__(self, *, ack: Ack, client: SlackBoltChatClient) -> None:
         self._ack = ack
         self._client = client
+        self._acknowledged = False
 
     def acknowledge(self) -> None:
-        self._ack()
+        if not self._acknowledged:
+            self._ack()
+            self._acknowledged = True
 
     def deliver_response(self, delivery: slack_boundary.SlackDelivery) -> None:
         self._client.chat_postMessage(
@@ -153,6 +156,7 @@ def handle_socket_mode_event(
         gateway.acknowledge()
         return None
 
+    gateway.acknowledge()
     payload: slack_boundary.SlackEventPayload = {
         "event_id": "",
         "event": {

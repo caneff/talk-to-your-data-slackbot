@@ -191,6 +191,7 @@ def test_handle_socket_mode_event_routes_human_dm_through_existing_boundary(
     connect_orders: testing_support.OrdersConnector,
 ) -> None:
     ack_calls: list[str] = []
+    calls: list[str] = []
     client = RecordingSlackClient()
     seen_questions: list[str] = []
     seen_identity_ids: list[str] = []
@@ -210,9 +211,11 @@ def test_handle_socket_mode_event_routes_human_dm_through_existing_boundary(
 
     def acknowledge() -> None:
         ack_calls.append("ack")
+        calls.append("ack")
 
     def connection_factory(
     ) -> contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]:
+        calls.append("connection_factory")
         return connect_orders((("2026-01-03", "North", "1200.00"),))
 
     def answer_path(
@@ -220,6 +223,7 @@ def test_handle_socket_mode_event_routes_human_dm_through_existing_boundary(
         question: str,
         internal_identity: contracts.InternalIdentity,
     ) -> slack_boundary.SlackWorkflowResult:
+        calls.append("answer_path")
         seen_questions.append(question)
         seen_identity_ids.append(internal_identity.identity_id)
         return final_response
@@ -234,6 +238,7 @@ def test_handle_socket_mode_event_routes_human_dm_through_existing_boundary(
 
     assert result is not None
     assert ack_calls == ["ack"]
+    assert calls == ["ack", "connection_factory", "answer_path"]
     assert seen_questions == [canonical_question]
     assert seen_identity_ids == ["slack_user:U123"]
     assert client.calls == [
