@@ -32,6 +32,12 @@ The quick confirmation sent to Slack that a request was received, before the
 composition.
 _Avoid_: Final response, answer, status update
 
+**Slack Runtime Adapter**:
+The part of the **Data Assistant** that receives real Slack events and delivers
+real Slack messages while preserving the boundaries between Slack delivery,
+conversation flow, and response composition.
+_Avoid_: Conversation manager, response composer, Slack bot
+
 **Progress Update**:
 A brief status message sent during long-running analysis to explain the current
 stage of work without exposing sensitive details or creating noisy repeated
