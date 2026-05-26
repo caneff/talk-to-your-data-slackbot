@@ -218,7 +218,6 @@ def register_socket_mode_handlers(
     """Register Slack Bolt event handlers that adapt DMs into the boundary."""
 
     def handle_message_event(
-        *,
         event: SlackBoltMessageEvent,
         ack: Ack,
         client: SlackBoltChatClient,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import collections.abc
 import contextlib
 import dataclasses
+import inspect
 import os
 import pathlib
 import typing
@@ -398,6 +399,23 @@ def test_run_socket_mode_from_env_registers_message_handler_before_startup() -> 
     assert "message" in app.registered_handlers
     assert len(created_handlers) == 1
     assert created_handlers[0].starts == 1
+
+
+def test_registered_message_handler_exposes_bolt_injected_arguments() -> None:
+    app = RecordingBoltApp()
+
+    def connection_factory(
+    ) -> contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]:
+        raise AssertionError("argument inspection must not open data")
+
+    slack_runtime.register_socket_mode_handlers(
+        app=app,
+        connection_factory=connection_factory,
+    )
+
+    handler = app.registered_handlers["message"]
+
+    assert inspect.getfullargspec(handler).args == ["event", "ack", "client"]
 
 
 def test_main_starts_socket_mode_with_dev_connection_factory(
