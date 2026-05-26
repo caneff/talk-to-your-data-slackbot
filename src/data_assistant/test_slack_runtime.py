@@ -378,10 +378,7 @@ def test_run_socket_mode_from_env_registers_message_handler_before_startup() -> 
 def test_main_starts_socket_mode_with_dev_connection_factory(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    dev_connection_factory = typing.cast(
-        slack_runtime.ConnectionFactory,
-        slack_runtime._dev_connection_factory,  # pyright: ignore[reportPrivateUsage]
-    )
+    dev_connection_factory = slack_runtime._dev_connection_factory  # pyright: ignore[reportPrivateUsage]
     dev_internal_identity_resolver = typing.cast(
         slack_boundary.InternalIdentityResolver,
         slack_runtime._dev_internal_identity_resolver,  # pyright: ignore[reportPrivateUsage]
@@ -424,10 +421,7 @@ def test_main_starts_socket_mode_with_dev_connection_factory(
 def test_run_socket_mode_from_env_registers_dev_runtime_that_answers_canonical_dm(
     canonical_question: str,
 ) -> None:
-    dev_connection_factory = typing.cast(
-        slack_runtime.ConnectionFactory,
-        slack_runtime._dev_connection_factory,  # pyright: ignore[reportPrivateUsage]
-    )
+    dev_connection_factory = slack_runtime._dev_connection_factory  # pyright: ignore[reportPrivateUsage]
     dev_internal_identity_resolver = typing.cast(
         slack_boundary.InternalIdentityResolver,
         slack_runtime._dev_internal_identity_resolver,  # pyright: ignore[reportPrivateUsage]

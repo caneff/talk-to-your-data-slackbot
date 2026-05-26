@@ -13,7 +13,6 @@ import duckdb
 
 import data_assistant.access_controller as access_controller
 import data_assistant.slack_boundary as slack_boundary
-import data_assistant.testing_support as testing_support
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
 
@@ -250,13 +249,35 @@ def _default_socket_mode_handler_factory(
 def _dev_connection_factory(
 ) -> contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]:
     """Provide a tiny local DuckDB fixture for manual Slack smoke testing."""
-    return testing_support.connect_orders(
+    return _connect_dev_orders(
         (
             ("2026-01-03", "North", "1200.00"),
             ("2026-01-10", "South", "800.00"),
             ("2026-01-17", "North", "300.00"),
         )
     )
+
+
+@contextlib.contextmanager
+def _connect_dev_orders(
+    rows: collections_abc.Iterable[tuple[str, str | None, str | None]],
+) -> collections_abc.Generator[duckdb.DuckDBPyConnection]:
+    """Build the runtime's tiny in-memory orders table for local Slack smoke tests."""
+    connection = duckdb.connect(":memory:")
+    connection.execute(
+        """
+        create table orders (
+            order_date date,
+            region varchar,
+            revenue decimal(12, 2)
+        )
+        """,
+    )
+    connection.executemany("insert into orders values (?, ?, ?)", rows)
+    try:
+        yield connection
+    finally:
+        connection.close()
 
 
 def run_socket_mode_from_env(
