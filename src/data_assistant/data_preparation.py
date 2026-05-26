@@ -62,14 +62,13 @@ def prepare_data(
         "start_date": data_request.time_range.start_date,
         "end_date": data_request.time_range.end_date,
     }
-    grouped_query_parameters = {
-        **time_range_parameters,
-        "result_limit": data_request.result_limit,
-    }
 
     prepared_dataframe = connection.execute(
         grouped_query,
-        grouped_query_parameters,
+        {
+            **time_range_parameters,
+            "result_limit": data_request.result_limit,
+        },
     ).df()
     quality_counts = connection.execute(quality_query, time_range_parameters).fetchone()
     if quality_counts is None:
