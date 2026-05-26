@@ -112,7 +112,7 @@ def test_handle_slack_event_acknowledges_before_running_answer_path(
     def answer_path(
         connection: duckdb.DuckDBPyConnection,
         question: str,
-    ) -> contracts.WorkflowResult:
+    ) -> slack_boundary.SlackWorkflowResult:
         del connection
         assert question == canonical_question
         calls.append("answer_path")
@@ -163,8 +163,8 @@ def test_handle_slack_event_delivers_non_answer_response(
     assert len(gateway.deliveries) == 1
     assert (
         gateway.deliveries[0].text
-        == "The Data Question is missing required interpretation details.\n\n"
-        "Unresolved ambiguities: time range\n"
+        == "I cannot answer safely yet because the Data Question is missing "
+        "required interpretation details.\n\n"
         "Next step: Ask a clarification question before selecting data."
     )
 

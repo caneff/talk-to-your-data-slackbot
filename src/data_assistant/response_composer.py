@@ -35,5 +35,27 @@ def compose_final_response(
     return contracts.FinalResponse(text=text, trust_summary=trust_summary)
 
 
+def compose_non_answer_response(
+    non_answer: contracts.NonAnswer,
+) -> contracts.FinalResponse:
+    """Compose a plain-text Final Response for a workflow Non-Answer."""
+    adverb = (
+        " yet"
+        if non_answer.reason
+        == "The Data Question is missing required interpretation details."
+        else ""
+    )
+    reason = non_answer.reason[0].lower() + non_answer.reason[1:]
+    text = (
+        f"I cannot answer safely{adverb} because {reason}\n\n"
+        f"Next step: {non_answer.next_step}"
+    )
+    trust_summary = (
+        "Trust Summary: Returned a Non-Answer Response from "
+        f"{non_answer.stage}."
+    )
+    return contracts.FinalResponse(text=text, trust_summary=trust_summary)
+
+
 def _format_money(value: float) -> str:
     return f"${value:,.2f}"
