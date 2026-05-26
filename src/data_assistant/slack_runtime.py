@@ -3,10 +3,17 @@
 from __future__ import annotations
 
 import collections.abc as collections_abc
+import contextlib
 import dataclasses
 import os
 import sys
 import typing
+
+import duckdb
+
+import data_assistant.slack_boundary as slack_boundary
+import data_assistant.workflow.contracts as contracts
+import data_assistant.workflow.runner as workflow_runner
 
 if typing.TYPE_CHECKING:
     from slack_bolt import App as SlackBoltApp
@@ -31,10 +38,85 @@ class SocketModeHandler(typing.Protocol):
         """Start the Socket Mode event loop."""
 
 
+class SlackBoltAppEventRegistrar(typing.Protocol):
+    """Minimal Slack Bolt app surface used by runtime registration."""
+
+    def event(
+        self, event_name: str
+    ) -> collections_abc.Callable[[collections_abc.Callable[..., object]], object]:
+        """Register a handler for one Slack event type."""
+        ...
+
+
 AppFactory: typing.TypeAlias = collections_abc.Callable[..., object]
 SocketModeHandlerFactory: typing.TypeAlias = collections_abc.Callable[
     ..., SocketModeHandler
 ]
+Ack: typing.TypeAlias = collections_abc.Callable[[], None]
+ConnectionFactory: typing.TypeAlias = collections_abc.Callable[
+    [], contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
+]
+
+
+class SlackBoltMessageEvent(typing.TypedDict):
+    """Slack Bolt event fields used by the DM runtime adapter."""
+
+    type: str
+    channel: str
+    channel_type: str
+    user: str
+    text: str
+    ts: str
+    bot_id: typing.NotRequired[str]
+    subtype: typing.NotRequired[str]
+
+
+class SlackBoltChatClient(typing.Protocol):
+    """Minimal Slack client surface used by the runtime adapter."""
+
+    def chat_postMessage(self, *, channel: str, thread_ts: str, text: str) -> None:
+        """Post a threaded DM response back to Slack."""
+
+
+class _SocketModeSlackGateway:
+    """Bridge boundary deliveries to the Slack Bolt ack/client shape."""
+
+    def __init__(self, *, ack: Ack, client: SlackBoltChatClient) -> None:
+        self._ack = ack
+        self._client = client
+        self._acknowledged = False
+
+    def acknowledge(self) -> None:
+        if not self._acknowledged:
+            self._ack()
+            self._acknowledged = True
+
+    def deliver_response(self, delivery: slack_boundary.SlackDelivery) -> None:
+        self._client.chat_postMessage(
+            channel=delivery.channel,
+            thread_ts=delivery.thread_ts,
+            text=delivery.text,
+        )
+
+
+def _default_answer_path(
+    connection: duckdb.DuckDBPyConnection,
+    question: str,
+    internal_identity: contracts.InternalIdentity,
+) -> slack_boundary.SlackWorkflowResult:
+    """Use the standard Data Assistant workflow for Slack DM requests."""
+    return workflow_runner.run_data_assistant(
+        connection,
+        question,
+        internal_identity=internal_identity,
+    )
+
+
+def _default_internal_identity_resolver(
+    event: slack_boundary.SlackInnerEvent,
+) -> contracts.InternalIdentity:
+    """Map Slack DM user identity into the workflow contract."""
+    return contracts.InternalIdentity(identity_id=f"slack_user:{event['user']}")
 
 
 def load_slack_runtime_config(
@@ -55,6 +137,84 @@ def load_slack_runtime_config(
         bot_token=environ["SLACK_BOT_TOKEN"],
         app_token=environ["SLACK_APP_TOKEN"],
     )
+
+
+def handle_socket_mode_event(
+    *,
+    event: SlackBoltMessageEvent,
+    ack: Ack,
+    client: SlackBoltChatClient,
+    connection_factory: ConnectionFactory,
+    answer_path: slack_boundary.AnswerPath = _default_answer_path,
+    internal_identity_resolver: slack_boundary.InternalIdentityResolver = (
+        _default_internal_identity_resolver
+    ),
+) -> slack_boundary.SlackRequestResult | None:
+    """Route one human DM event through the existing Slack boundary."""
+    gateway = _SocketModeSlackGateway(ack=ack, client=client)
+    if not _is_supported_human_dm(event):
+        gateway.acknowledge()
+        return None
+
+    gateway.acknowledge()
+    payload: slack_boundary.SlackEventPayload = {
+        "event_id": "",
+        "event": {
+            "type": event["type"],
+            "channel": event["channel"],
+            "user": event["user"],
+            "text": event["text"],
+            "ts": event["ts"],
+        },
+    }
+    with connection_factory() as connection:
+        return slack_boundary.handle_slack_event(
+            payload=payload,
+            connection=connection,
+            gateway=gateway,
+            answer_path=answer_path,
+            internal_identity_resolver=internal_identity_resolver,
+        )
+
+
+def _is_supported_human_dm(event: SlackBoltMessageEvent) -> bool:
+    """Filter Slack events down to human direct messages only."""
+    return (
+        event.get("type") == "message"
+        and event.get("channel_type") == "im"
+        and bool(event.get("user"))
+        and not event.get("bot_id")
+        and not event.get("subtype")
+    )
+
+
+def register_socket_mode_handlers(
+    *,
+    app: SlackBoltAppEventRegistrar,
+    connection_factory: ConnectionFactory,
+    answer_path: slack_boundary.AnswerPath = _default_answer_path,
+    internal_identity_resolver: slack_boundary.InternalIdentityResolver = (
+        _default_internal_identity_resolver
+    ),
+) -> None:
+    """Register Slack Bolt event handlers that adapt DMs into the boundary."""
+
+    def handle_message_event(
+        *,
+        event: SlackBoltMessageEvent,
+        ack: Ack,
+        client: SlackBoltChatClient,
+    ) -> slack_boundary.SlackRequestResult | None:
+        return handle_socket_mode_event(
+            event=event,
+            ack=ack,
+            client=client,
+            connection_factory=connection_factory,
+            answer_path=answer_path,
+            internal_identity_resolver=internal_identity_resolver,
+        )
+
+    app.event("message")(handle_message_event)
 
 
 def _default_app_factory(*, token: str) -> object:
@@ -84,10 +244,16 @@ def run_socket_mode_from_env(
     socket_mode_handler_factory: SocketModeHandlerFactory = (
         _default_socket_mode_handler_factory
     ),
+    connection_factory: ConnectionFactory | None = None,
 ) -> SocketModeHandler:
     """Build and start the local Slack Runtime Adapter from environment config."""
     config = load_slack_runtime_config(environ)
     app = app_factory(token=config.bot_token)
+    if connection_factory is not None:
+        register_socket_mode_handlers(
+            app=typing.cast(SlackBoltAppEventRegistrar, app),
+            connection_factory=connection_factory,
+        )
     handler = socket_mode_handler_factory(app_token=config.app_token, app=app)
     handler.start()
     return handler
