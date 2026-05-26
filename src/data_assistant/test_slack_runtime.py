@@ -373,3 +373,115 @@ def test_run_socket_mode_from_env_registers_message_handler_before_startup() -> 
     assert "message" in app.registered_handlers
     assert len(created_handlers) == 1
     assert created_handlers[0].starts == 1
+
+
+def test_main_starts_socket_mode_with_dev_connection_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dev_connection_factory = typing.cast(
+        slack_runtime.ConnectionFactory,
+        slack_runtime._dev_connection_factory,  # pyright: ignore[reportPrivateUsage]
+    )
+    dev_internal_identity_resolver = typing.cast(
+        slack_boundary.InternalIdentityResolver,
+        slack_runtime._dev_internal_identity_resolver,  # pyright: ignore[reportPrivateUsage]
+    )
+    received_connection_factory: list[slack_runtime.ConnectionFactory | None] = []
+    received_identity_resolver: list[
+        slack_boundary.InternalIdentityResolver | None
+    ] = []
+
+    def fake_run_socket_mode_from_env(
+        environ: collections.abc.Mapping[str, str] = {},
+        *,
+        app_factory: slack_runtime.AppFactory | None = None,
+        socket_mode_handler_factory: (
+            slack_runtime.SocketModeHandlerFactory | None
+        ) = None,
+        connection_factory: slack_runtime.ConnectionFactory | None = None,
+        internal_identity_resolver: (
+            slack_boundary.InternalIdentityResolver | None
+        ) = None,
+    ) -> FakeSocketModeHandler:
+        del environ, app_factory, socket_mode_handler_factory
+        received_connection_factory.append(connection_factory)
+        received_identity_resolver.append(internal_identity_resolver)
+        return FakeSocketModeHandler(app_token="xapp-test-token", app=object())
+
+    monkeypatch.setattr(
+        slack_runtime,
+        "run_socket_mode_from_env",
+        fake_run_socket_mode_from_env,
+    )
+
+    exit_code = slack_runtime.main()
+
+    assert exit_code == 0
+    assert received_connection_factory == [dev_connection_factory]
+    assert received_identity_resolver == [dev_internal_identity_resolver]
+
+
+def test_run_socket_mode_from_env_registers_dev_runtime_that_answers_canonical_dm(
+    canonical_question: str,
+) -> None:
+    dev_connection_factory = typing.cast(
+        slack_runtime.ConnectionFactory,
+        slack_runtime._dev_connection_factory,  # pyright: ignore[reportPrivateUsage]
+    )
+    dev_internal_identity_resolver = typing.cast(
+        slack_boundary.InternalIdentityResolver,
+        slack_runtime._dev_internal_identity_resolver,  # pyright: ignore[reportPrivateUsage]
+    )
+    app = RecordingBoltApp()
+
+    def app_factory(*, token: str) -> object:
+        assert token == "xoxb-live-token"
+        return app
+
+    def socket_mode_handler_factory(
+        *, app_token: str, app: object
+    ) -> FakeSocketModeHandler:
+        assert app_token == "xapp-live-token"
+        assert app is not None
+        return FakeSocketModeHandler(app_token=app_token, app=app)
+
+    slack_runtime.run_socket_mode_from_env(
+        {
+            "SLACK_BOT_TOKEN": "xoxb-live-token",
+            "SLACK_APP_TOKEN": "xapp-live-token",
+        },
+        app_factory=app_factory,
+        socket_mode_handler_factory=socket_mode_handler_factory,
+        connection_factory=dev_connection_factory,
+        internal_identity_resolver=dev_internal_identity_resolver,
+    )
+
+    handler = app.registered_handlers["message"]
+    ack_calls: list[str] = []
+    client = RecordingSlackClient()
+    event: slack_runtime.SlackBoltMessageEvent = {
+        "type": "message",
+        "channel": "D123",
+        "channel_type": "im",
+        "user": "U999",
+        "text": canonical_question,
+        "ts": "1710000000.654321",
+    }
+
+    result = typing.cast(
+        slack_boundary.SlackRequestResult,
+        handler(
+            event=event,
+            ack=lambda: ack_calls.append("ack"),
+            client=client,
+        ),
+    )
+
+    assert result.acknowledged is True
+    assert ack_calls == ["ack"]
+    assert len(client.calls) == 1
+    assert client.calls[0]["thread_ts"] == "1710000000.654321"
+    assert "Trust Summary:" in client.calls[0]["text"]
+    assert "North" in client.calls[0]["text"]
+    assert "South" in client.calls[0]["text"]
+    assert "I cannot answer safely" not in client.calls[0]["text"]

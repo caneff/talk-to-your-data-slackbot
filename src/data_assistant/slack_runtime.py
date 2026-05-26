@@ -11,7 +11,9 @@ import typing
 
 import duckdb
 
+import data_assistant.access_controller as access_controller
 import data_assistant.slack_boundary as slack_boundary
+import data_assistant.testing_support as testing_support
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
 
@@ -117,6 +119,14 @@ def _default_internal_identity_resolver(
 ) -> contracts.InternalIdentity:
     """Map Slack DM user identity into the workflow contract."""
     return contracts.InternalIdentity(identity_id=f"slack_user:{event['user']}")
+
+
+def _dev_internal_identity_resolver(
+    event: slack_boundary.SlackInnerEvent,
+) -> contracts.InternalIdentity:
+    """Use the local allowed identity for manual development smoke testing."""
+    del event
+    return access_controller.DEFAULT_LOCAL_ALLOWED_IDENTITY
 
 
 def load_slack_runtime_config(
@@ -237,6 +247,18 @@ def _default_socket_mode_handler_factory(
     )
 
 
+def _dev_connection_factory(
+) -> contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]:
+    """Provide a tiny local DuckDB fixture for manual Slack smoke testing."""
+    return testing_support.connect_orders(
+        (
+            ("2026-01-03", "North", "1200.00"),
+            ("2026-01-10", "South", "800.00"),
+            ("2026-01-17", "North", "300.00"),
+        )
+    )
+
+
 def run_socket_mode_from_env(
     environ: collections_abc.Mapping[str, str] = os.environ,
     *,
@@ -245,6 +267,9 @@ def run_socket_mode_from_env(
         _default_socket_mode_handler_factory
     ),
     connection_factory: ConnectionFactory | None = None,
+    internal_identity_resolver: slack_boundary.InternalIdentityResolver = (
+        _default_internal_identity_resolver
+    ),
 ) -> SocketModeHandler:
     """Build and start the local Slack Runtime Adapter from environment config."""
     config = load_slack_runtime_config(environ)
@@ -253,6 +278,7 @@ def run_socket_mode_from_env(
         register_socket_mode_handlers(
             app=typing.cast(SlackBoltAppEventRegistrar, app),
             connection_factory=connection_factory,
+            internal_identity_resolver=internal_identity_resolver,
         )
     handler = socket_mode_handler_factory(app_token=config.app_token, app=app)
     handler.start()
@@ -262,7 +288,10 @@ def run_socket_mode_from_env(
 def main() -> int:
     """Run the local Socket Mode entrypoint."""
     try:
-        run_socket_mode_from_env()
+        run_socket_mode_from_env(
+            connection_factory=_dev_connection_factory,
+            internal_identity_resolver=_dev_internal_identity_resolver,
+        )
     except SlackRuntimeConfigError as error:
         print(str(error), file=sys.stderr)
         return 1
