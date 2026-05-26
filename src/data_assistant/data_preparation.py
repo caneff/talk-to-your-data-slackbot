@@ -16,13 +16,16 @@ def prepare_data(
     dimension_value_expression = (
         f"coalesce(nullif(trim({data_request.dimension.column}), ''), 'Unknown')"
     )
-    grouped_query = f"""
-        with filtered_rows as (
+    filtered_rows_cte = f"""
+        filtered_rows as (
             select *
             from {data_request.table.table_id}
             where {data_request.table.date_column} >= $start_date
               and {data_request.table.date_column} <= $end_date
-        ),
+        )
+    """
+    grouped_query = f"""
+        with {filtered_rows_cte},
         metric_rows as (
             select *
             from filtered_rows
@@ -37,12 +40,7 @@ def prepare_data(
         limit $result_limit
     """
     quality_query = f"""
-        with filtered_rows as (
-            select *
-            from {data_request.table.table_id}
-            where {data_request.table.date_column} >= $start_date
-              and {data_request.table.date_column} <= $end_date
-        )
+        with {filtered_rows_cte}
         select
             sum(
                 case
