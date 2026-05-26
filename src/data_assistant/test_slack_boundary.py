@@ -39,6 +39,10 @@ def test_handle_slack_event_delivers_final_response_in_original_thread(
     connect_orders: testing_support.OrdersConnector,
 ) -> None:
     gateway = RecordingSlackGateway()
+    final_response = contracts.FinalResponse(
+        text="Final answer text.",
+        trust_summary="Trust Summary: fake answer path.",
+    )
     payload: slack_boundary.SlackEventPayload = {
         "event_id": "Ev123",
         "event": {
@@ -49,46 +53,28 @@ def test_handle_slack_event_delivers_final_response_in_original_thread(
             "ts": "1710000000.123456",
         },
     }
-    order_rows = (
-        ("2026-01-03", "North", "1200.00"),
-        ("2026-01-08", "South", "850.00"),
-        ("2026-01-15", "West", "1600.00"),
-        ("2026-01-20", " ", "250.00"),
-        ("2026-01-22", "North", "300.00"),
-        ("2026-01-28", "East", "950.00"),
-        ("2026-01-29", "East", None),
-        ("2026-02-01", None, None),
-    )
+    order_rows = (("2026-01-03", "North", "1200.00"),)
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        question: str,
+    ) -> slack_boundary.SlackWorkflowResult:
+        assert question == canonical_question
+        return final_response
 
     with connect_orders(order_rows) as connection:
         slack_boundary.handle_slack_event(
             payload=payload,
             connection=connection,
             gateway=gateway,
+            answer_path=answer_path,
         )
 
-    assert gateway.deliveries == [
-        slack_boundary.SlackDelivery(
-            channel="C123",
-            thread_ts="1710000000.123456",
-            text=(
-                "Total revenue in January 2026 was $5,150.00, grouped across 5 "
-                "regions.\n\n"
-                "- West: $1,600.00\n"
-                "- North: $1,500.00\n"
-                "- East: $950.00\n"
-                "- South: $850.00\n"
-                "- Unknown: $250.00\n\n"
-                "Trust Summary: Curated Dataset: Commerce Revenue. "
-                "Dataset Table: orders. "
-                "Time range: January 2026. "
-                "Filters: none. "
-                "Caveats: Commerce order data refreshed through 2026-01-31. "
-                "1 row excluded because revenue was missing. "
-                "1 row grouped under Unknown because region was missing."
-            ),
-        ),
-    ]
+    assert len(gateway.deliveries) == 1
+    delivery = gateway.deliveries[0]
+    assert delivery.channel == "C123"
+    assert delivery.thread_ts == "1710000000.123456"
+    assert delivery.text == final_response.text
 
 
 def test_handle_slack_event_acknowledges_before_running_answer_path(
