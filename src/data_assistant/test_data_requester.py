@@ -13,6 +13,7 @@ def test_data_request_asks_for_total_revenue_grouped_by_region(
     assert data_request.metric.metric_id == "total_revenue"
     assert data_request.metric.label == "total revenue"
     assert data_request.metric.expression == "sum(revenue)"
+    assert data_request.metric.source_column == "revenue"
     assert data_request.dimension.dimension_id == "region"
     assert data_request.dimension.label == "region"
     assert data_request.dimension.column == "region"
@@ -48,6 +49,7 @@ def test_data_requester_returns_non_answer_for_ambiguous_tables() -> None:
         metric_id="total_revenue",
         label="total revenue",
         expression="sum(revenue)",
+        source_column="revenue",
     )
     dimension = schema.Dimension(
         dimension_id="region",

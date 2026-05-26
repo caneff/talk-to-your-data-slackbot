@@ -44,6 +44,7 @@ class Metric(_SemanticLayerModel):
     metric_id: str
     label: str
     expression: str
+    source_column: str
 
 
 class Dimension(_SemanticLayerModel):
@@ -74,6 +75,13 @@ class DatasetTable(_SemanticLayerModel):
         for dimension in self.dimensions:
             if dimension.column not in column_ids:
                 msg = f"Dimension column is not listed in columns: {dimension.column}"
+                raise ValueError(msg)
+        for metric in self.metrics:
+            if metric.source_column not in column_ids:
+                msg = (
+                    "Metric source column is not listed in columns: "
+                    f"{metric.source_column}"
+                )
                 raise ValueError(msg)
         return self
 

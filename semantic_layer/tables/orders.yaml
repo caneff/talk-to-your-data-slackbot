@@ -15,6 +15,7 @@ metrics:
   - metric_id: total_revenue
     label: total revenue
     expression: sum(revenue)
+    source_column: revenue
 dimensions:
   - dimension_id: region
     label: region

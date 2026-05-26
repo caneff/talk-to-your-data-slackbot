@@ -1,7 +1,10 @@
+import dataclasses
+
 import pandas as pd
 import pandas.testing as pd_testing
 
 import data_assistant.data_preparation as data_preparation
+import data_assistant.semantic_layer.schema as schema
 import data_assistant.testing_support as testing_support
 import data_assistant.workflow.contracts as contracts
 
@@ -57,4 +60,36 @@ def test_prepared_data_records_quality_notes_after_time_filtering(
     assert prepared_data.quality_notes == (
         "1 row excluded because revenue was missing.",
         "3 rows grouped under Unknown because region was missing.",
+    )
+
+
+def test_prepared_data_uses_metric_source_column_for_missing_values(
+    data_request: contracts.DataRequest,
+    connect_orders: testing_support.OrdersConnector,
+) -> None:
+    data_request = dataclasses.replace(
+        data_request,
+        metric=schema.Metric(
+            metric_id="total_revenue",
+            label="total revenue",
+            expression="sum(revenue * 1)",
+            source_column="revenue",
+        ),
+    )
+    order_rows = (
+        ("2026-01-03", "North", "100.00"),
+        ("2026-01-08", "North", None),
+    )
+    with connect_orders(order_rows) as connection:
+        prepared_data = data_preparation.prepare_data(data_request, connection)
+
+    expected_data = pd.DataFrame(
+        {
+            "dimension_value": ("North",),
+            "metric_value": (100.0,),
+        },
+    )
+    pd_testing.assert_frame_equal(prepared_data.data, expected_data)
+    assert prepared_data.quality_notes == (
+        "1 row excluded because revenue was missing.",
     )
