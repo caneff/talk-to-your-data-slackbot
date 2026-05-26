@@ -1,20 +1,29 @@
-"""Tests for the local Slack Runtime Adapter startup boundary.
-
-These tests intentionally exercise only the local startup contract for issue
-#23. They do not import Slack Bolt directly, create real Slack clients, open a
-Socket Mode connection, or adapt incoming Slack events. The next issue owns live
-`message.im` handling; this file only proves that local configuration and
-startup wiring are safe before that event path exists.
-"""
+"""Tests for the local Slack Runtime Adapter startup and DM event adapter."""
 
 from __future__ import annotations
 
+import collections.abc
+import contextlib
 import dataclasses
 import typing
 
+import duckdb
 import pytest
 
+import data_assistant.slack_boundary as slack_boundary
 import data_assistant.slack_runtime as slack_runtime
+import data_assistant.testing_support as testing_support
+import data_assistant.workflow.contracts as contracts
+
+
+def create_empty_chat_post_calls() -> list[dict[str, str]]:
+    return []
+
+
+def create_empty_registered_handlers() -> dict[
+    str, collections.abc.Callable[..., object]
+]:
+    return {}
 
 
 def test_load_slack_runtime_config_reads_required_env_vars() -> None:
@@ -134,3 +143,228 @@ def test_run_socket_mode_from_env_builds_and_starts_socket_mode_runtime() -> Non
     assert handler.app == {"bot_token": "xoxb-live-token"}
     assert handler.app_token == "xapp-live-token"
     assert handler.starts == 1
+
+
+@dataclasses.dataclass
+class RecordingSlackClient:
+    """Capture Slack DM replies without calling Slack APIs."""
+
+    calls: list[dict[str, str]] = dataclasses.field(
+        default_factory=create_empty_chat_post_calls
+    )
+
+    def chat_postMessage(self, *, channel: str, thread_ts: str, text: str) -> None:
+        self.calls.append(
+            {
+                "channel": channel,
+                "thread_ts": thread_ts,
+                "text": text,
+            }
+        )
+
+
+@dataclasses.dataclass
+class RecordingBoltApp:
+    """Capture registered Bolt event handlers without importing Slack Bolt."""
+
+    registered_handlers: dict[str, collections.abc.Callable[..., object]] = (
+        dataclasses.field(default_factory=create_empty_registered_handlers)
+    )
+
+    def event(
+        self, event_name: str
+    ) -> collections.abc.Callable[
+        [collections.abc.Callable[..., object]],
+        collections.abc.Callable[..., object],
+    ]:
+        def register(
+            handler: collections.abc.Callable[..., object],
+        ) -> collections.abc.Callable[..., object]:
+            self.registered_handlers[event_name] = handler
+            return handler
+
+        return register
+
+
+def test_handle_socket_mode_event_routes_human_dm_through_existing_boundary(
+    canonical_question: str,
+    connect_orders: testing_support.OrdersConnector,
+) -> None:
+    ack_calls: list[str] = []
+    client = RecordingSlackClient()
+    seen_questions: list[str] = []
+    seen_identity_ids: list[str] = []
+    event: slack_runtime.SlackBoltMessageEvent = {
+        "type": "message",
+        "channel": "D123",
+        "channel_type": "im",
+        "user": "U123",
+        "text": canonical_question,
+        "ts": "1710000000.654321",
+    }
+    final_response = contracts.FinalResponse(
+        text="Final answer text.",
+        trust_summary=contracts.TrustSummary(datasets=("Commerce Revenue",)),
+        response_kind="answer",
+    )
+
+    def acknowledge() -> None:
+        ack_calls.append("ack")
+
+    def connection_factory(
+    ) -> contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]:
+        return connect_orders((("2026-01-03", "North", "1200.00"),))
+
+    def answer_path(
+        _connection: object,
+        question: str,
+        internal_identity: contracts.InternalIdentity,
+    ) -> slack_boundary.SlackWorkflowResult:
+        seen_questions.append(question)
+        seen_identity_ids.append(internal_identity.identity_id)
+        return final_response
+
+    result = slack_runtime.handle_socket_mode_event(
+        event=event,
+        ack=acknowledge,
+        client=client,
+        connection_factory=connection_factory,
+        answer_path=answer_path,
+    )
+
+    assert result is not None
+    assert ack_calls == ["ack"]
+    assert seen_questions == [canonical_question]
+    assert seen_identity_ids == ["slack_user:U123"]
+    assert client.calls == [
+        {
+            "channel": "D123",
+            "thread_ts": "1710000000.654321",
+            "text": "Final answer text.",
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    ("event", "label"),
+    [
+        (
+            typing.cast(
+                slack_runtime.SlackBoltMessageEvent,
+                {
+                    "type": "message",
+                    "channel": "D123",
+                    "channel_type": "im",
+                    "user": "U123",
+                    "text": "hello",
+                    "ts": "1710000000.111111",
+                    "bot_id": "B123",
+                },
+            ),
+            "bot message",
+        ),
+        (
+            typing.cast(
+                slack_runtime.SlackBoltMessageEvent,
+                {
+                    "type": "message",
+                    "channel": "C123",
+                    "channel_type": "channel",
+                    "user": "U123",
+                    "text": "hello",
+                    "ts": "1710000000.222222",
+                },
+            ),
+            "non-DM message",
+        ),
+        (
+            typing.cast(
+                slack_runtime.SlackBoltMessageEvent,
+                {
+                    "type": "app_mention",
+                    "channel": "C123",
+                    "channel_type": "channel",
+                    "user": "U123",
+                    "text": "hello",
+                    "ts": "1710000000.333333",
+                },
+            ),
+            "unsupported event type",
+        ),
+    ],
+    ids=lambda value: value if isinstance(value, str) else None,
+)
+def test_handle_socket_mode_event_acknowledges_and_ignores_unsupported_events(
+    event: slack_runtime.SlackBoltMessageEvent,
+    label: str,
+) -> None:
+    del label
+    ack_calls: list[str] = []
+    client = RecordingSlackClient()
+    connection_factory_calls: list[str] = []
+    answer_path_calls: list[str] = []
+
+    def acknowledge() -> None:
+        ack_calls.append("ack")
+
+    def connection_factory(
+    ) -> contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]:
+        connection_factory_calls.append("connection_factory")
+        raise AssertionError("ignored events must not open a data connection")
+
+    def answer_path(
+        _connection: object,
+        _question: str,
+        _internal_identity: contracts.InternalIdentity,
+    ) -> slack_boundary.SlackWorkflowResult:
+        answer_path_calls.append("answer_path")
+        raise AssertionError("ignored events must not run the answer path")
+
+    result = slack_runtime.handle_socket_mode_event(
+        event=event,
+        ack=acknowledge,
+        client=client,
+        connection_factory=connection_factory,
+        answer_path=answer_path,
+    )
+
+    assert result is None
+    assert ack_calls == ["ack"]
+    assert connection_factory_calls == []
+    assert answer_path_calls == []
+    assert client.calls == []
+
+
+def test_run_socket_mode_from_env_registers_message_handler_before_startup() -> None:
+    app = RecordingBoltApp()
+    created_handlers: list[FakeSocketModeHandler] = []
+
+    def app_factory(*, token: str) -> object:
+        assert token == "xoxb-live-token"
+        return app
+
+    def socket_mode_handler_factory(
+        *, app_token: str, app: object
+    ) -> FakeSocketModeHandler:
+        assert app is not None
+        handler = FakeSocketModeHandler(app_token=app_token, app=app)
+        created_handlers.append(handler)
+        return handler
+
+    def connection_factory(
+    ) -> contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]:
+        raise AssertionError("startup should register handlers without opening data")
+
+    slack_runtime.run_socket_mode_from_env(
+        {
+            "SLACK_BOT_TOKEN": "xoxb-live-token",
+            "SLACK_APP_TOKEN": "xapp-live-token",
+        },
+        app_factory=app_factory,
+        socket_mode_handler_factory=socket_mode_handler_factory,
+        connection_factory=connection_factory,
+    )
+
+    assert "message" in app.registered_handlers
+    assert len(created_handlers) == 1
+    assert created_handlers[0].starts == 1
