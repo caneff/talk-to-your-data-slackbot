@@ -1,0 +1,173 @@
+from __future__ import annotations
+
+import dataclasses
+
+import duckdb
+
+import data_assistant.slack_boundary as slack_boundary
+import data_assistant.testing_support as testing_support
+import data_assistant.workflow.contracts as contracts
+
+
+def create_empty_deliveries() -> list[slack_boundary.SlackDelivery]:
+    return []
+
+
+def create_empty_calls() -> list[str]:
+    return []
+
+
+@dataclasses.dataclass
+class RecordingSlackGateway:
+    acknowledgements: int = 0
+    calls: list[str] = dataclasses.field(default_factory=create_empty_calls)
+    deliveries: list[slack_boundary.SlackDelivery] = dataclasses.field(
+        default_factory=create_empty_deliveries
+    )
+
+    def acknowledge(self) -> None:
+        self.calls.append("acknowledge")
+        self.acknowledgements += 1
+
+    def deliver_response(self, delivery: slack_boundary.SlackDelivery) -> None:
+        self.calls.append("deliver_response")
+        self.deliveries.append(delivery)
+
+
+def build_test_payload(
+    *,
+    event_id: str = "Ev123",
+    event_type: str = "message",
+    channel: str = "C123",
+    user: str = "U123",
+    text: str = "What was total revenue by region in January 2026?",
+    ts: str = "1710000000.123456",
+) -> slack_boundary.SlackEventPayload:
+    return {
+        "event_id": event_id,
+        "event": {
+            "type": event_type,
+            "channel": channel,
+            "user": user,
+            "text": text,
+            "ts": ts,
+        },
+    }
+
+
+def test_handle_slack_event_sends_answer_text_to_original_slack_thread(
+    canonical_question: str,
+    connect_orders: testing_support.OrdersConnector,
+) -> None:
+    gateway = RecordingSlackGateway()
+    final_response = contracts.FinalResponse(
+        text="Final answer text.",
+        trust_summary="Trust Summary: fake answer path.",
+    )
+    payload = build_test_payload(
+        channel="C-final",
+        text=canonical_question,
+        ts="1710000000.654321",
+    )
+    order_rows = (("2026-01-03", "North", "1200.00"),)
+
+    # The fake answer path keeps this test focused on Slack delivery, not
+    # response composition or data retrieval.
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        question: str,
+    ) -> slack_boundary.SlackWorkflowResult:
+        assert question == canonical_question
+        return final_response
+
+    with connect_orders(order_rows) as connection:
+        slack_boundary.handle_slack_event(
+            payload=payload,
+            connection=connection,
+            gateway=gateway,
+            answer_path=answer_path,
+        )
+
+    assert len(gateway.deliveries) == 1
+    delivery = gateway.deliveries[0]
+    assert delivery.channel == "C-final"
+    assert delivery.thread_ts == "1710000000.654321"
+    assert delivery.text == final_response.text
+
+
+def test_handle_slack_event_acknowledges_before_running_answer_path(
+    canonical_question: str,
+    connect_orders: testing_support.OrdersConnector,
+) -> None:
+    gateway = RecordingSlackGateway()
+    payload = build_test_payload(text=canonical_question)
+    order_rows = (("2026-01-03", "North", "1200.00"),)
+    calls: list[str] = []
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        question: str,
+    ) -> slack_boundary.SlackWorkflowResult:
+        assert question == canonical_question
+        calls.append("answer_path")
+        assert gateway.acknowledgements == 1
+        return contracts.NonAnswer(
+            stage="question_interpreter",
+            reason="Need a time range.",
+            unresolved_ambiguities=("time range",),
+            next_step="Ask a clarification question before selecting data.",
+        )
+
+    with connect_orders(order_rows) as connection:
+        slack_boundary.handle_slack_event(
+            payload=payload,
+            connection=connection,
+            gateway=gateway,
+            answer_path=answer_path,
+        )
+
+    assert gateway.acknowledgements == 1
+    assert calls == ["answer_path"]
+    assert gateway.calls == ["acknowledge", "deliver_response"]
+
+
+def test_handle_slack_event_delivers_non_answer_response(
+    connect_orders: testing_support.OrdersConnector,
+) -> None:
+    gateway = RecordingSlackGateway()
+    payload = build_test_payload(text="What was total revenue by region?")
+    order_rows = (("2026-01-03", "North", "1200.00"),)
+
+    with connect_orders(order_rows) as connection:
+        slack_boundary.handle_slack_event(
+            payload=payload,
+            connection=connection,
+            gateway=gateway,
+        )
+
+    assert len(gateway.deliveries) == 1
+    assert (
+        gateway.deliveries[0].text
+        == "I cannot answer safely yet because the Data Question is missing "
+        "required interpretation details.\n\n"
+        "Next step: Ask a clarification question before selecting data."
+    )
+
+
+def test_handle_slack_event_returns_acknowledged_delivery_result(
+    canonical_question: str,
+    connect_orders: testing_support.OrdersConnector,
+) -> None:
+    gateway = RecordingSlackGateway()
+    payload = build_test_payload(text=canonical_question)
+    order_rows = (("2026-01-03", "North", "1200.00"),)
+
+    with connect_orders(order_rows) as connection:
+        result = slack_boundary.handle_slack_event(
+            payload=payload,
+            connection=connection,
+            gateway=gateway,
+        )
+
+    assert result.acknowledged is True
+    assert result.delivery == gateway.deliveries[0]
