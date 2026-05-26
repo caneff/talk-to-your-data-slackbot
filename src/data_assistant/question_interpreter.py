@@ -11,6 +11,13 @@ import typing
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
 
+_SUPPORTED_SHAPE_REASON = (
+    "The Data Assistant currently supports total revenue by region for one month."
+)
+_SUPPORTED_SHAPE_NEXT_STEP = (
+    "Ask: What was total revenue by region in January 2026?"
+)
+
 
 def interpret_question(
     question: str,
@@ -36,6 +43,14 @@ def interpret_question(
         )
         if value is None
     )
+
+    if unresolved_ambiguities and unresolved_ambiguities != ("time range",):
+        return contracts.NonAnswer(
+            stage="question_interpreter",
+            reason=_SUPPORTED_SHAPE_REASON,
+            unresolved_ambiguities=("supported shape",),
+            next_step=_SUPPORTED_SHAPE_NEXT_STEP,
+        )
 
     if unresolved_ambiguities:
         return contracts.NonAnswer(
