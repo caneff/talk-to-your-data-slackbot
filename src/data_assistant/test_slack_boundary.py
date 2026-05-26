@@ -13,17 +13,24 @@ def create_empty_deliveries() -> list[slack_boundary.SlackDelivery]:
     return []
 
 
+def create_empty_calls() -> list[str]:
+    return []
+
+
 @dataclasses.dataclass
 class RecordingSlackGateway:
     acknowledgements: int = 0
+    calls: list[str] = dataclasses.field(default_factory=create_empty_calls)
     deliveries: list[slack_boundary.SlackDelivery] = dataclasses.field(
         default_factory=create_empty_deliveries
     )
 
     def acknowledge(self) -> None:
+        self.calls.append("acknowledge")
         self.acknowledgements += 1
 
     def deliver_response(self, delivery: slack_boundary.SlackDelivery) -> None:
+        self.calls.append("deliver_response")
         self.deliveries.append(delivery)
 
 
@@ -127,6 +134,7 @@ def test_handle_slack_event_acknowledges_before_running_answer_path(
 
     assert gateway.acknowledgements == 1
     assert calls == ["answer_path"]
+    assert gateway.calls == ["acknowledge", "deliver_response"]
 
 
 def test_handle_slack_event_delivers_non_answer_response(
