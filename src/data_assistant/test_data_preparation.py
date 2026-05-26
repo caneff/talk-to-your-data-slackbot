@@ -30,3 +30,31 @@ def test_prepared_data_contains_bounded_grouped_revenue_results(
         },
     )
     pd_testing.assert_frame_equal(prepared_data.data, expected_data)
+
+
+def test_prepared_data_records_quality_notes_after_time_filtering(
+    data_request: contracts.DataRequest,
+    connect_orders: testing_support.OrdersConnector,
+) -> None:
+    order_rows = (
+        ("2026-01-03", "North", "100.00"),
+        ("2026-01-08", None, "200.00"),
+        ("2026-01-15", "", "300.00"),
+        ("2026-01-22", " ", "400.00"),
+        ("2026-01-28", "South", None),
+        ("2026-02-01", None, None),
+    )
+    with connect_orders(order_rows) as connection:
+        prepared_data = data_preparation.prepare_data(data_request, connection)
+
+    expected_data = pd.DataFrame(
+        {
+            "dimension_value": ("Unknown", "North"),
+            "metric_value": (900.0, 100.0),
+        },
+    )
+    pd_testing.assert_frame_equal(prepared_data.data, expected_data)
+    assert prepared_data.quality_notes == (
+        "1 row excluded because revenue was missing.",
+        "3 rows grouped under Unknown because region was missing.",
+    )

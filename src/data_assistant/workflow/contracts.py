@@ -86,6 +86,7 @@ class PreparedData:
 
     request: DataRequest
     data: pd.DataFrame
+    quality_notes: tuple[str, ...]
 
 
 @dataclasses.dataclass(frozen=True)
