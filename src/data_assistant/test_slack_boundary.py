@@ -74,7 +74,8 @@ def test_handle_slack_event_sends_answer_text_to_original_slack_thread(
     gateway = RecordingSlackGateway()
     final_response = contracts.FinalResponse(
         text="Final answer text.",
-        trust_summary="Trust Summary: fake answer path.",
+        trust_summary=contracts.TrustSummary(datasets=("Commerce Revenue",)),
+        response_kind="answer",
     )
     payload = build_test_payload(
         channel="C-final",
@@ -166,7 +167,9 @@ def test_handle_slack_event_delivers_non_answer_response(
         gateway.deliveries[0].text
         == "I cannot answer safely yet because the Data Question is missing "
         "required interpretation details.\n\n"
-        "Next step: Ask a clarification question before selecting data."
+        "Next step: Ask a clarification question before selecting data.\n\n"
+        "Trust Summary: Limitations: The Data Question is missing required "
+        "interpretation details."
     )
 
 
@@ -215,7 +218,8 @@ def test_handle_slack_event_passes_resolved_internal_identity_to_answer_path(
         seen_identity_ids.append(internal_identity.identity_id)
         return contracts.FinalResponse(
             text="Final answer text.",
-            trust_summary="Trust Summary: fake answer path.",
+            trust_summary=contracts.TrustSummary(datasets=("Commerce Revenue",)),
+            response_kind="answer",
         )
 
     with connect_orders(order_rows) as connection:
@@ -248,3 +252,6 @@ def test_handle_slack_event_delivers_access_denial_for_denied_internal_identity(
         )
 
     assert "commerce Curated Dataset" in gateway.deliveries[0].text
+    assert "Dataset Table:" not in gateway.deliveries[0].text
+    assert "Filters:" not in gateway.deliveries[0].text
+    assert "Freshness:" not in gateway.deliveries[0].text

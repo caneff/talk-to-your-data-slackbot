@@ -25,25 +25,26 @@ def test_response_composer_returns_plain_text_with_trust_summary(
         )
 
     assert isinstance(run, contracts.DataAssistantRun)
-    assert run.final_response.text == (
+    assert run.final_response.response_kind == "answer"
+    assert (
         "Total revenue in January 2026 was $5,150.00, grouped across 5 regions."
-        "\n\n"
-        "- West: $1,600.00\n"
-        "- North: $1,500.00\n"
-        "- East: $950.00\n"
-        "- South: $850.00\n"
-        "- Unknown: $250.00"
-        "\n\n"
-        "Trust Summary: Curated Dataset: Commerce Revenue. "
-        "Dataset Table: orders. "
-        "Time range: January 2026. "
-        "Filters: none. "
-        "Caveats: Commerce order data refreshed through 2026-01-31. "
-        "1 row excluded because revenue was missing. "
-        "1 row grouped under Unknown because region was missing."
+        in run.final_response.text
     )
-    assert run.final_response.trust_summary in run.final_response.text
-    assert "customers" not in run.final_response.trust_summary
+    assert "- Unknown: $250.00" in run.final_response.text
+    assert "Trust Summary:" in run.final_response.text
+    assert run.final_response.trust_summary == contracts.TrustSummary(
+        datasets=("Commerce Revenue",),
+        dataset_tables=("orders",),
+        time_range="January 2026",
+        filters=(),
+        freshness="Commerce order data refreshed through 2026-01-31.",
+        caveats=(
+            "1 row excluded because revenue was missing.",
+            "1 row grouped under Unknown because region was missing.",
+        ),
+        limitations=(),
+    )
+    assert "customers" not in run.final_response.text
 
 
 def test_response_composer_returns_final_response_for_non_answer() -> None:
@@ -64,10 +65,55 @@ def test_response_composer_returns_final_response_for_non_answer() -> None:
             "I cannot answer safely because user-provided CSV files are not "
             "supported data sources.\n\n"
             "Next step: Ask about an approved Curated Dataset in the "
-            "Semantic Layer instead."
+            "Semantic Layer instead.\n\n"
+            "Trust Summary: Limitations: User-provided CSV files are not "
+            "supported data sources."
         ),
-        trust_summary=(
-            "Trust Summary: Returned a Non-Answer Response from "
-            "question_interpreter."
+        trust_summary=contracts.TrustSummary(
+            limitations=("User-provided CSV files are not supported data sources.",),
+        ),
+        response_kind="unsupported",
+    )
+
+
+def test_response_composer_returns_safe_access_denial_contract() -> None:
+    response = response_composer.compose_non_answer_response(
+        contracts.NonAnswer(
+            stage="access_controller",
+            reason="You do not have access to the commerce Curated Dataset.",
+            unresolved_ambiguities=(),
+            next_step=(
+                "Ask a data owner to grant Dataset Access or ask about "
+                "available data."
+            ),
+            datasets=("commerce",),
+        )
+    )
+
+    assert response.response_kind == "access_denial"
+    assert response.trust_summary == contracts.TrustSummary(
+        datasets=("commerce",),
+        limitations=("You do not have access to the commerce Curated Dataset.",),
+    )
+    assert "Curated Dataset: commerce." in response.text
+    assert "Dataset Table:" not in response.text
+    assert "Filters:" not in response.text
+    assert "Freshness:" not in response.text
+
+
+def test_response_composer_marks_clarification_needed_non_answer() -> None:
+    response = response_composer.compose_non_answer_response(
+        contracts.NonAnswer(
+            stage="question_interpreter",
+            reason="The Data Question is missing required interpretation details.",
+            unresolved_ambiguities=("time range",),
+            next_step="Ask a clarification question before selecting data.",
+        )
+    )
+
+    assert response.response_kind == "clarification_needed"
+    assert response.trust_summary == contracts.TrustSummary(
+        limitations=(
+            "The Data Question is missing required interpretation details.",
         ),
     )
