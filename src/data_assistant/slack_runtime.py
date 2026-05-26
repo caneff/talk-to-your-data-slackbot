@@ -6,9 +6,11 @@ import collections.abc as collections_abc
 import contextlib
 import dataclasses
 import os
+import pathlib
 import sys
 import typing
 
+import dotenv
 import duckdb
 
 import data_assistant.access_controller as access_controller
@@ -126,6 +128,13 @@ def _dev_internal_identity_resolver(
     """Use the local allowed identity for manual development smoke testing."""
     del event
     return access_controller.DEFAULT_LOCAL_ALLOWED_IDENTITY
+
+
+def _load_env_file(
+    path: str | pathlib.Path = ".env",
+) -> None:
+    """Load local dotenv values without overriding exported environment vars."""
+    dotenv.load_dotenv(dotenv_path=path, override=False)
 
 
 def load_slack_runtime_config(
@@ -306,9 +315,10 @@ def run_socket_mode_from_env(
     return handler
 
 
-def main() -> int:
+def main(env_file: str | pathlib.Path = ".env") -> int:
     """Run the local Socket Mode entrypoint."""
     try:
+        _load_env_file(env_file)
         run_socket_mode_from_env(
             connection_factory=_dev_connection_factory,
             internal_identity_resolver=_dev_internal_identity_resolver,

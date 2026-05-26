@@ -16,29 +16,58 @@ Out of scope for this MVP:
 
 ## Local Slack setup
 
-Create a Slack app and configure it for Socket Mode with Slack Bolt for Python.
+This setup creates a private Slack app in your development workspace and runs
+this repo as the app's local process. Socket Mode means the local process opens a
+WebSocket connection out to Slack, so you do not need a public HTTP URL, ngrok,
+or deployed web server for the MVP.
 
-Required app settings:
+Create the Slack app from the repo manifest:
 
-- Enable Socket Mode.
-- Create an app-level token with the `connections:write` scope for `SLACK_APP_TOKEN`.
-- Install the app to your workspace and use the bot token for `SLACK_BOT_TOKEN`.
-- Enable Events and subscribe to the bot event `message.im`.
-- Add bot scopes `chat:write` and `im:history`.
-- In App Home, enable the Messages tab if your workspace needs it before users can DM the app.
+1. Open the Slack app dashboard: <https://api.slack.com/apps>.
+2. Click **Create New App**.
+3. Choose **From an app manifest**.
+4. Pick your development workspace.
+5. Copy the contents of `slack-app-manifest.yaml` into the YAML editor.
+6. Review Slack's summary and click **Create**.
 
-Required environment variables:
+The manifest sets the MVP app shape for you:
+
+- Socket Mode is enabled.
+- The App Home Messages tab is enabled so users can DM the app.
+- The bot can send DM replies with `chat:write`.
+- The bot receives direct-message events with `im:history` and `message.im`.
+
+Create a local `.env` file:
 
 ```bash
-export SLACK_BOT_TOKEN=...
-export SLACK_APP_TOKEN=...
+cp .env.example .env
 ```
 
-Use environment variables only. Do not commit token values, workspace IDs, or other secrets.
+You still need to create and copy the two local tokens into `.env`:
+
+1. In **Basic Information**, create an app-level token with the
+   `connections:write` scope. Replace `xapp-your-app-token` in `.env` with that
+   token.
+2. In **Install App**, install the app to the workspace.
+3. In **OAuth & Permissions**, copy the bot user OAuth token. Replace
+   `xoxb-your-bot-token` in `.env` with that token.
+
+The runtime loads `.env` automatically with `python-dotenv`. Explicitly exported
+environment variables still take precedence over values in `.env`. The `.env`
+file is local only, and `.gitignore` keeps it out of commits. Do not commit token
+values, workspace IDs, or other secrets.
+
+Slack references:
+
+- [Using Socket Mode](https://docs.slack.dev/apis/events-api/using-socket-mode/)
+- [Bolt for Python Socket Mode](https://docs.slack.dev/tools/bolt-python/concepts/socket-mode/)
+- [`message.im` event](https://docs.slack.dev/reference/events/message.im/)
+- [`connections:write` scope](https://docs.slack.dev/reference/scopes/connections.write/)
+- [`chat.postMessage` method](https://docs.slack.dev/reference/methods/chat.postMessage/)
 
 ## Start the adapter
 
-Install dependencies, export the Slack tokens, and start the local adapter:
+Install dependencies and start the adapter:
 
 ```bash
 uv run python -m data_assistant.slack_runtime

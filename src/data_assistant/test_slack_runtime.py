@@ -5,6 +5,8 @@ from __future__ import annotations
 import collections.abc
 import contextlib
 import dataclasses
+import os
+import pathlib
 import typing
 
 import duckdb
@@ -53,6 +55,29 @@ def test_load_slack_runtime_config_names_all_missing_env_vars() -> None:
         == "Missing required Slack environment variables: "
         "SLACK_BOT_TOKEN, SLACK_APP_TOKEN"
     )
+
+
+def test_load_env_file_uses_dotenv_without_overriding_existing_env(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+) -> None:
+    """Load local dotenv values while preserving explicit shell exports."""
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            (
+                "SLACK_BOT_TOKEN=xoxb-dotenv-token",
+                "SLACK_APP_TOKEN=xapp-dotenv-token",
+            )
+        )
+    )
+    monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+    monkeypatch.setenv("SLACK_APP_TOKEN", "xapp-exported-token")
+
+    slack_runtime._load_env_file(env_file)  # pyright: ignore[reportPrivateUsage]
+
+    assert os.environ["SLACK_BOT_TOKEN"] == "xoxb-dotenv-token"
+    assert os.environ["SLACK_APP_TOKEN"] == "xapp-exported-token"
 
 
 def test_run_socket_mode_from_env_fails_before_constructing_runtime_objects() -> None:
@@ -377,6 +402,7 @@ def test_run_socket_mode_from_env_registers_message_handler_before_startup() -> 
 
 def test_main_starts_socket_mode_with_dev_connection_factory(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
 ) -> None:
     dev_connection_factory = slack_runtime._dev_connection_factory  # pyright: ignore[reportPrivateUsage]
     dev_internal_identity_resolver = typing.cast(
@@ -411,7 +437,7 @@ def test_main_starts_socket_mode_with_dev_connection_factory(
         fake_run_socket_mode_from_env,
     )
 
-    exit_code = slack_runtime.main()
+    exit_code = slack_runtime.main(env_file=tmp_path / ".env")
 
     assert exit_code == 0
     assert received_connection_factory == [dev_connection_factory]
