@@ -9,6 +9,7 @@ dependencies = [
     "pandas>=3.0.3",
     "pydantic>=2.13.4",
     "pyyaml>=6.0.3",
+    "slack-bolt>=1.28.0",
 ]
 
 [build-system]
