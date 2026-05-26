@@ -13,6 +13,7 @@ def test_canonical_data_question_creates_business_question_frame() -> None:
                 metric_id="total_revenue",
                 label="total revenue",
                 expression="sum(revenue)",
+                source_column="revenue",
             ),
         ),
         dimensions=(

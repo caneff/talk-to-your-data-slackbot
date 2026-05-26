@@ -12,7 +12,7 @@ def prepare_data(
     connection: duckdb.DuckDBPyConnection,
 ) -> contracts.PreparedData:
     """Produce bounded grouped Prepared Data from local DuckDB rows."""
-    metric_column = _sum_metric_column(data_request.metric.expression)
+    metric_source_column = data_request.metric.source_column
     dimension_value_expression = (
         f"coalesce(nullif(trim({data_request.dimension.column}), ''), 'Unknown')"
     )
@@ -29,11 +29,11 @@ def prepare_data(
         metric_rows as (
             select *
             from filtered_rows
-            where {metric_column} is not null
+            where {metric_source_column} is not null
         )
         select
             {dimension_value_expression} as dimension_value,
-            sum({metric_column}) as metric_value
+            {data_request.metric.expression} as metric_value
         from metric_rows
         group by dimension_value
         order by metric_value desc, dimension_value asc
@@ -44,7 +44,7 @@ def prepare_data(
         select
             coalesce(sum(
                 case
-                    when {metric_column} is null then 1
+                    when {metric_source_column} is null then 1
                     else 0
                 end
             ), 0) as missing_metric_count,
@@ -79,19 +79,12 @@ def prepare_data(
         request=data_request,
         data=prepared_dataframe,
         quality_notes=_quality_notes(
-            metric_column=metric_column,
+            metric_column=metric_source_column,
             dimension_label=data_request.dimension.label,
             missing_metric_count=missing_metric_count,
             missing_dimension_count=missing_dimension_count,
         ),
     )
-
-
-def _sum_metric_column(metric_expression: str) -> str:
-    expression = metric_expression.strip()
-    if not expression.startswith("sum(") or not expression.endswith(")"):
-        raise ValueError(f"Unsupported metric expression: {metric_expression}")
-    return expression.removeprefix("sum(").removesuffix(")").strip()
 
 
 def _quality_notes(

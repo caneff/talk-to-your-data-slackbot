@@ -14,6 +14,7 @@ _DEFAULT_METRICS = (
         metric_id="total_revenue",
         label="total revenue",
         expression="sum(revenue)",
+        source_column="revenue",
     ),
 )
 _DEFAULT_DIMENSIONS = (

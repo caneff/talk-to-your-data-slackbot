@@ -15,6 +15,7 @@ metrics:
   - metric_id: customer_count
     label: customer count
     expression: count(customer_id)
+    source_column: customer_id
 dimensions:
   - dimension_id: customer_region
     label: customer region
