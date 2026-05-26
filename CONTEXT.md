@@ -142,6 +142,11 @@ The bounded result produced from a **Data Request** and passed to the
 **Reasoning Layer** for analysis.
 _Avoid_: Raw query result, database access, source data
 
+**Quality Note**:
+A structured note attached to **Prepared Data** that records important
+data-quality handling the answer depends on.
+_Avoid_: Debug detail, warning, error
+
 **Reasoning Layer**:
 The part of the **Data Assistant** that analyzes prepared data and drafts a
 natural-language answer.
