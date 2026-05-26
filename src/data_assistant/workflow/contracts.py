@@ -122,4 +122,4 @@ class DataAssistantRun:
     final_response: FinalResponse
 
 
-WorkflowResult: typing.TypeAlias = DataAssistantRun | NonAnswer
+WorkflowResult: typing.TypeAlias = DataAssistantRun | FinalResponse

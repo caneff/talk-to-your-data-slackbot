@@ -1,3 +1,4 @@
+import data_assistant.response_composer as response_composer
 import data_assistant.testing_support as testing_support
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
@@ -43,3 +44,30 @@ def test_response_composer_returns_plain_text_with_trust_summary(
     )
     assert run.final_response.trust_summary in run.final_response.text
     assert "customers" not in run.final_response.trust_summary
+
+
+def test_response_composer_returns_final_response_for_non_answer() -> None:
+    response = response_composer.compose_non_answer_response(
+        contracts.NonAnswer(
+            stage="question_interpreter",
+            reason="User-provided CSV files are not supported data sources.",
+            unresolved_ambiguities=("unsupported data",),
+            next_step=(
+                "Ask about an approved Curated Dataset in the Semantic Layer "
+                "instead."
+            ),
+        )
+    )
+
+    assert response == contracts.FinalResponse(
+        text=(
+            "I cannot answer safely because user-provided CSV files are not "
+            "supported data sources.\n\n"
+            "Next step: Ask about an approved Curated Dataset in the "
+            "Semantic Layer instead."
+        ),
+        trust_summary=(
+            "Trust Summary: Returned a Non-Answer Response from "
+            "question_interpreter."
+        ),
+    )
