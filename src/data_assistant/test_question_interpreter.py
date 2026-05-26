@@ -59,3 +59,24 @@ def test_question_interpreter_returns_non_answer_for_missing_time_range() -> Non
         unresolved_ambiguities=("time range",),
         next_step="Ask a clarification question before selecting data.",
     )
+
+
+def test_question_interpreter_returns_non_answer_for_unsupported_shape() -> None:
+    semantic_layer = semantic_layer_testing.semantic_layer_with_table()
+
+    result = question_interpreter.interpret_question(
+        "Can you forecast revenue for next quarter?",
+        semantic_layer,
+    )
+
+    assert result == contracts.NonAnswer(
+        stage="question_interpreter",
+        reason=(
+            "The Data Assistant currently supports total revenue by region "
+            "for one month."
+        ),
+        unresolved_ambiguities=("supported shape",),
+        next_step=(
+            "Ask: What was total revenue by region in January 2026?"
+        ),
+    )
