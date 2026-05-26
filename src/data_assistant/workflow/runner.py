@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import duckdb
 
+import data_assistant.access_controller as access_controller
 import data_assistant.data_preparation as data_preparation
 import data_assistant.data_requester as data_requester
 import data_assistant.question_interpreter as question_interpreter
@@ -18,6 +19,7 @@ import data_assistant.workflow.contracts as contracts
 def run_data_assistant(
     connection: duckdb.DuckDBPyConnection,
     question: str,
+    internal_identity: contracts.InternalIdentity | None = None,
     semantic_layer: schema.SemanticLayer | None = None,
 ) -> contracts.WorkflowResult:
     """Run the canonical Data Assistant path end to end."""
@@ -26,6 +28,9 @@ def run_data_assistant(
         active_semantic_layer = semantic_layer_loader.load_semantic_layer()
     else:
         active_semantic_layer = semantic_layer
+    active_internal_identity = internal_identity
+    if active_internal_identity is None:
+        active_internal_identity = access_controller.DEFAULT_LOCAL_ALLOWED_IDENTITY
 
     question_frame_result = question_interpreter.interpret_question(
         question=question,
@@ -43,9 +48,16 @@ def run_data_assistant(
         return response_composer.compose_non_answer_response(dataset_selection_result)
     dataset_selection = dataset_selection_result.value
 
+    dataset_access_result = access_controller.authorize_dataset_access(
+        dataset_selection=dataset_selection,
+        internal_identity=active_internal_identity,
+    )
+    if isinstance(dataset_access_result, contracts.NonAnswer):
+        return response_composer.compose_non_answer_response(dataset_access_result)
+
     data_request_result = data_requester.create_data_request(
         question_frame=question_frame,
-        dataset_selection=dataset_selection,
+        dataset_selection=dataset_access_result.value,
         semantic_layer=active_semantic_layer,
     )
     if isinstance(data_request_result, contracts.NonAnswer):

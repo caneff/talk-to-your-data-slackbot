@@ -76,7 +76,9 @@ def test_handle_slack_event_sends_answer_text_to_original_slack_thread(
     def answer_path(
         _connection: duckdb.DuckDBPyConnection,
         question: str,
+        internal_identity: contracts.InternalIdentity,
     ) -> slack_boundary.SlackWorkflowResult:
+        del internal_identity
         assert question == canonical_question
         return final_response
 
@@ -107,7 +109,9 @@ def test_handle_slack_event_acknowledges_before_running_answer_path(
     def answer_path(
         _connection: duckdb.DuckDBPyConnection,
         question: str,
+        internal_identity: contracts.InternalIdentity,
     ) -> slack_boundary.SlackWorkflowResult:
+        del internal_identity
         assert question == canonical_question
         calls.append("answer_path")
         assert gateway.acknowledgements == 1
@@ -171,3 +175,74 @@ def test_handle_slack_event_returns_acknowledged_delivery_result(
 
     assert result.acknowledged is True
     assert result.delivery == gateway.deliveries[0]
+
+
+def test_handle_slack_event_maps_u123_to_allowed_internal_identity(
+    canonical_question: str,
+    connect_orders: testing_support.OrdersConnector,
+) -> None:
+    gateway = RecordingSlackGateway()
+    payload = build_test_payload(user="U123", text=canonical_question)
+    order_rows = (("2026-01-03", "North", "1200.00"),)
+    seen_identity_ids: list[str] = []
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        question: str,
+        internal_identity: contracts.InternalIdentity,
+    ) -> slack_boundary.SlackWorkflowResult:
+        assert question == canonical_question
+        seen_identity_ids.append(internal_identity.identity_id)
+        return contracts.FinalResponse(
+            text="Final answer text.",
+            trust_summary="Trust Summary: fake answer path.",
+        )
+
+    with connect_orders(order_rows) as connection:
+        slack_boundary.handle_slack_event(
+            payload=payload,
+            connection=connection,
+            gateway=gateway,
+            answer_path=answer_path,
+        )
+
+    assert seen_identity_ids == ["employee_123"]
+
+
+def test_handle_slack_event_maps_other_users_to_denied_internal_identity(
+    canonical_question: str,
+    connect_orders: testing_support.OrdersConnector,
+) -> None:
+    gateway = RecordingSlackGateway()
+    payload = build_test_payload(user="U999", text=canonical_question)
+    order_rows = (("2026-01-03", "North", "1200.00"),)
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        question: str,
+        internal_identity: contracts.InternalIdentity,
+    ) -> slack_boundary.SlackWorkflowResult:
+        assert question == canonical_question
+        if internal_identity.identity_id == "employee_123":
+            return contracts.FinalResponse(
+                text="Final answer text.",
+                trust_summary="Trust Summary: fake answer path.",
+            )
+        return contracts.NonAnswer(
+            stage="access_controller",
+            reason="You do not have access to the commerce Curated Dataset.",
+            unresolved_ambiguities=(),
+            next_step="Ask a data owner to grant Dataset Access.",
+        )
+
+    with connect_orders(order_rows) as connection:
+        slack_boundary.handle_slack_event(
+            payload=payload,
+            connection=connection,
+            gateway=gateway,
+            answer_path=answer_path,
+        )
+
+    assert "You do not have access to the commerce Curated Dataset." in (
+        gateway.deliveries[0].text
+    )

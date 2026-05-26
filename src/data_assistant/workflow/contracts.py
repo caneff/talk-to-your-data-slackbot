@@ -39,6 +39,13 @@ class QuestionFrame:
 
 
 @dataclasses.dataclass(frozen=True)
+class InternalIdentity:
+    """Internal caller identity passed into the workflow."""
+
+    identity_id: str
+
+
+@dataclasses.dataclass(frozen=True)
 class Success(typing.Generic[T]):
     """Successful stage result."""
 

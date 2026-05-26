@@ -91,16 +91,29 @@ class SlackGateway(typing.Protocol):
 SlackWorkflowResult: typing.TypeAlias = contracts.WorkflowResult | contracts.NonAnswer
 
 AnswerPath: typing.TypeAlias = collections_abc.Callable[
-    [duckdb.DuckDBPyConnection, str],
+    [duckdb.DuckDBPyConnection, str, contracts.InternalIdentity],
     SlackWorkflowResult,
 ]
+
+
+def _run_workflow_answer_path(
+    connection: duckdb.DuckDBPyConnection,
+    question: str,
+    internal_identity: contracts.InternalIdentity,
+) -> SlackWorkflowResult:
+    """Adapt the workflow runner to the Slack boundary answer-path shape."""
+    return workflow_runner.run_data_assistant(
+        connection,
+        question,
+        internal_identity=internal_identity,
+    )
 
 
 def handle_slack_event(
     payload: SlackEventPayload,
     connection: duckdb.DuckDBPyConnection,
     gateway: SlackGateway,
-    answer_path: AnswerPath = workflow_runner.run_data_assistant,
+    answer_path: AnswerPath = _run_workflow_answer_path,
 ) -> SlackRequestResult:
     """Acknowledge a Slack message event and deliver the workflow response.
 
@@ -132,7 +145,8 @@ def handle_slack_event(
     real threaded reply when a Slack SDK adapter is added.
     """
     gateway.acknowledge()
-    result = answer_path(connection, payload["event"]["text"])
+    internal_identity = _map_internal_identity(payload["event"]["user"])
+    result = answer_path(connection, payload["event"]["text"], internal_identity)
     delivery = SlackDelivery(
         channel=payload["event"]["channel"],
         thread_ts=payload["event"]["ts"],
@@ -153,3 +167,10 @@ def _render_workflow_result(result: SlackWorkflowResult) -> str:
     if isinstance(result, contracts.FinalResponse):
         return result.text
     return result.final_response.text
+
+
+def _map_internal_identity(slack_user_id: str) -> contracts.InternalIdentity:
+    """Map Slack user identity into the internal workflow identity."""
+    if slack_user_id == "U123":
+        return contracts.InternalIdentity(identity_id="employee_123")
+    return contracts.InternalIdentity(identity_id="employee_denied")
