@@ -55,7 +55,7 @@ def build_test_payload(
     }
 
 
-def test_handle_slack_event_delivers_final_response_in_original_thread(
+def test_handle_slack_event_sends_answer_text_to_original_slack_thread(
     canonical_question: str,
     connect_orders: testing_support.OrdersConnector,
 ) -> None:
@@ -71,6 +71,8 @@ def test_handle_slack_event_delivers_final_response_in_original_thread(
     )
     order_rows = (("2026-01-03", "North", "1200.00"),)
 
+    # The fake answer path keeps this test focused on Slack delivery, not
+    # response composition or data retrieval.
     def answer_path(
         _connection: duckdb.DuckDBPyConnection,
         question: str,
