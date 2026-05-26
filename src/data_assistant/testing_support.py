@@ -5,7 +5,7 @@ import contextlib
 
 import duckdb
 
-OrderRow = tuple[str, str, str]
+OrderRow = tuple[str, str | None, str | None]
 OrdersConnector = collections.abc.Callable[
     [collections.abc.Iterable[OrderRow]],
     contextlib.AbstractContextManager[duckdb.DuckDBPyConnection],
