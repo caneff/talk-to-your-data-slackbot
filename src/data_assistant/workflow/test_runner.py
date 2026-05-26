@@ -58,11 +58,16 @@ def test_data_assistant_short_circuits_question_ambiguity(
             "What was total revenue by region?",
         )
 
-    assert result == contracts.NonAnswer(
-        stage="question_interpreter",
-        reason="The Data Question is missing required interpretation details.",
-        unresolved_ambiguities=("time range",),
-        next_step="Ask a clarification question before selecting data.",
+    assert result == contracts.FinalResponse(
+        text=(
+            "I cannot answer safely yet because the Data Question is missing "
+            "required interpretation details.\n\n"
+            "Next step: Ask a clarification question before selecting data."
+        ),
+        trust_summary=(
+            "Trust Summary: Returned a Non-Answer Response from "
+            "question_interpreter."
+        ),
     )
 
 
@@ -84,15 +89,18 @@ def test_data_assistant_short_circuits_unsupported_question_before_preparing_dat
     with connect_orders(order_rows) as connection:
         result = workflow_runner.run_data_assistant(
             connection,
-            "Can you forecast revenue for next quarter?",
+            "Can you use my CSV file to show total revenue by region in January 2026?",
         )
 
-    assert result == contracts.NonAnswer(
-        stage="question_interpreter",
-        reason=(
-            "The Data Assistant currently supports total revenue by region "
-            "for one month."
+    assert result == contracts.FinalResponse(
+        text=(
+            "I cannot answer safely because user-provided CSV files are not "
+            "supported data sources.\n\n"
+            "Next step: Ask about an approved Curated Dataset in the "
+            "Semantic Layer instead."
         ),
-        unresolved_ambiguities=("supported shape",),
-        next_step="Ask: What was total revenue by region in January 2026?",
+        trust_summary=(
+            "Trust Summary: Returned a Non-Answer Response from "
+            "question_interpreter."
+        ),
     )

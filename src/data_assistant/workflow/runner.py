@@ -32,7 +32,7 @@ def run_data_assistant(
         semantic_layer=active_semantic_layer,
     )
     if isinstance(question_frame_result, contracts.NonAnswer):
-        return question_frame_result
+        return response_composer.compose_non_answer_response(question_frame_result)
     question_frame = question_frame_result.value
 
     dataset_selection_result = semantic_router.select_dataset(
@@ -40,7 +40,7 @@ def run_data_assistant(
         semantic_layer=active_semantic_layer,
     )
     if isinstance(dataset_selection_result, contracts.NonAnswer):
-        return dataset_selection_result
+        return response_composer.compose_non_answer_response(dataset_selection_result)
     dataset_selection = dataset_selection_result.value
 
     data_request_result = data_requester.create_data_request(
@@ -49,7 +49,7 @@ def run_data_assistant(
         semantic_layer=active_semantic_layer,
     )
     if isinstance(data_request_result, contracts.NonAnswer):
-        return data_request_result
+        return response_composer.compose_non_answer_response(data_request_result)
     data_request = data_request_result.value
 
     prepared_data = data_preparation.prepare_data(

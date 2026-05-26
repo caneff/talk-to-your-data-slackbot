@@ -17,6 +17,18 @@ _SUPPORTED_SHAPE_REASON = (
 _SUPPORTED_SHAPE_NEXT_STEP = (
     "Ask: What was total revenue by region in January 2026?"
 )
+_UNSUPPORTED_DATA_PATTERNS = (
+    re.compile(r"\bcsv\b"),
+    re.compile(r"\bupload\b"),
+    re.compile(r"\bspreadsheet\b"),
+    re.compile(r"\bsql\b"),
+    re.compile(r"\btable\b"),
+    re.compile(r"\bdatabase\b"),
+)
+_UNSUPPORTED_DATA_REASON = "User-provided CSV files are not supported data sources."
+_UNSUPPORTED_DATA_NEXT_STEP = (
+    "Ask about an approved Curated Dataset in the Semantic Layer instead."
+)
 
 
 def interpret_question(
@@ -25,6 +37,14 @@ def interpret_question(
 ) -> contracts.StageResult[contracts.QuestionFrame]:
     """Create a Question Frame by matching Semantic Layer business labels."""
     normalized_question = _normalize(question)
+    if _mentions_unsupported_data(normalized_question):
+        return contracts.NonAnswer(
+            stage="question_interpreter",
+            reason=_UNSUPPORTED_DATA_REASON,
+            unresolved_ambiguities=("unsupported data",),
+            next_step=_UNSUPPORTED_DATA_NEXT_STEP,
+        )
+
     metric = _find_one_label(
         normalized_question,
         (table.metrics for table in semantic_layer.tables),
@@ -123,3 +143,10 @@ def _find_one_label(
 
 def _normalize(question: str) -> str:
     return " ".join(question.casefold().strip().split())
+
+
+def _mentions_unsupported_data(normalized_question: str) -> bool:
+    return any(
+        pattern.search(normalized_question)
+        for pattern in _UNSUPPORTED_DATA_PATTERNS
+    )

@@ -81,3 +81,21 @@ def test_question_interpreter_returns_non_answer_for_unsupported_shape() -> None
             "Ask: What was total revenue by region in January 2026?"
         ),
     )
+
+
+def test_question_interpreter_returns_non_answer_for_user_provided_csv() -> None:
+    semantic_layer = semantic_layer_testing.semantic_layer_with_table()
+
+    result = question_interpreter.interpret_question(
+        "Can you use my CSV file to show total revenue by region in January 2026?",
+        semantic_layer,
+    )
+
+    assert result == contracts.NonAnswer(
+        stage="question_interpreter",
+        reason="User-provided CSV files are not supported data sources.",
+        unresolved_ambiguities=("unsupported data",),
+        next_step=(
+            "Ask about an approved Curated Dataset in the Semantic Layer instead."
+        ),
+    )
