@@ -42,19 +42,19 @@ def prepare_data(
     quality_query = f"""
         with {filtered_rows_cte}
         select
-            sum(
+            coalesce(sum(
                 case
                     when {metric_column} is null then 1
                     else 0
                 end
-            ) as missing_metric_count,
-            sum(
+            ), 0) as missing_metric_count,
+            coalesce(sum(
                 case
                     when {data_request.dimension.column} is null
                       or trim({data_request.dimension.column}) = '' then 1
                     else 0
                 end
-            ) as missing_dimension_count
+            ), 0) as missing_dimension_count
         from filtered_rows
     """
 
@@ -71,12 +71,9 @@ def prepare_data(
         },
     ).df()
     quality_counts = connection.execute(quality_query, time_range_parameters).fetchone()
-    if quality_counts is None:
-        missing_metric_count = 0
-        missing_dimension_count = 0
-    else:
-        missing_metric_count = int(quality_counts[0] or 0)
-        missing_dimension_count = int(quality_counts[1] or 0)
+    assert quality_counts is not None
+    missing_metric_count = int(quality_counts[0])
+    missing_dimension_count = int(quality_counts[1])
 
     return contracts.PreparedData(
         request=data_request,
