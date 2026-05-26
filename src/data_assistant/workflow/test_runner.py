@@ -6,6 +6,29 @@ import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
 
 
+def capture_non_answer_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[contracts.FinalResponse, list[contracts.NonAnswer]]:
+    captured_non_answers: list[contracts.NonAnswer] = []
+    sentinel_response = contracts.FinalResponse(
+        text="non-answer response",
+        trust_summary="non-answer trust summary",
+    )
+
+    def compose_non_answer_response(
+        non_answer: contracts.NonAnswer,
+    ) -> contracts.FinalResponse:
+        captured_non_answers.append(non_answer)
+        return sentinel_response
+
+    monkeypatch.setattr(
+        workflow_runner.response_composer,
+        "compose_non_answer_response",
+        compose_non_answer_response,
+    )
+    return sentinel_response, captured_non_answers
+
+
 def test_data_assistant_runs_end_to_end(
     canonical_question: str,
     connect_orders: testing_support.OrdersConnector,
@@ -47,8 +70,10 @@ def test_data_assistant_runs_end_to_end(
 
 
 def test_data_assistant_short_circuits_question_ambiguity(
+    monkeypatch: pytest.MonkeyPatch,
     connect_orders: testing_support.OrdersConnector,
 ) -> None:
+    sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
     order_rows = (
         ("2026-01-03", "North", "1200.00"),
     )
@@ -58,23 +83,19 @@ def test_data_assistant_short_circuits_question_ambiguity(
             "What was total revenue by region?",
         )
 
-    assert result == contracts.FinalResponse(
-        text=(
-            "I cannot answer safely yet because the Data Question is missing "
-            "required interpretation details.\n\n"
-            "Next step: Ask a clarification question before selecting data."
-        ),
-        trust_summary=(
-            "Trust Summary: Returned a Non-Answer Response from "
-            "question_interpreter."
-        ),
-    )
+    assert result is sentinel_response
+    assert len(captured_non_answers) == 1
+    non_answer = captured_non_answers[0]
+    assert non_answer.stage == "question_interpreter"
+    assert non_answer.unresolved_ambiguities == ("time range",)
 
 
 def test_data_assistant_short_circuits_unsupported_question_before_preparing_data(
     monkeypatch: pytest.MonkeyPatch,
     connect_orders: testing_support.OrdersConnector,
 ) -> None:
+    sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
+
     def fail_prepare_data(
         data_request: contracts.DataRequest,
         connection: object,
@@ -92,15 +113,8 @@ def test_data_assistant_short_circuits_unsupported_question_before_preparing_dat
             "Can you use my CSV file to show total revenue by region in January 2026?",
         )
 
-    assert result == contracts.FinalResponse(
-        text=(
-            "I cannot answer safely because user-provided CSV files are not "
-            "supported data sources.\n\n"
-            "Next step: Ask about an approved Curated Dataset in the "
-            "Semantic Layer instead."
-        ),
-        trust_summary=(
-            "Trust Summary: Returned a Non-Answer Response from "
-            "question_interpreter."
-        ),
-    )
+    assert result is sentinel_response
+    assert len(captured_non_answers) == 1
+    non_answer = captured_non_answers[0]
+    assert non_answer.stage == "question_interpreter"
+    assert non_answer.unresolved_ambiguities == ("unsupported data",)
