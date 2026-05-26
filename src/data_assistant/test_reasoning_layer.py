@@ -34,8 +34,10 @@ def test_reasoning_layer_produces_answer_draft_from_prepared_data(
     assert run.answer_draft.dataset_tables_used == ("orders",)
     assert run.answer_draft.time_range == "January 2026"
     assert run.answer_draft.filters == ()
+    assert run.answer_draft.freshness == (
+        "Commerce order data refreshed through 2026-01-31."
+    )
     assert run.answer_draft.caveats == (
-        "Commerce order data refreshed through 2026-01-31.",
         "1 row excluded because revenue was missing.",
         "1 row grouped under Unknown because region was missing.",
     )

@@ -171,7 +171,8 @@ _Avoid_: Answer draft, raw output, model response
 **Trust Summary**:
 The concise source and context summary included with every **Final Response**,
 covering **Curated Datasets** used, selected **Dataset Tables**, time range,
-freshness, major filters, and important caveats.
+freshness, major filters, important caveats, and limitations that shaped the
+answer or **Non-Answer Response**.
 _Avoid_: Citation, audit log, debug trace
 
 **Trust Detail**:

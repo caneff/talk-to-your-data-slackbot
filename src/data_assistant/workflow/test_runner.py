@@ -13,7 +13,10 @@ def capture_non_answer_response(
     captured_non_answers: list[contracts.NonAnswer] = []
     sentinel_response = contracts.FinalResponse(
         text="non-answer response",
-        trust_summary="non-answer trust summary",
+        trust_summary=contracts.TrustSummary(
+            limitations=("non-answer trust summary",),
+        ),
+        response_kind="unsupported",
     )
 
     def compose_non_answer_response(
@@ -61,11 +64,13 @@ def test_data_assistant_runs_end_to_end(
     )
     assert "- Unknown: $250.00" in run.final_response.text
     assert "$5,150.00" in run.final_response.text
-    assert "1 row excluded because revenue was missing." in (
-        run.final_response.trust_summary
+    assert run.final_response.response_kind == "answer"
+    assert run.final_response.trust_summary.freshness == (
+        "Commerce order data refreshed through 2026-01-31."
     )
-    assert "1 row grouped under Unknown because region was missing." in (
-        run.final_response.trust_summary
+    assert run.final_response.trust_summary.caveats == (
+        "1 row excluded because revenue was missing.",
+        "1 row grouped under Unknown because region was missing.",
     )
     assert "Trust Summary:" in run.final_response.text
 
@@ -148,6 +153,7 @@ def test_data_assistant_denies_dataset_access_before_request_or_preparation(
     non_answer = captured_non_answers[0]
     assert non_answer.stage == "access_controller"
     assert "commerce Curated Dataset" in non_answer.reason
+    assert non_answer.datasets == ("commerce",)
 
 
 def test_data_assistant_short_circuits_unsupported_question_before_preparing_data(
@@ -178,3 +184,4 @@ def test_data_assistant_short_circuits_unsupported_question_before_preparing_dat
     non_answer = captured_non_answers[0]
     assert non_answer.stage == "question_interpreter"
     assert non_answer.unresolved_ambiguities == ("unsupported data",)
+    assert non_answer.datasets == ()

@@ -60,6 +60,7 @@ class NonAnswer:
     reason: str
     unresolved_ambiguities: tuple[str, ...]
     next_step: str
+    datasets: tuple[str, ...] = ()
 
 
 StageResult: typing.TypeAlias = Success[T] | NonAnswer
@@ -106,15 +107,31 @@ class AnswerDraft:
     dataset_tables_used: tuple[str, ...]
     time_range: str
     filters: tuple[str, ...]
+    freshness: str
     caveats: tuple[str, ...]
+    limitations: tuple[str, ...] = ()
+
+
+@dataclasses.dataclass(frozen=True)
+class TrustSummary:
+    """Structured trust summary for answer and non-answer responses."""
+
+    datasets: tuple[str, ...] = ()
+    dataset_tables: tuple[str, ...] = ()
+    time_range: str | None = None
+    filters: tuple[str, ...] = ()
+    freshness: str | None = None
+    caveats: tuple[str, ...] = ()
+    limitations: tuple[str, ...] = ()
 
 
 @dataclasses.dataclass(frozen=True)
 class FinalResponse:
-    """Plain-text Final Response prepared by the Response Composer."""
+    """Final Response prepared by the Response Composer."""
 
     text: str
-    trust_summary: str
+    trust_summary: TrustSummary
+    response_kind: str
 
 
 @dataclasses.dataclass(frozen=True)

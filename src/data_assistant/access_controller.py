@@ -28,6 +28,7 @@ def authorize_dataset_access(
                     "Ask a data owner to grant Dataset Access or ask about "
                     "available data."
                 ),
+                datasets=(dataset.dataset_id,),
             )
 
     return contracts.Success(dataset_selection)
