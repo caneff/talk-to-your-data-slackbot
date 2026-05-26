@@ -211,7 +211,8 @@ _Avoid_: Error, refusal, fallback answer
 
 **Access Denial Response**:
 A **Non-Answer Response** for denied access that explains the permission limit
-without revealing sensitive dataset names or restricted details.
+and can name the relevant **Curated Dataset** while avoiding restricted details
+such as sensitive fields, rows, or derived results.
 _Avoid_: Permission error, security failure, forbidden response
 
 **Visual Payload**:

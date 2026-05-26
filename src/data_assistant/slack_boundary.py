@@ -91,16 +91,43 @@ class SlackGateway(typing.Protocol):
 SlackWorkflowResult: typing.TypeAlias = contracts.WorkflowResult | contracts.NonAnswer
 
 AnswerPath: typing.TypeAlias = collections_abc.Callable[
-    [duckdb.DuckDBPyConnection, str],
+    [duckdb.DuckDBPyConnection, str, contracts.InternalIdentity],
     SlackWorkflowResult,
 ]
+InternalIdentityResolver: typing.TypeAlias = collections_abc.Callable[
+    [SlackInnerEvent],
+    contracts.InternalIdentity,
+]
+
+
+def _run_workflow_answer_path(
+    connection: duckdb.DuckDBPyConnection,
+    question: str,
+    internal_identity: contracts.InternalIdentity,
+) -> SlackWorkflowResult:
+    """Adapt the workflow runner to the Slack boundary answer-path shape."""
+    return workflow_runner.run_data_assistant(
+        connection,
+        question,
+        internal_identity=internal_identity,
+    )
+
+
+def _default_internal_identity_resolver(
+    event: SlackInnerEvent,
+) -> contracts.InternalIdentity:
+    """Map Slack user context without embedding organization policy."""
+    return contracts.InternalIdentity(identity_id=f"slack_user:{event['user']}")
 
 
 def handle_slack_event(
     payload: SlackEventPayload,
     connection: duckdb.DuckDBPyConnection,
     gateway: SlackGateway,
-    answer_path: AnswerPath = workflow_runner.run_data_assistant,
+    answer_path: AnswerPath = _run_workflow_answer_path,
+    internal_identity_resolver: InternalIdentityResolver = (
+        _default_internal_identity_resolver
+    ),
 ) -> SlackRequestResult:
     """Acknowledge a Slack message event and deliver the workflow response.
 
@@ -119,6 +146,8 @@ def handle_slack_event(
         acknowledgement ordering. Test doubles may still return a `NonAnswer`
         directly even when the default workflow composes one into a
         Final Response.
+    internal_identity_resolver : InternalIdentityResolver, optional
+        Callable that maps Slack request context to an Internal Identity.
 
     Returns
     -------
@@ -132,7 +161,8 @@ def handle_slack_event(
     real threaded reply when a Slack SDK adapter is added.
     """
     gateway.acknowledge()
-    result = answer_path(connection, payload["event"]["text"])
+    internal_identity = internal_identity_resolver(payload["event"])
+    result = answer_path(connection, payload["event"]["text"], internal_identity)
     delivery = SlackDelivery(
         channel=payload["event"]["channel"],
         thread_ts=payload["event"]["ts"],

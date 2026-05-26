@@ -55,6 +55,18 @@ def build_test_payload(
     }
 
 
+def resolve_employee_123_identity(
+    _event: slack_boundary.SlackInnerEvent,
+) -> contracts.InternalIdentity:
+    return contracts.InternalIdentity(identity_id="employee_123")
+
+
+def resolve_denied_identity(
+    _event: slack_boundary.SlackInnerEvent,
+) -> contracts.InternalIdentity:
+    return contracts.InternalIdentity(identity_id="employee_denied")
+
+
 def test_handle_slack_event_sends_answer_text_to_original_slack_thread(
     canonical_question: str,
     connect_orders: testing_support.OrdersConnector,
@@ -76,7 +88,9 @@ def test_handle_slack_event_sends_answer_text_to_original_slack_thread(
     def answer_path(
         _connection: duckdb.DuckDBPyConnection,
         question: str,
+        internal_identity: contracts.InternalIdentity,
     ) -> slack_boundary.SlackWorkflowResult:
+        del internal_identity
         assert question == canonical_question
         return final_response
 
@@ -107,7 +121,9 @@ def test_handle_slack_event_acknowledges_before_running_answer_path(
     def answer_path(
         _connection: duckdb.DuckDBPyConnection,
         question: str,
+        internal_identity: contracts.InternalIdentity,
     ) -> slack_boundary.SlackWorkflowResult:
+        del internal_identity
         assert question == canonical_question
         calls.append("answer_path")
         assert gateway.acknowledgements == 1
@@ -167,7 +183,68 @@ def test_handle_slack_event_returns_acknowledged_delivery_result(
             payload=payload,
             connection=connection,
             gateway=gateway,
+            internal_identity_resolver=resolve_employee_123_identity,
         )
 
     assert result.acknowledged is True
     assert result.delivery == gateway.deliveries[0]
+
+
+def test_handle_slack_event_passes_resolved_internal_identity_to_answer_path(
+    canonical_question: str,
+    connect_orders: testing_support.OrdersConnector,
+) -> None:
+    gateway = RecordingSlackGateway()
+    payload = build_test_payload(user="U999", text=canonical_question)
+    order_rows = (("2026-01-03", "North", "1200.00"),)
+    seen_identity_ids: list[str] = []
+    seen_slack_user_ids: list[str] = []
+
+    def internal_identity_resolver(
+        event: slack_boundary.SlackInnerEvent,
+    ) -> contracts.InternalIdentity:
+        seen_slack_user_ids.append(event["user"])
+        return contracts.InternalIdentity(identity_id="employee_123")
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        question: str,
+        internal_identity: contracts.InternalIdentity,
+    ) -> slack_boundary.SlackWorkflowResult:
+        assert question == canonical_question
+        seen_identity_ids.append(internal_identity.identity_id)
+        return contracts.FinalResponse(
+            text="Final answer text.",
+            trust_summary="Trust Summary: fake answer path.",
+        )
+
+    with connect_orders(order_rows) as connection:
+        slack_boundary.handle_slack_event(
+            payload=payload,
+            connection=connection,
+            gateway=gateway,
+            answer_path=answer_path,
+            internal_identity_resolver=internal_identity_resolver,
+        )
+
+    assert seen_slack_user_ids == ["U999"]
+    assert seen_identity_ids == ["employee_123"]
+
+
+def test_handle_slack_event_delivers_access_denial_for_denied_internal_identity(
+    canonical_question: str,
+    connect_orders: testing_support.OrdersConnector,
+) -> None:
+    gateway = RecordingSlackGateway()
+    payload = build_test_payload(user="U999", text=canonical_question)
+    order_rows = (("2026-01-03", "North", "1200.00"),)
+
+    with connect_orders(order_rows) as connection:
+        slack_boundary.handle_slack_event(
+            payload=payload,
+            connection=connection,
+            gateway=gateway,
+            internal_identity_resolver=resolve_denied_identity,
+        )
+
+    assert "commerce Curated Dataset" in gateway.deliveries[0].text

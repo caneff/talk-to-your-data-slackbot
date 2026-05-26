@@ -19,6 +19,12 @@ class Freshness(_SemanticLayerModel):
     description: str
 
 
+class DatasetAccess(_SemanticLayerModel):
+    """Dataset-level access rules for a Curated Dataset."""
+
+    allowed_identity_ids: tuple[str, ...]
+
+
 class CuratedDataset(_SemanticLayerModel):
     """Approved business data product available through the Semantic Layer."""
 
@@ -28,6 +34,7 @@ class CuratedDataset(_SemanticLayerModel):
     information_types: tuple[str, ...]
     freshness: Freshness
     example_questions: tuple[str, ...]
+    dataset_access: DatasetAccess = DatasetAccess(allowed_identity_ids=())
 
 
 class TableColumn(_SemanticLayerModel):
