@@ -40,10 +40,28 @@ Question to a Final Response grounded in one approved Curated Dataset.
 
 ### High Priority Follow-Ups
 
-- Replace the deterministic MVP Question Interpreter with an LLM-backed
-  interpreter once the Question Frame contract is stable.
+- Current LLM-backed Question Interpreter sequence:
+  #31 contract and eval harness; #32 Decision Trail recorder; #34 OpenAI
+  provider; #33 manual live LLM eval suite. ADR-0004 records the decision to use
+  direct OpenAI SDK integration for the first live provider and defer
+  LangChain/LangGraph until a second LLM-backed component or stateful
+  conversation flow makes that trade-off concrete.
+- Introduce an LLM-backed Question Interpreter in contract-first slices: first
+  add the Question Frame proposal, validation, fake provider, and eval harness;
+  then add the first Decision Trail slice for Question Interpreter outcomes
+  using a structured recorder and in-memory test sink without durable
+  persistence; then add the live LLM provider; then add a manual live LLM eval
+  suite that can be run with one explicit command outside normal checks. The
+  deterministic MVP interpreter was only application plumbing and should not be
+  used as a real-application fallback.
+- Treat interpretation, reasoning, response composition, and conversation flow
+  as candidates for LLM-backed components. Keep access control, validation,
+  promotion, Semantic Layer loading, and data retrieval deterministic.
+- Add Semantic Layer aliases for metrics and dimensions after the first
+  LLM-backed interpreter slice, so common business phrasing can be safely
+  promoted to canonical Question Frame values.
 - Add Visual Payload support for compact Slack-friendly tables and simple chart
-  images once the plain-text Final Response contract is stable.
+  images after LLM-backed interpretation and evals are in place.
 
 ### Better Conversation Flow
 
