@@ -81,17 +81,8 @@ class QuestionFrameProposal:
     intent: str
     metric: str
     dimension: str
-    time_range: TimeRangeProposal | None
+    time_range: contracts.TimeRange | None
     filters: tuple[str, ...]
-
-
-@dataclasses.dataclass(frozen=True)
-class TimeRangeProposal:
-    """Structured provider proposal for a Question Frame time range."""
-
-    label: str
-    start_date: datetime.date
-    end_date: datetime.date
 
 
 @dataclasses.dataclass(frozen=True)
@@ -114,7 +105,7 @@ class QuestionInterpreterProvider(typing.Protocol):
 
 
 ProposalMapping: typing.TypeAlias = dict[str, object]
-TimeRangeProposalMapping: typing.TypeAlias = dict[str, object]
+TimeRangeMapping: typing.TypeAlias = dict[str, object]
 
 
 def interpret_question(
@@ -235,7 +226,7 @@ def _normalize_provider_result(
     filters_sequence = typing.cast(tuple[object, ...] | list[object], filters)
     if not all(isinstance(value, str) for value in filters_sequence):
         return _invalid_provider_output_non_answer()
-    time_range_result = _normalize_time_range_proposal(time_range)
+    time_range_result = _normalize_time_range(time_range)
     if isinstance(time_range_result, contracts.NonAnswer):
         return time_range_result
 
@@ -267,9 +258,9 @@ def _validate_proposal(
     if not proposal.dimension:
         return _missing_required_field_non_answer("dimension")
 
-    time_range_result = _promote_time_range(proposal.time_range)
-    if time_range_result is None:
+    if proposal.time_range is None:
         return _missing_required_field_non_answer("time range")
+    time_range_result = _validate_time_range(proposal.time_range)
     if isinstance(time_range_result, contracts.NonAnswer):
         return time_range_result
     time_range = time_range_result
@@ -355,16 +346,16 @@ def _non_answer(
     )
 
 
-def _normalize_time_range_proposal(
+def _normalize_time_range(
     raw_time_range: object,
-) -> contracts.NonAnswer | TimeRangeProposal | None:
+) -> contracts.NonAnswer | contracts.TimeRange | None:
     if raw_time_range is None:
         return None
-    if isinstance(raw_time_range, TimeRangeProposal):
-        return raw_time_range
+    if isinstance(raw_time_range, contracts.TimeRange):
+        return _validate_time_range(raw_time_range)
     if not isinstance(raw_time_range, dict):
         return _invalid_time_range_non_answer()
-    time_range_mapping = typing.cast(TimeRangeProposalMapping, raw_time_range)
+    time_range_mapping = typing.cast(TimeRangeMapping, raw_time_range)
     if set(time_range_mapping) != {"label", "start_date", "end_date"}:
         return _invalid_time_range_non_answer()
 
@@ -374,25 +365,20 @@ def _normalize_time_range_proposal(
     if not isinstance(label, str) or start_date is None or end_date is None:
         return _invalid_time_range_non_answer()
 
-    return TimeRangeProposal(
+    time_range = contracts.TimeRange(
         label=label,
         start_date=start_date,
         end_date=end_date,
     )
+    return _validate_time_range(time_range)
 
 
-def _promote_time_range(
-    proposal: TimeRangeProposal | None,
-) -> contracts.NonAnswer | contracts.TimeRange | None:
-    if proposal is None:
-        return None
-    if proposal.start_date > proposal.end_date:
+def _validate_time_range(
+    time_range: contracts.TimeRange,
+) -> contracts.NonAnswer | contracts.TimeRange:
+    if time_range.start_date > time_range.end_date:
         return _invalid_time_range_non_answer()
-    return contracts.TimeRange(
-        label=proposal.label,
-        start_date=proposal.start_date,
-        end_date=proposal.end_date,
-    )
+    return time_range
 
 
 def _normalize_date(raw_value: object) -> datetime.date | None:

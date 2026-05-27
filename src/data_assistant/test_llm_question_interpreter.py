@@ -23,7 +23,7 @@ def test_provider_backed_interpreter_promotes_valid_question_frame_proposal() ->
                 intent="summarize",
                 metric="total revenue",
                 dimension="region",
-                time_range=llm_question_interpreter.TimeRangeProposal(
+                time_range=contracts.TimeRange(
                     label="January 2026",
                     start_date=datetime.date(2026, 1, 1),
                     end_date=datetime.date(2026, 1, 31),
