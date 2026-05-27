@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import collections.abc as collections_abc
 import contextlib
 import dataclasses
@@ -14,6 +15,7 @@ import dotenv
 import duckdb
 
 import data_assistant.access_controller as access_controller
+import data_assistant.llm_question_interpreter as llm_question_interpreter
 import data_assistant.slack_boundary as slack_boundary
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
@@ -58,6 +60,9 @@ SocketModeHandlerFactory: typing.TypeAlias = collections_abc.Callable[
 Ack: typing.TypeAlias = collections_abc.Callable[[], None]
 ConnectionFactory: typing.TypeAlias = collections_abc.Callable[
     [], contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
+]
+QuestionInterpreterProviderName: typing.TypeAlias = typing.Literal[
+    "deterministic", "openai"
 ]
 
 
@@ -113,6 +118,34 @@ def _default_answer_path(
         question,
         internal_identity=internal_identity,
     )
+
+
+def select_answer_path(
+    environ: collections_abc.Mapping[str, str],
+    *,
+    question_interpreter_provider_name: QuestionInterpreterProviderName,
+) -> slack_boundary.AnswerPath:
+    """Select the Slack answer path for the configured Question Interpreter."""
+    if question_interpreter_provider_name == "deterministic":
+        return _default_answer_path
+
+    provider = llm_question_interpreter.build_openai_question_interpreter_provider(
+        environ
+    )
+
+    def answer_path(
+        connection: duckdb.DuckDBPyConnection,
+        question: str,
+        internal_identity: contracts.InternalIdentity,
+    ) -> slack_boundary.SlackWorkflowResult:
+        return workflow_runner.run_data_assistant(
+            connection,
+            question,
+            internal_identity=internal_identity,
+            question_interpreter_provider=provider,
+        )
+
+    return answer_path
 
 
 def _default_internal_identity_resolver(
@@ -299,6 +332,7 @@ def run_socket_mode_from_env(
     internal_identity_resolver: slack_boundary.InternalIdentityResolver = (
         _default_internal_identity_resolver
     ),
+    answer_path: slack_boundary.AnswerPath = _default_answer_path,
 ) -> SocketModeHandler:
     """Build and start the local Slack Runtime Adapter from environment config."""
     config = load_slack_runtime_config(environ)
@@ -307,6 +341,7 @@ def run_socket_mode_from_env(
         register_socket_mode_handlers(
             app=typing.cast(SlackBoltAppEventRegistrar, app),
             connection_factory=connection_factory,
+            answer_path=answer_path,
             internal_identity_resolver=internal_identity_resolver,
         )
     handler = socket_mode_handler_factory(app_token=config.app_token, app=app)
@@ -314,19 +349,45 @@ def run_socket_mode_from_env(
     return handler
 
 
-def main(env_file: str | pathlib.Path = ".env") -> int:
+def parse_runtime_args(
+    argv: collections_abc.Sequence[str] | None = None,
+) -> argparse.Namespace:
+    """Parse local Slack runtime CLI arguments."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--question-interpreter-provider",
+        choices=("deterministic", "openai"),
+        default="deterministic",
+    )
+    return parser.parse_args(list(argv) if argv is not None else None)
+
+
+def main(
+    argv: collections_abc.Sequence[str] | None = None,
+    *,
+    env_file: str | pathlib.Path = ".env",
+) -> int:
     """Run the local Socket Mode entrypoint."""
     try:
+        args = parse_runtime_args([] if argv is None else argv)
         _load_env_file(env_file)
+        answer_path = select_answer_path(
+            os.environ,
+            question_interpreter_provider_name=args.question_interpreter_provider,
+        )
         run_socket_mode_from_env(
             connection_factory=_dev_connection_factory,
             internal_identity_resolver=_dev_internal_identity_resolver,
+            answer_path=answer_path,
         )
-    except SlackRuntimeConfigError as error:
+    except (
+        SlackRuntimeConfigError,
+        llm_question_interpreter.OpenAIQuestionInterpreterConfigError,
+    ) as error:
         print(str(error), file=sys.stderr)
         return 1
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

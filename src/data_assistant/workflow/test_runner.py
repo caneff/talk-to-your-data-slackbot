@@ -1,3 +1,5 @@
+import datetime
+
 import pytest
 
 import data_assistant.data_preparation as data_preparation
@@ -185,3 +187,64 @@ def test_data_assistant_short_circuits_unsupported_question_before_preparing_dat
     assert non_answer.stage == contracts.NonAnswerStage.QUESTION_INTERPRETER
     assert non_answer.unresolved_ambiguities == ("unsupported data",)
     assert non_answer.datasets == ()
+
+
+def test_data_assistant_uses_injected_question_interpreter_provider(
+    monkeypatch: pytest.MonkeyPatch,
+    canonical_question: str,
+    connect_orders: testing_support.OrdersConnector,
+) -> None:
+    class FakeProvider:
+        def propose_question_frame(
+            self,
+            *,
+            question: str,
+            prompt_context: dict[str, object],
+        ) -> object:
+            assert question == canonical_question
+            assert "metric_labels" in prompt_context
+            return {
+                "intent": "summarize",
+                "metric": "total revenue",
+                "dimension": "region",
+                "time_range": {
+                    "label": "January 2026",
+                    "start_date": "2026-01-01",
+                    "end_date": "2026-01-31",
+                },
+                "filters": (),
+            }
+
+    def fail_deterministic_interpreter(
+        question: str,
+        semantic_layer: object,
+    ) -> contracts.StageResult[contracts.QuestionFrame]:
+        del question, semantic_layer
+        raise AssertionError("deterministic interpreter should not be called")
+
+    monkeypatch.setattr(
+        workflow_runner.question_interpreter,
+        "interpret_question",
+        fail_deterministic_interpreter,
+    )
+
+    with connect_orders((("2026-01-03", "North", "1200.00"),)) as connection:
+        run = workflow_runner.run_data_assistant(
+            connection,
+            canonical_question,
+            question_interpreter_provider=FakeProvider(),
+        )
+
+    assert isinstance(run, contracts.DataAssistantRun)
+    assert run.question_frame == contracts.QuestionFrame(
+        intent="summarize",
+        metric="total revenue",
+        dimension="region",
+        time_range=contracts.TimeRange(
+            label="January 2026",
+            start_date=datetime.date(2026, 1, 1),
+            end_date=datetime.date(2026, 1, 31),
+        ),
+        filters=(),
+        unresolved_ambiguities=(),
+    )

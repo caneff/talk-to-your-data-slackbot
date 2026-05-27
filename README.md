@@ -76,6 +76,13 @@ You still need to create and copy the two local tokens into `.env`:
 3. In **OAuth & Permissions**, copy the bot user OAuth token. Replace
    `xoxb-your-bot-token` in `.env` with that token.
 
+For the optional live OpenAI Question Interpreter, also set:
+
+- `OPENAI_API_KEY` when you plan to start the runtime with
+  `--question-interpreter-provider openai`
+- optional `OPENAI_MODEL`
+  default is `gpt-5.5`
+
 The runtime loads `.env` automatically with `python-dotenv`. Explicitly exported
 environment variables still take precedence over values in `.env`. The `.env`
 file is local only, and `.gitignore` keeps it out of commits. Do not commit token
@@ -96,6 +103,18 @@ Install dependencies and start the adapter:
 ```bash
 uv run python -m data_assistant.slack_runtime
 ```
+
+That default startup keeps the deterministic MVP Question Interpreter.
+
+To use the live OpenAI Question Interpreter instead:
+
+```bash
+uv run python -m data_assistant.slack_runtime --question-interpreter-provider openai
+```
+
+When `openai` is selected, startup requires `OPENAI_API_KEY`. Live provider
+failures, refusals, or invalid structured output return the existing typed
+Non-Answer path; the runtime does not fall back to the deterministic interpreter.
 
 For local development, the runtime uses a tiny in-memory DuckDB `orders` table. It is only there to support a manual Slack smoke test. No dataset files are committed.
 

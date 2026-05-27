@@ -7,6 +7,7 @@ import duckdb
 import data_assistant.access_controller as access_controller
 import data_assistant.data_preparation as data_preparation
 import data_assistant.data_requester as data_requester
+import data_assistant.llm_question_interpreter as llm_question_interpreter
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.reasoning_layer as reasoning_layer
 import data_assistant.response_composer as response_composer
@@ -21,6 +22,9 @@ def run_data_assistant(
     question: str,
     internal_identity: contracts.InternalIdentity | None = None,
     semantic_layer: schema.SemanticLayer | None = None,
+    question_interpreter_provider: (
+        llm_question_interpreter.QuestionInterpreterProvider | None
+    ) = None,
 ) -> contracts.WorkflowResult:
     """Run the canonical Data Assistant path end to end."""
     active_semantic_layer: schema.SemanticLayer
@@ -32,10 +36,17 @@ def run_data_assistant(
     if active_internal_identity is None:
         active_internal_identity = access_controller.DEFAULT_LOCAL_ALLOWED_IDENTITY
 
-    question_frame_result = question_interpreter.interpret_question(
-        question=question,
-        semantic_layer=active_semantic_layer,
-    )
+    if question_interpreter_provider is None:
+        question_frame_result = question_interpreter.interpret_question(
+            question=question,
+            semantic_layer=active_semantic_layer,
+        )
+    else:
+        question_frame_result = llm_question_interpreter.interpret_question(
+            question=question,
+            semantic_layer=active_semantic_layer,
+            provider=question_interpreter_provider,
+        )
     if isinstance(question_frame_result, contracts.NonAnswer):
         return response_composer.compose_non_answer_response(question_frame_result)
     question_frame = question_frame_result.value

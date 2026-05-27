@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import collections.abc
 import dataclasses
 import datetime
+import json
 import typing
+
+import pydantic
 
 import data_assistant.question_interpreter_guards as interpreter_guards
 import data_assistant.semantic_layer.loader as semantic_layer_loader
@@ -39,6 +43,37 @@ _UNSAFE_AUTHORITY_KEYS = frozenset({
     "dimension_ids",
 })
 _SUPPORTED_PROVIDER_INTENTS = frozenset({"summarize"})
+_DEFAULT_OPENAI_MODEL = "gpt-5.5"
+
+
+@dataclasses.dataclass(frozen=True)
+class OpenAIQuestionInterpreterConfig:
+    """Environment-backed config for the OpenAI Question Interpreter provider."""
+
+    api_key: str
+    model: str
+
+
+class OpenAIQuestionInterpreterConfigError(ValueError):
+    """Raised when required OpenAI provider config is missing."""
+
+
+class OpenAITimeRangeProposal(pydantic.BaseModel):
+    """Structured time range payload expected from OpenAI."""
+
+    label: str
+    start_date: datetime.date
+    end_date: datetime.date
+
+
+class OpenAIQuestionFrameProposal(pydantic.BaseModel):
+    """Structured Question Frame proposal expected from OpenAI."""
+
+    intent: str
+    metric: str
+    dimension: str
+    time_range: OpenAITimeRangeProposal | None
+    filters: tuple[str, ...]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -46,6 +81,123 @@ class ProviderFailure:
     """Provider failed to produce a proposal."""
 
     reason: str
+
+
+def load_openai_question_interpreter_config(
+    environ: collections.abc.Mapping[str, str],
+) -> OpenAIQuestionInterpreterConfig:
+    """Load required OpenAI provider config from environment variables."""
+    if not environ.get("OPENAI_API_KEY"):
+        raise OpenAIQuestionInterpreterConfigError(
+            "Missing required OpenAI environment variables: OPENAI_API_KEY"
+        )
+    return OpenAIQuestionInterpreterConfig(
+        api_key=environ["OPENAI_API_KEY"],
+        model=environ.get("OPENAI_MODEL", _DEFAULT_OPENAI_MODEL),
+    )
+
+
+class _OpenAIResponsesClient(typing.Protocol):
+    def parse(self, **kwargs: object) -> object:
+        """Return one structured Responses API result."""
+
+
+class _OpenAIClient(typing.Protocol):
+    responses: _OpenAIResponsesClient
+
+
+OpenAIClientFactory: typing.TypeAlias = collections.abc.Callable[..., _OpenAIClient]
+
+
+class OpenAIQuestionInterpreterProvider:
+    """OpenAI-backed Question Interpreter provider."""
+
+    def __init__(
+        self,
+        *,
+        config: OpenAIQuestionInterpreterConfig,
+        client: _OpenAIClient,
+    ) -> None:
+        self._config = config
+        self._client = client
+
+    def propose_question_frame(
+        self,
+        *,
+        question: str,
+        prompt_context: dict[str, object],
+    ) -> object:
+        try:
+            response = self._client.responses.parse(
+                model=self._config.model,
+                input=_build_openai_input(
+                    question=question,
+                    prompt_context=prompt_context,
+                ),
+                text_format=OpenAIQuestionFrameProposal,
+            )
+        except Exception as error:
+            return ProviderFailure(reason=str(error) or "OpenAI provider failed")
+
+        refusal = getattr(response, "refusal", None)
+        if isinstance(refusal, str) and refusal:
+            return ProviderFailure(reason=refusal)
+
+        parsed_output = getattr(response, "output_parsed", None)
+        if not isinstance(parsed_output, OpenAIQuestionFrameProposal):
+            return {}
+        proposal_dump = parsed_output.model_dump(mode="json")
+        raw_filters = proposal_dump.get("filters")
+        if isinstance(raw_filters, list):
+            proposal_dump["filters"] = tuple(typing.cast(list[str], raw_filters))
+        return typing.cast(dict[str, object], proposal_dump)
+
+
+def _build_openai_input(
+    *,
+    question: str,
+    prompt_context: dict[str, object],
+) -> list[dict[str, str]]:
+    return [
+        {
+            "role": "system",
+            "content": (
+                "Interpret the Data Question into only the allowed structured "
+                "Question Frame proposal fields. Use only business-facing "
+                "Semantic Layer labels from the supplied context."
+            ),
+        },
+        {
+            "role": "user",
+            "content": json.dumps(
+                {
+                    "question": question,
+                    "prompt_context": prompt_context,
+                },
+                sort_keys=True,
+            ),
+        },
+    ]
+
+
+def build_openai_question_interpreter_provider(
+    environ: collections.abc.Mapping[str, str],
+    *,
+    client_factory: OpenAIClientFactory | None = None,
+) -> OpenAIQuestionInterpreterProvider:
+    """Build the OpenAI provider with env-backed config and a lazy SDK client."""
+    config = load_openai_question_interpreter_config(environ)
+    active_client_factory = client_factory
+    if active_client_factory is None:
+        active_client_factory = _default_openai_client_factory
+    client = active_client_factory(api_key=config.api_key)
+    return OpenAIQuestionInterpreterProvider(config=config, client=client)
+
+
+def _default_openai_client_factory(*, api_key: str) -> _OpenAIClient:
+    from openai import OpenAI
+
+    return typing.cast(_OpenAIClient, OpenAI(api_key=api_key))
 
 
 class QuestionInterpreterProvider(typing.Protocol):

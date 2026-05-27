@@ -58,6 +58,149 @@ def test_load_slack_runtime_config_names_all_missing_env_vars() -> None:
     )
 
 
+def test_select_answer_path_defaults_to_deterministic_workflow() -> None:
+    answer_path = slack_runtime.select_answer_path(
+        {"SLACK_BOT_TOKEN": "xoxb-test-token", "SLACK_APP_TOKEN": "xapp-test-token"},
+        question_interpreter_provider_name="deterministic",
+    )
+
+    assert answer_path is slack_runtime._default_answer_path  # pyright: ignore[reportPrivateUsage]
+
+
+def test_select_answer_path_builds_openai_provider_without_deterministic_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_providers: list[object] = []
+
+    class FakeProvider:
+        pass
+
+    def fake_build_openai_provider(
+        environ: collections.abc.Mapping[str, str],
+        *,
+        client_factory: object | None = None,
+    ) -> FakeProvider:
+        del client_factory
+        assert environ["OPENAI_API_KEY"] == "test-key"
+        return FakeProvider()
+
+    def fake_run_data_assistant(
+        connection: duckdb.DuckDBPyConnection,
+        question: str,
+        internal_identity: contracts.InternalIdentity | None = None,
+        semantic_layer: object | None = None,
+        question_interpreter_provider: object | None = None,
+    ) -> contracts.FinalResponse:
+        del connection, question, internal_identity, semantic_layer
+        captured_providers.append(question_interpreter_provider)
+        return contracts.FinalResponse(
+            text="openai answer path",
+            trust_summary=contracts.TrustSummary(),
+            response_kind="answer",
+        )
+
+    monkeypatch.setattr(
+        slack_runtime.llm_question_interpreter,
+        "build_openai_question_interpreter_provider",
+        fake_build_openai_provider,
+    )
+    monkeypatch.setattr(
+        slack_runtime.workflow_runner,
+        "run_data_assistant",
+        fake_run_data_assistant,
+    )
+    answer_path = slack_runtime.select_answer_path(
+        {
+            "SLACK_BOT_TOKEN": "xoxb-test-token",
+            "SLACK_APP_TOKEN": "xapp-test-token",
+            "OPENAI_API_KEY": "test-key",
+        },
+        question_interpreter_provider_name="openai",
+    )
+
+    with duckdb.connect(":memory:") as connection:
+        result = answer_path(
+            connection,
+            "What was total revenue by region in January 2026?",
+            contracts.InternalIdentity(identity_id="slack_user:U123"),
+        )
+
+    assert isinstance(result, contracts.FinalResponse)
+    assert result.response_kind == "answer"
+    assert len(captured_providers) == 1
+    assert isinstance(captured_providers[0], FakeProvider)
+
+
+def test_parse_runtime_args_defaults_to_deterministic_provider() -> None:
+    args = slack_runtime.parse_runtime_args([])
+
+    assert args.question_interpreter_provider == "deterministic"
+
+
+def test_main_passes_openai_provider_selection_into_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+) -> None:
+    selected_provider_names: list[str] = []
+    received_answer_paths: list[slack_boundary.AnswerPath] = []
+
+    def sentinel_answer_path(
+        connection: duckdb.DuckDBPyConnection,
+        question: str,
+        internal_identity: contracts.InternalIdentity,
+    ) -> contracts.FinalResponse:
+        del connection, question, internal_identity
+        return contracts.FinalResponse(
+            text="answer",
+            trust_summary=contracts.TrustSummary(),
+            response_kind="answer",
+        )
+
+    def fake_select_answer_path(
+        environ: collections.abc.Mapping[str, str],
+        *,
+        question_interpreter_provider_name: str,
+    ) -> slack_boundary.AnswerPath:
+        del environ
+        selected_provider_names.append(question_interpreter_provider_name)
+        return sentinel_answer_path
+
+    def fake_run_socket_mode_from_env(
+        environ: collections.abc.Mapping[str, str] = {},
+        *,
+        app_factory: slack_runtime.AppFactory | None = None,
+        socket_mode_handler_factory: (
+            slack_runtime.SocketModeHandlerFactory | None
+        ) = None,
+        connection_factory: slack_runtime.ConnectionFactory | None = None,
+        internal_identity_resolver: (
+            slack_boundary.InternalIdentityResolver | None
+        ) = None,
+        answer_path: slack_boundary.AnswerPath | None = None,
+    ) -> FakeSocketModeHandler:
+        del environ, app_factory, socket_mode_handler_factory
+        del connection_factory, internal_identity_resolver
+        assert answer_path is not None
+        received_answer_paths.append(answer_path)
+        return FakeSocketModeHandler(app_token="xapp-test-token", app=object())
+
+    monkeypatch.setattr(slack_runtime, "select_answer_path", fake_select_answer_path)
+    monkeypatch.setattr(
+        slack_runtime,
+        "run_socket_mode_from_env",
+        fake_run_socket_mode_from_env,
+    )
+
+    exit_code = slack_runtime.main(
+        ["--question-interpreter-provider", "openai"],
+        env_file=tmp_path / ".env",
+    )
+
+    assert exit_code == 0
+    assert selected_provider_names == ["openai"]
+    assert received_answer_paths == [sentinel_answer_path]
+
+
 def test_load_env_file_uses_dotenv_without_overriding_existing_env(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: pathlib.Path,
@@ -431,6 +574,7 @@ def test_main_starts_socket_mode_with_dev_connection_factory(
     received_identity_resolver: list[
         slack_boundary.InternalIdentityResolver | None
     ] = []
+    received_answer_paths: list[slack_boundary.AnswerPath | None] = []
 
     def fake_run_socket_mode_from_env(
         environ: collections.abc.Mapping[str, str] = {},
@@ -443,10 +587,12 @@ def test_main_starts_socket_mode_with_dev_connection_factory(
         internal_identity_resolver: (
             slack_boundary.InternalIdentityResolver | None
         ) = None,
+        answer_path: slack_boundary.AnswerPath | None = None,
     ) -> FakeSocketModeHandler:
         del environ, app_factory, socket_mode_handler_factory
         received_connection_factory.append(connection_factory)
         received_identity_resolver.append(internal_identity_resolver)
+        received_answer_paths.append(answer_path)
         return FakeSocketModeHandler(app_token="xapp-test-token", app=object())
 
     monkeypatch.setattr(
@@ -460,6 +606,9 @@ def test_main_starts_socket_mode_with_dev_connection_factory(
     assert exit_code == 0
     assert received_connection_factory == [dev_connection_factory]
     assert received_identity_resolver == [dev_internal_identity_resolver]
+    assert received_answer_paths == [
+        slack_runtime._default_answer_path  # pyright: ignore[reportPrivateUsage]
+    ]
 
 
 def test_run_socket_mode_from_env_registers_dev_runtime_that_answers_canonical_dm(
