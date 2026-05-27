@@ -56,19 +56,33 @@ class Success(typing.Generic[T]):
 class NonAnswerReasonCode(enum.StrEnum):
     """Typed reason categories for Non-Answer Responses."""
 
+    # Caller lacks access to the selected Curated Dataset.
     ACCESS_DENIED = "access_denied"
+    # More than one Curated Dataset matches or was selected.
     AMBIGUOUS_DATASET = "ambiguous_dataset"
+    # More than one Dataset Table can satisfy the Data Request.
     AMBIGUOUS_TABLE = "ambiguous_table"
+    # Provider returned output that violates the required schema.
     INVALID_PROVIDER_OUTPUT = "invalid_provider_output"
+    # Question Frame is missing a required business interpretation field.
     MISSING_REQUIRED_FIELD = "missing_required_field"
+    # No Curated Dataset can answer the Question Frame.
     NO_MATCHING_DATASET = "no_matching_dataset"
+    # No Dataset Table can satisfy the Question Frame.
     NO_MATCHING_TABLE = "no_matching_table"
+    # Provider failed before returning usable output.
     PROVIDER_FAILURE = "provider_failure"
+    # Provider proposed a label outside the Semantic Layer.
     UNKNOWN_SEMANTIC_LABEL = "unknown_semantic_label"
+    # Provider attempted to choose data retrieval or schema authority.
     UNSAFE_AUTHORITY_DRIFT = "unsafe_authority_drift"
+    # Question asks about data outside approved Curated Datasets.
     UNSUPPORTED_DATA = "unsupported_data"
+    # Question uses filters not supported by the current workflow.
     UNSUPPORTED_FILTER = "unsupported_filter"
+    # Question uses an intent not supported by the current workflow.
     UNSUPPORTED_INTENT = "unsupported_intent"
+    # Question shape cannot be handled by the current interpreter.
     UNSUPPORTED_SHAPE = "unsupported_shape"
 
 

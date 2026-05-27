@@ -65,7 +65,7 @@ def create_data_request(
             next_step="Ask which Dataset Table should be used.",
         )
 
-    table, metric, dimension = next(iter(table_options))
+    table, metric, dimension = table_options[0]
     return contracts.Success(
         contracts.DataRequest(
             dataset=dataset,
