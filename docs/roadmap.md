@@ -41,19 +41,17 @@ Question to a Final Response grounded in one approved Curated Dataset.
 ### High Priority Follow-Ups
 
 - Current LLM-backed Question Interpreter sequence:
-  #31 contract and eval harness; #32 Decision Trail recorder; #34 OpenAI
-  provider; #33 manual live LLM eval suite. ADR-0004 records the decision to use
+  #31 contract and eval harness; #34 OpenAI provider; #33 manual live LLM eval
+  suite. ADR-0004 records the decision to use
   direct OpenAI SDK integration for the first live provider and defer
   LangChain/LangGraph until a second LLM-backed component or stateful
   conversation flow makes that trade-off concrete.
 - Introduce an LLM-backed Question Interpreter in contract-first slices: first
   add the Question Frame proposal, validation, fake provider, and eval harness;
-  then add the first Decision Trail slice for Question Interpreter outcomes
-  using a structured recorder and in-memory test sink without durable
-  persistence; then add the live LLM provider; then add a manual live LLM eval
-  suite that can be run with one explicit command outside normal checks. The
-  deterministic MVP interpreter was only application plumbing and should not be
-  used as a real-application fallback.
+  then add the live LLM provider; then add a manual live LLM eval suite that can
+  be run with one explicit command outside normal checks. The deterministic MVP
+  interpreter was only application plumbing and should not be used as a
+  real-application fallback.
 - Treat interpretation, reasoning, response composition, and conversation flow
   as candidates for LLM-backed components. Keep access control, validation,
   promotion, Semantic Layer loading, and data retrieval deterministic.
@@ -86,8 +84,13 @@ Question to a Final Response grounded in one approved Curated Dataset.
 
 ### Operational Hardening
 
-- Add a Decision Trail with decision metadata, counts, statuses, errors, and
-  latency, while excluding raw Prepared Data and sensitive values.
+- Revisit Decision Trail only when there is a concrete Trust Detail, demo,
+  debug, or audit consumer. Keep interpreter correctness tests output-based, and
+  any future Decision Trail artifact should record sanitized terminal outcomes
+  rather than internal proposal/validation step ordering.
+- Add Decision Trail metadata, counts, statuses, errors, and latency when that
+  consumer exists, while excluding raw prompts, raw provider payloads, raw
+  Prepared Data, secrets, SQL, chain-of-thought, and sensitive values.
 - Add configurable Response Timing Defaults.
 - Cache Semantic Layer metadata.
 - Consider a Routing Cache if repeated specific Question Frames become common.
