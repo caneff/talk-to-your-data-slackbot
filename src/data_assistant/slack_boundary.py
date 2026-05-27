@@ -15,7 +15,6 @@ import typing
 import duckdb
 
 import data_assistant.workflow.contracts as contracts
-import data_assistant.workflow.runner as workflow_runner
 
 
 class SlackInnerEvent(typing.TypedDict):
@@ -100,19 +99,6 @@ InternalIdentityResolver: typing.TypeAlias = collections_abc.Callable[
 ]
 
 
-def _run_workflow_answer_path(
-    connection: duckdb.DuckDBPyConnection,
-    question: str,
-    internal_identity: contracts.InternalIdentity,
-) -> SlackWorkflowResult:
-    """Adapt the workflow runner to the Slack boundary answer-path shape."""
-    return workflow_runner.run_data_assistant(
-        connection,
-        question,
-        internal_identity=internal_identity,
-    )
-
-
 def _default_internal_identity_resolver(
     event: SlackInnerEvent,
 ) -> contracts.InternalIdentity:
@@ -124,7 +110,7 @@ def handle_slack_event(
     payload: SlackEventPayload,
     connection: duckdb.DuckDBPyConnection,
     gateway: SlackGateway,
-    answer_path: AnswerPath = _run_workflow_answer_path,
+    answer_path: AnswerPath,
     internal_identity_resolver: InternalIdentityResolver = (
         _default_internal_identity_resolver
     ),
@@ -140,12 +126,11 @@ def handle_slack_event(
         Ready-to-use data connection supplied by the outer runtime layer.
     gateway : SlackGateway
         Output port that records the acknowledgement and response delivery.
-    answer_path : AnswerPath, optional
-        Callable used to produce the core workflow result. Defaults to the real
-        Data Assistant runner and can be replaced by tests to prove
-        acknowledgement ordering. Test doubles may still return a `NonAnswer`
-        directly even when the default workflow composes one into a
-        Final Response.
+    answer_path : AnswerPath
+        Callable used to produce the core workflow result. The outer runtime
+        must supply the active Question Interpreter provider before calling this
+        boundary. Test doubles may still return a `NonAnswer` directly even
+        when the workflow composes one into a Final Response.
     internal_identity_resolver : InternalIdentityResolver, optional
         Callable that maps Slack request context to an Internal Identity.
 

@@ -154,24 +154,40 @@ def test_handle_slack_event_delivers_non_answer_response(
 ) -> None:
     gateway = RecordingSlackGateway()
     payload = build_test_payload(text="What was total revenue by region?")
+    final_response = contracts.FinalResponse(
+        text=(
+            "I cannot answer safely yet because the Data Question is missing "
+            "required interpretation details.\n\n"
+            "Next step: Ask a clarification question before selecting data.\n\n"
+            "Trust Summary: Limitations: The Data Question is missing required "
+            "interpretation details."
+        ),
+        trust_summary=contracts.TrustSummary(
+            limitations=(
+                "The Data Question is missing required interpretation details.",
+            )
+        ),
+        response_kind="clarification_needed",
+    )
     order_rows = (("2026-01-03", "North", "1200.00"),)
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        _question: str,
+        _internal_identity: contracts.InternalIdentity,
+    ) -> slack_boundary.SlackWorkflowResult:
+        return final_response
 
     with connect_orders(order_rows) as connection:
         slack_boundary.handle_slack_event(
             payload=payload,
             connection=connection,
             gateway=gateway,
+            answer_path=answer_path,
         )
 
     assert len(gateway.deliveries) == 1
-    assert (
-        gateway.deliveries[0].text
-        == "I cannot answer safely yet because the Data Question is missing "
-        "required interpretation details.\n\n"
-        "Next step: Ask a clarification question before selecting data.\n\n"
-        "Trust Summary: Limitations: The Data Question is missing required "
-        "interpretation details."
-    )
+    assert gateway.deliveries[0].text == final_response.text
 
 
 def test_handle_slack_event_returns_acknowledged_delivery_result(
@@ -180,13 +196,26 @@ def test_handle_slack_event_returns_acknowledged_delivery_result(
 ) -> None:
     gateway = RecordingSlackGateway()
     payload = build_test_payload(text=canonical_question)
+    final_response = contracts.FinalResponse(
+        text="Final answer text.",
+        trust_summary=contracts.TrustSummary(datasets=("Commerce Revenue",)),
+        response_kind="answer",
+    )
     order_rows = (("2026-01-03", "North", "1200.00"),)
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        _question: str,
+        _internal_identity: contracts.InternalIdentity,
+    ) -> slack_boundary.SlackWorkflowResult:
+        return final_response
 
     with connect_orders(order_rows) as connection:
         result = slack_boundary.handle_slack_event(
             payload=payload,
             connection=connection,
             gateway=gateway,
+            answer_path=answer_path,
             internal_identity_resolver=resolve_employee_123_identity,
         )
 
@@ -242,13 +271,35 @@ def test_handle_slack_event_delivers_access_denial_for_denied_internal_identity(
 ) -> None:
     gateway = RecordingSlackGateway()
     payload = build_test_payload(user="U999", text=canonical_question)
+    final_response = contracts.FinalResponse(
+        text=(
+            "I cannot answer safely because you do not have access to the "
+            "commerce Curated Dataset.\n\n"
+            "Curated Dataset: commerce.\n\n"
+            "Next step: Ask a data owner to grant Dataset Access."
+        ),
+        trust_summary=contracts.TrustSummary(
+            datasets=("commerce",),
+            limitations=("You do not have access to the commerce Curated Dataset.",),
+        ),
+        response_kind="access_denial",
+    )
     order_rows = (("2026-01-03", "North", "1200.00"),)
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        _question: str,
+        internal_identity: contracts.InternalIdentity,
+    ) -> slack_boundary.SlackWorkflowResult:
+        assert internal_identity.identity_id == "employee_denied"
+        return final_response
 
     with connect_orders(order_rows) as connection:
         slack_boundary.handle_slack_event(
             payload=payload,
             connection=connection,
             gateway=gateway,
+            answer_path=answer_path,
             internal_identity_resolver=resolve_denied_identity,
         )
 

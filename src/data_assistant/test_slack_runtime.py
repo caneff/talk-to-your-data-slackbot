@@ -13,10 +13,12 @@ import typing
 import duckdb
 import pytest
 
+import data_assistant.llm_question_interpreter as llm_question_interpreter
 import data_assistant.slack_boundary as slack_boundary
 import data_assistant.slack_runtime as slack_runtime
 import data_assistant.testing_support as testing_support
 import data_assistant.workflow.contracts as contracts
+import data_assistant.workflow.runner as workflow_runner
 
 
 def create_empty_chat_post_calls() -> list[dict[str, str]]:
@@ -58,16 +60,7 @@ def test_load_slack_runtime_config_names_all_missing_env_vars() -> None:
     )
 
 
-def test_select_answer_path_defaults_to_deterministic_workflow() -> None:
-    answer_path = slack_runtime.select_answer_path(
-        {"SLACK_BOT_TOKEN": "xoxb-test-token", "SLACK_APP_TOKEN": "xapp-test-token"},
-        question_interpreter_provider_name="deterministic",
-    )
-
-    assert answer_path is slack_runtime._default_answer_path  # pyright: ignore[reportPrivateUsage]
-
-
-def test_select_answer_path_builds_openai_provider_without_deterministic_fallback(
+def test_build_openai_answer_path_uses_openai_provider_without_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured_providers: list[object] = []
@@ -109,13 +102,12 @@ def test_select_answer_path_builds_openai_provider_without_deterministic_fallbac
         "run_data_assistant",
         fake_run_data_assistant,
     )
-    answer_path = slack_runtime.select_answer_path(
+    answer_path = slack_runtime.build_openai_answer_path(
         {
             "SLACK_BOT_TOKEN": "xoxb-test-token",
             "SLACK_APP_TOKEN": "xapp-test-token",
             "OPENAI_API_KEY": "test-key",
-        },
-        question_interpreter_provider_name="openai",
+        }
     )
 
     with duckdb.connect(":memory:") as connection:
@@ -129,76 +121,6 @@ def test_select_answer_path_builds_openai_provider_without_deterministic_fallbac
     assert result.response_kind == "answer"
     assert len(captured_providers) == 1
     assert isinstance(captured_providers[0], FakeProvider)
-
-
-def test_parse_runtime_args_defaults_to_deterministic_provider() -> None:
-    args = slack_runtime.parse_runtime_args([])
-
-    assert args.question_interpreter_provider == "deterministic"
-
-
-def test_main_passes_openai_provider_selection_into_runtime(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: pathlib.Path,
-) -> None:
-    selected_provider_names: list[str] = []
-    received_answer_paths: list[slack_boundary.AnswerPath] = []
-
-    def sentinel_answer_path(
-        connection: duckdb.DuckDBPyConnection,
-        question: str,
-        internal_identity: contracts.InternalIdentity,
-    ) -> contracts.FinalResponse:
-        del connection, question, internal_identity
-        return contracts.FinalResponse(
-            text="answer",
-            trust_summary=contracts.TrustSummary(),
-            response_kind="answer",
-        )
-
-    def fake_select_answer_path(
-        environ: collections.abc.Mapping[str, str],
-        *,
-        question_interpreter_provider_name: str,
-    ) -> slack_boundary.AnswerPath:
-        del environ
-        selected_provider_names.append(question_interpreter_provider_name)
-        return sentinel_answer_path
-
-    def fake_run_socket_mode_from_env(
-        environ: collections.abc.Mapping[str, str] = {},
-        *,
-        app_factory: slack_runtime.AppFactory | None = None,
-        socket_mode_handler_factory: (
-            slack_runtime.SocketModeHandlerFactory | None
-        ) = None,
-        connection_factory: slack_runtime.ConnectionFactory | None = None,
-        internal_identity_resolver: (
-            slack_boundary.InternalIdentityResolver | None
-        ) = None,
-        answer_path: slack_boundary.AnswerPath | None = None,
-    ) -> FakeSocketModeHandler:
-        del environ, app_factory, socket_mode_handler_factory
-        del connection_factory, internal_identity_resolver
-        assert answer_path is not None
-        received_answer_paths.append(answer_path)
-        return FakeSocketModeHandler(app_token="xapp-test-token", app=object())
-
-    monkeypatch.setattr(slack_runtime, "select_answer_path", fake_select_answer_path)
-    monkeypatch.setattr(
-        slack_runtime,
-        "run_socket_mode_from_env",
-        fake_run_socket_mode_from_env,
-    )
-
-    exit_code = slack_runtime.main(
-        ["--question-interpreter-provider", "openai"],
-        env_file=tmp_path / ".env",
-    )
-
-    assert exit_code == 0
-    assert selected_provider_names == ["openai"]
-    assert received_answer_paths == [sentinel_answer_path]
 
 
 def test_load_env_file_uses_dotenv_without_overriding_existing_env(
@@ -249,6 +171,43 @@ def test_run_socket_mode_from_env_fails_before_constructing_runtime_objects() ->
         )
 
     # Missing config must stop startup before any Slack-facing object exists.
+    assert app_factory_calls == []
+    assert handler_factory_calls == []
+
+
+def test_run_socket_mode_from_env_requires_openai_config_before_runtime_objects(
+) -> None:
+    """Validate live interpreter config before constructing Slack runtime objects."""
+    app_factory_calls: list[str] = []
+    handler_factory_calls: list[str] = []
+
+    def app_factory(*, token: str) -> object:
+        app_factory_calls.append(token)
+        return object()
+
+    def socket_mode_handler_factory(
+        *, app_token: str, app: object
+    ) -> FakeSocketModeHandler:
+        handler_factory_calls.append(app_token)
+        return FakeSocketModeHandler(app_token=app_token, app=app)
+
+    def connection_factory(
+    ) -> contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]:
+        raise AssertionError("missing OpenAI config should fail before startup")
+
+    with pytest.raises(
+        slack_runtime.llm_question_interpreter.OpenAIQuestionInterpreterConfigError
+    ):
+        slack_runtime.run_socket_mode_from_env(
+            {
+                "SLACK_BOT_TOKEN": "xoxb-live-token",
+                "SLACK_APP_TOKEN": "xapp-live-token",
+            },
+            app_factory=app_factory,
+            socket_mode_handler_factory=socket_mode_handler_factory,
+            connection_factory=connection_factory,
+        )
+
     assert app_factory_calls == []
     assert handler_factory_calls == []
 
@@ -353,6 +312,19 @@ class RecordingBoltApp:
             return handler
 
         return register
+
+
+def sentinel_answer_path(
+    connection: duckdb.DuckDBPyConnection,
+    question: str,
+    internal_identity: contracts.InternalIdentity,
+) -> contracts.FinalResponse:
+    del connection, question, internal_identity
+    return contracts.FinalResponse(
+        text="answer",
+        trust_summary=contracts.TrustSummary(),
+        response_kind="answer",
+    )
 
 
 def test_handle_socket_mode_event_routes_human_dm_through_existing_boundary(
@@ -537,6 +509,7 @@ def test_run_socket_mode_from_env_registers_message_handler_before_startup() -> 
         app_factory=app_factory,
         socket_mode_handler_factory=socket_mode_handler_factory,
         connection_factory=connection_factory,
+        answer_path=sentinel_answer_path,
     )
 
     assert "message" in app.registered_handlers
@@ -554,6 +527,7 @@ def test_registered_message_handler_exposes_bolt_injected_arguments() -> None:
     slack_runtime.register_socket_mode_handlers(
         app=app,
         connection_factory=connection_factory,
+        answer_path=sentinel_answer_path,
     )
 
     handler = app.registered_handlers["message"]
@@ -606,13 +580,12 @@ def test_main_starts_socket_mode_with_dev_connection_factory(
     assert exit_code == 0
     assert received_connection_factory == [dev_connection_factory]
     assert received_identity_resolver == [dev_internal_identity_resolver]
-    assert received_answer_paths == [
-        slack_runtime._default_answer_path  # pyright: ignore[reportPrivateUsage]
-    ]
+    assert received_answer_paths == [None]
 
 
 def test_run_socket_mode_from_env_registers_dev_runtime_that_answers_canonical_dm(
     canonical_question: str,
+    canonical_question_provider: llm_question_interpreter.QuestionInterpreterProvider,
 ) -> None:
     dev_connection_factory = slack_runtime._dev_connection_factory  # pyright: ignore[reportPrivateUsage]
     dev_internal_identity_resolver = typing.cast(
@@ -632,6 +605,18 @@ def test_run_socket_mode_from_env_registers_dev_runtime_that_answers_canonical_d
         assert app is not None
         return FakeSocketModeHandler(app_token=app_token, app=app)
 
+    def answer_path(
+        connection: duckdb.DuckDBPyConnection,
+        question: str,
+        internal_identity: contracts.InternalIdentity,
+    ) -> slack_boundary.SlackWorkflowResult:
+        return workflow_runner.run_data_assistant(
+            connection,
+            question,
+            question_interpreter_provider=canonical_question_provider,
+            internal_identity=internal_identity,
+        )
+
     slack_runtime.run_socket_mode_from_env(
         {
             "SLACK_BOT_TOKEN": "xoxb-live-token",
@@ -641,6 +626,7 @@ def test_run_socket_mode_from_env_registers_dev_runtime_that_answers_canonical_d
         socket_mode_handler_factory=socket_mode_handler_factory,
         connection_factory=dev_connection_factory,
         internal_identity_resolver=dev_internal_identity_resolver,
+        answer_path=answer_path,
     )
 
     handler = app.registered_handlers["message"]

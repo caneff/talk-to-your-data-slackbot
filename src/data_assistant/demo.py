@@ -12,6 +12,7 @@ import data_assistant.access_controller as access_controller
 import data_assistant.slack_boundary as slack_boundary
 import data_assistant.testing_support as testing_support
 import data_assistant.workflow.contracts as contracts
+import data_assistant.workflow.runner as workflow_runner
 
 DEMO_ORDER_ROWS: tuple[testing_support.OrderRow, ...] = (
     ("2026-01-03", "North", "1200.00"),
@@ -42,6 +43,35 @@ class _RecordingSlackGateway:
 
     def deliver_response(self, delivery: slack_boundary.SlackDelivery) -> None:
         self.delivery = delivery
+
+
+class _DemoQuestionInterpreterProvider:
+    def propose_question_frame(
+        self,
+        *,
+        question: str,
+        prompt_context: dict[str, object],
+    ) -> object:
+        del prompt_context
+        if question == "What was total revenue by region?":
+            return {
+                "intent": "summarize",
+                "metric": "total revenue",
+                "dimension": "region",
+                "time_range": None,
+                "filters": (),
+            }
+        return {
+            "intent": "summarize",
+            "metric": "total revenue",
+            "dimension": "region",
+            "time_range": {
+                "label": "January 2026",
+                "start_date": "2026-01-01",
+                "end_date": "2026-01-31",
+            },
+            "filters": (),
+        }
 
 
 def run_demo() -> tuple[DemoScenarioResult, ...]:
@@ -90,6 +120,7 @@ def _run_one_demo_scenario(
         payload=payload,
         connection=connection,
         gateway=gateway,
+        answer_path=_run_demo_answer_path,
         internal_identity_resolver=_resolve_local_demo_identity,
     )
     if gateway.delivery is None:
@@ -108,6 +139,19 @@ def _resolve_local_demo_identity(
     _event: slack_boundary.SlackInnerEvent,
 ) -> contracts.InternalIdentity:
     return access_controller.DEFAULT_LOCAL_ALLOWED_IDENTITY
+
+
+def _run_demo_answer_path(
+    connection: duckdb.DuckDBPyConnection,
+    question: str,
+    internal_identity: contracts.InternalIdentity,
+) -> slack_boundary.SlackWorkflowResult:
+    return workflow_runner.run_data_assistant(
+        connection,
+        question,
+        question_interpreter_provider=_DemoQuestionInterpreterProvider(),
+        internal_identity=internal_identity,
+    )
 
 
 def _write_demo_scenario(

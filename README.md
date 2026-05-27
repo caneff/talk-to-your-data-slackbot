@@ -7,7 +7,8 @@ Python project scaffold for a Slackbot that helps users talk to their data.
 This repo's Slack Runtime Adapter is DM-only.
 
 The MVP Demo Scenario also includes a no-secret local harness that simulates
-Slack-like requests without any Slack app, tokens, or network calls.
+Slack-like requests with a fake Question Interpreter provider, without any
+Slack app, tokens, OpenAI secrets, or network calls.
 
 Out of scope for this MVP:
 
@@ -76,10 +77,9 @@ You still need to create and copy the two local tokens into `.env`:
 3. In **OAuth & Permissions**, copy the bot user OAuth token. Replace
    `xoxb-your-bot-token` in `.env` with that token.
 
-For the optional live OpenAI Question Interpreter, also set:
+For the live OpenAI Question Interpreter, also set:
 
-- `OPENAI_API_KEY` when you plan to start the runtime with
-  `--question-interpreter-provider openai`
+- `OPENAI_API_KEY`
 - optional `OPENAI_MODEL`
   default is `gpt-5.5`
 
@@ -104,17 +104,9 @@ Install dependencies and start the adapter:
 uv run python -m data_assistant.slack_runtime
 ```
 
-That default startup keeps the deterministic MVP Question Interpreter.
-
-To use the live OpenAI Question Interpreter instead:
-
-```bash
-uv run python -m data_assistant.slack_runtime --question-interpreter-provider openai
-```
-
-When `openai` is selected, startup requires `OPENAI_API_KEY`. Live provider
-failures, refusals, or invalid structured output return the existing typed
-Non-Answer path; the runtime does not fall back to the deterministic interpreter.
+Startup requires `OPENAI_API_KEY`. Live provider failures, refusals, or invalid
+structured output return the existing typed Non-Answer path; the runtime does
+not fall back to a deterministic interpreter.
 
 For local development, the runtime uses a tiny in-memory DuckDB `orders` table. It is only there to support a manual Slack smoke test. No dataset files are committed.
 
@@ -142,3 +134,5 @@ uv run pytest -q
 uv run ruff check .
 uv run pyright
 ```
+
+Normal validation and the local demo do not contact OpenAI.

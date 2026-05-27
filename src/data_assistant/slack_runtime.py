@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import collections.abc as collections_abc
 import contextlib
 import dataclasses
@@ -61,9 +60,6 @@ Ack: typing.TypeAlias = collections_abc.Callable[[], None]
 ConnectionFactory: typing.TypeAlias = collections_abc.Callable[
     [], contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
 ]
-QuestionInterpreterProviderName: typing.TypeAlias = typing.Literal[
-    "deterministic", "openai"
-]
 
 
 class SlackBoltMessageEvent(typing.TypedDict):
@@ -107,28 +103,10 @@ class _SocketModeSlackGateway:
         )
 
 
-def _default_answer_path(
-    connection: duckdb.DuckDBPyConnection,
-    question: str,
-    internal_identity: contracts.InternalIdentity,
-) -> slack_boundary.SlackWorkflowResult:
-    """Use the standard Data Assistant workflow for Slack DM requests."""
-    return workflow_runner.run_data_assistant(
-        connection,
-        question,
-        internal_identity=internal_identity,
-    )
-
-
-def select_answer_path(
+def build_openai_answer_path(
     environ: collections_abc.Mapping[str, str],
-    *,
-    question_interpreter_provider_name: QuestionInterpreterProviderName,
 ) -> slack_boundary.AnswerPath:
-    """Select the Slack answer path for the configured Question Interpreter."""
-    if question_interpreter_provider_name == "deterministic":
-        return _default_answer_path
-
+    """Build the Slack answer path using the live OpenAI Question Interpreter."""
     provider = llm_question_interpreter.build_openai_question_interpreter_provider(
         environ
     )
@@ -141,8 +119,8 @@ def select_answer_path(
         return workflow_runner.run_data_assistant(
             connection,
             question,
-            internal_identity=internal_identity,
             question_interpreter_provider=provider,
+            internal_identity=internal_identity,
         )
 
     return answer_path
@@ -196,7 +174,7 @@ def handle_socket_mode_event(
     ack: Ack,
     client: SlackBoltChatClient,
     connection_factory: ConnectionFactory,
-    answer_path: slack_boundary.AnswerPath = _default_answer_path,
+    answer_path: slack_boundary.AnswerPath,
     internal_identity_resolver: slack_boundary.InternalIdentityResolver = (
         _default_internal_identity_resolver
     ),
@@ -243,7 +221,7 @@ def register_socket_mode_handlers(
     *,
     app: SlackBoltAppEventRegistrar,
     connection_factory: ConnectionFactory,
-    answer_path: slack_boundary.AnswerPath = _default_answer_path,
+    answer_path: slack_boundary.AnswerPath,
     internal_identity_resolver: slack_boundary.InternalIdentityResolver = (
         _default_internal_identity_resolver
     ),
@@ -332,16 +310,21 @@ def run_socket_mode_from_env(
     internal_identity_resolver: slack_boundary.InternalIdentityResolver = (
         _default_internal_identity_resolver
     ),
-    answer_path: slack_boundary.AnswerPath = _default_answer_path,
+    answer_path: slack_boundary.AnswerPath | None = None,
 ) -> SocketModeHandler:
     """Build and start the local Slack Runtime Adapter from environment config."""
     config = load_slack_runtime_config(environ)
+    active_answer_path = answer_path
+    if connection_factory is not None and active_answer_path is None:
+        active_answer_path = build_openai_answer_path(environ)
     app = app_factory(token=config.bot_token)
     if connection_factory is not None:
+        if active_answer_path is None:
+            raise AssertionError("answer path should be configured")
         register_socket_mode_handlers(
             app=typing.cast(SlackBoltAppEventRegistrar, app),
             connection_factory=connection_factory,
-            answer_path=answer_path,
+            answer_path=active_answer_path,
             internal_identity_resolver=internal_identity_resolver,
         )
     handler = socket_mode_handler_factory(app_token=config.app_token, app=app)
@@ -349,36 +332,16 @@ def run_socket_mode_from_env(
     return handler
 
 
-def parse_runtime_args(
-    argv: collections_abc.Sequence[str] | None = None,
-) -> argparse.Namespace:
-    """Parse local Slack runtime CLI arguments."""
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--question-interpreter-provider",
-        choices=("deterministic", "openai"),
-        default="deterministic",
-    )
-    return parser.parse_args(list(argv) if argv is not None else None)
-
-
 def main(
-    argv: collections_abc.Sequence[str] | None = None,
     *,
     env_file: str | pathlib.Path = ".env",
 ) -> int:
     """Run the local Socket Mode entrypoint."""
     try:
-        args = parse_runtime_args([] if argv is None else argv)
         _load_env_file(env_file)
-        answer_path = select_answer_path(
-            os.environ,
-            question_interpreter_provider_name=args.question_interpreter_provider,
-        )
         run_socket_mode_from_env(
             connection_factory=_dev_connection_factory,
             internal_identity_resolver=_dev_internal_identity_resolver,
-            answer_path=answer_path,
         )
     except (
         SlackRuntimeConfigError,
@@ -390,4 +353,4 @@ def main(
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    raise SystemExit(main())
