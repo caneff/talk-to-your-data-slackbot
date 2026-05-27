@@ -19,17 +19,13 @@ def test_provider_backed_interpreter_promotes_valid_question_frame_proposal() ->
         ) -> object:
             assert question == "What was total revenue by region in January 2026?"
             assert prompt_context is not None
-            return llm_question_interpreter.QuestionFrameProposal(
-                intent="summarize",
-                metric="total revenue",
-                dimension="region",
-                time_range=contracts.TimeRange(
-                    label="January 2026",
-                    start_date=datetime.date(2026, 1, 1),
-                    end_date=datetime.date(2026, 1, 31),
-                ),
-                filters=(),
-            )
+            return {
+                "intent": "summarize",
+                "metric": "total revenue",
+                "dimension": "region",
+                "time_range": _january_2026_time_range_payload(),
+                "filters": (),
+            }
 
     result = llm_question_interpreter.interpret_question(
         question="What was total revenue by region in January 2026?",
@@ -65,13 +61,13 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_missing_time_r
             prompt_context: object,
         ) -> object:
             del question, prompt_context
-            return llm_question_interpreter.QuestionFrameProposal(
-                intent="summarize",
-                metric="total revenue",
-                dimension="region",
-                time_range=None,
-                filters=(),
-            )
+            return {
+                "intent": "summarize",
+                "metric": "total revenue",
+                "dimension": "region",
+                "time_range": None,
+                "filters": (),
+            }
 
     result = llm_question_interpreter.interpret_question(
         question="What was total revenue by region?",
@@ -319,7 +315,6 @@ def test_build_prompt_context_uses_only_business_facing_semantic_layer_fields() 
 
     assert prompt_context.datasets == (
         llm_question_interpreter.PromptContextDataset(
-            dataset_id="commerce",
             name="Commerce Revenue",
             information_types=(
                 "revenue",
@@ -335,6 +330,7 @@ def test_build_prompt_context_uses_only_business_facing_semantic_layer_fields() 
         ),
     )
     rendered_prompt_context = repr(prompt_context)
+    assert "commerce" not in rendered_prompt_context
     assert "orders" not in rendered_prompt_context
     assert "customers" not in rendered_prompt_context
     assert "total_revenue" not in rendered_prompt_context

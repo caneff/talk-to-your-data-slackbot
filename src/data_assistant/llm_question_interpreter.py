@@ -5,25 +5,13 @@ from __future__ import annotations
 import collections.abc
 import dataclasses
 import datetime
-import re
 import typing
 
+import data_assistant.question_interpreter_guards as interpreter_guards
 import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
 
-_UNSUPPORTED_DATA_PATTERNS = (
-    re.compile(r"\bcsv\b"),
-    re.compile(r"\bupload\b"),
-    re.compile(r"\bspreadsheet\b"),
-    re.compile(r"\bsql\b"),
-    re.compile(r"\btable\b"),
-    re.compile(r"\bdatabase\b"),
-)
-_UNSUPPORTED_DATA_REASON = "User-provided CSV files are not supported data sources."
-_UNSUPPORTED_DATA_NEXT_STEP = (
-    "Ask about an approved Curated Dataset in the Semantic Layer instead."
-)
 _REQUIRED_PROPOSAL_KEYS = frozenset(
     {"intent", "metric", "dimension", "time_range", "filters"}
 )
@@ -56,7 +44,6 @@ _SUPPORTED_PROVIDER_INTENTS = frozenset({"summarize"})
 class PromptContextDataset:
     """Business-facing Curated Dataset context for provider prompts."""
 
-    dataset_id: str
     name: str
     information_types: tuple[str, ...]
     example_questions: tuple[str, ...]
@@ -72,17 +59,6 @@ class PromptContext:
     metric_labels: tuple[str, ...]
     dimension_labels: tuple[str, ...]
     supported_intents: tuple[str, ...]
-
-
-@dataclasses.dataclass(frozen=True)
-class QuestionFrameProposal:
-    """Untrusted provider proposal shaped like a Question Frame."""
-
-    intent: str
-    metric: str
-    dimension: str
-    time_range: contracts.TimeRange | None
-    filters: tuple[str, ...]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -115,15 +91,13 @@ def interpret_question(
     provider: QuestionInterpreterProvider,
 ) -> contracts.StageResult[contracts.QuestionFrame]:
     """Promote validated provider proposal into a trusted Question Frame."""
-    normalized_question = _normalize(question)
-    if _mentions_unsupported_data(normalized_question):
-        return _non_answer(
-            reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_DATA,
-            reason=_UNSUPPORTED_DATA_REASON,
-            unresolved_ambiguities=("unsupported data",),
-            next_step=_UNSUPPORTED_DATA_NEXT_STEP,
-        )
+    normalized_question = interpreter_guards.normalize_question(question)
+    # Some requests are policy-level rejects; do not spend provider work on them.
+    if interpreter_guards.mentions_unsupported_data(normalized_question):
+        return interpreter_guards.unsupported_data_non_answer()
 
+    # Prompt context is intentionally business-facing: labels and examples, not
+    # table names, SQL, column names, or access internals.
     prompt_context = build_prompt_context(semantic_layer)
     try:
         raw_provider_result = provider.propose_question_frame(
@@ -133,19 +107,15 @@ def interpret_question(
     except Exception:
         return _provider_failure_non_answer()
 
-    proposal_result = _normalize_provider_result(raw_provider_result)
-    if isinstance(proposal_result, contracts.NonAnswer):
-        return proposal_result
-    proposal = proposal_result
-
-    return _validate_proposal(proposal, prompt_context)
+    # Provider output is only a proposal until schema and authority checks
+    # promote it into the trusted Question Frame contract.
+    return _promote_provider_result(raw_provider_result, prompt_context)
 
 
 def build_prompt_context(semantic_layer: schema.SemanticLayer) -> PromptContext:
     """Collect business-facing prompt context from the Semantic Layer only."""
     datasets = tuple(
         PromptContextDataset(
-            dataset_id=dataset.dataset_id,
             name=dataset.name,
             information_types=dataset.information_types,
             example_questions=dataset.example_questions,
@@ -186,13 +156,12 @@ def build_prompt_context(semantic_layer: schema.SemanticLayer) -> PromptContext:
     )
 
 
-def _normalize_provider_result(
+def _promote_provider_result(
     raw_provider_result: object,
-) -> contracts.NonAnswer | QuestionFrameProposal:
+    prompt_context: PromptContext,
+) -> contracts.StageResult[contracts.QuestionFrame]:
     if isinstance(raw_provider_result, ProviderFailure):
         return _provider_failure_non_answer()
-    if isinstance(raw_provider_result, QuestionFrameProposal):
-        return raw_provider_result
     if not isinstance(raw_provider_result, dict):
         return _invalid_provider_output_non_answer()
     proposal_mapping = typing.cast(ProposalMapping, raw_provider_result)
@@ -230,20 +199,14 @@ def _normalize_provider_result(
     if isinstance(time_range_result, contracts.NonAnswer):
         return time_range_result
 
-    return QuestionFrameProposal(
-        intent=typing.cast(str, intent),
-        metric=typing.cast(str, metric),
-        dimension=typing.cast(str, dimension),
-        time_range=time_range_result,
-        filters=tuple(typing.cast(collections.abc.Iterable[str], filters_sequence)),
+    intent_value = typing.cast(str, intent)
+    metric_value = typing.cast(str, metric)
+    dimension_value = typing.cast(str, dimension)
+    filters_value = tuple(
+        typing.cast(collections.abc.Iterable[str], filters_sequence)
     )
 
-
-def _validate_proposal(
-    proposal: QuestionFrameProposal,
-    prompt_context: PromptContext,
-) -> contracts.StageResult[contracts.QuestionFrame]:
-    if proposal.intent not in _SUPPORTED_PROVIDER_INTENTS:
+    if intent_value not in _SUPPORTED_PROVIDER_INTENTS:
         return _non_answer(
             reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT,
             reason=(
@@ -253,18 +216,15 @@ def _validate_proposal(
             unresolved_ambiguities=("supported intent",),
             next_step="Ask: What was total revenue by region in January 2026?",
         )
-    if not proposal.metric:
+    if not metric_value:
         return _missing_required_field_non_answer("metric")
-    if not proposal.dimension:
+    if not dimension_value:
         return _missing_required_field_non_answer("dimension")
 
-    if proposal.time_range is None:
+    if time_range_result is None:
         return _missing_required_field_non_answer("time range")
-    time_range_result = _validate_time_range(proposal.time_range)
-    if isinstance(time_range_result, contracts.NonAnswer):
-        return time_range_result
-    time_range = time_range_result
-    if proposal.filters:
+    time_range_value = time_range_result
+    if filters_value:
         return _non_answer(
             reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_FILTER,
             reason=(
@@ -274,18 +234,18 @@ def _validate_proposal(
             unresolved_ambiguities=("filters",),
             next_step="Ask the Data Question without filters for now.",
         )
-    if proposal.metric not in prompt_context.metric_labels:
+    if metric_value not in prompt_context.metric_labels:
         return _unknown_semantic_label_non_answer("metric")
-    if proposal.dimension not in prompt_context.dimension_labels:
+    if dimension_value not in prompt_context.dimension_labels:
         return _unknown_semantic_label_non_answer("dimension")
 
     return contracts.Success(
         contracts.QuestionFrame(
-            intent=proposal.intent,
-            metric=proposal.metric,
-            dimension=proposal.dimension,
-            time_range=time_range,
-            filters=proposal.filters,
+            intent=intent_value,
+            metric=metric_value,
+            dimension=dimension_value,
+            time_range=time_range_value,
+            filters=filters_value,
             unresolved_ambiguities=(),
         )
     )
@@ -398,15 +358,4 @@ def _invalid_time_range_non_answer() -> contracts.NonAnswer:
         reason="The Question Interpreter provider returned invalid output.",
         unresolved_ambiguities=("time range",),
         next_step="Fix the provider contract before retrying.",
-    )
-
-
-def _normalize(question: str) -> str:
-    return " ".join(question.casefold().strip().split())
-
-
-def _mentions_unsupported_data(normalized_question: str) -> bool:
-    return any(
-        pattern.search(normalized_question)
-        for pattern in _UNSUPPORTED_DATA_PATTERNS
     )

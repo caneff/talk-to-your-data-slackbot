@@ -8,26 +8,17 @@ import datetime
 import re
 import typing
 
+import data_assistant.question_interpreter_guards as interpreter_guards
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
+
+# TODO: Remove this deterministic interpreter once the LLM version is implemented.
 
 _SUPPORTED_SHAPE_REASON = (
     "The Data Assistant currently supports total revenue by region for one month."
 )
 _SUPPORTED_SHAPE_NEXT_STEP = (
     "Ask: What was total revenue by region in January 2026?"
-)
-_UNSUPPORTED_DATA_PATTERNS = (
-    re.compile(r"\bcsv\b"),
-    re.compile(r"\bupload\b"),
-    re.compile(r"\bspreadsheet\b"),
-    re.compile(r"\bsql\b"),
-    re.compile(r"\btable\b"),
-    re.compile(r"\bdatabase\b"),
-)
-_UNSUPPORTED_DATA_REASON = "User-provided CSV files are not supported data sources."
-_UNSUPPORTED_DATA_NEXT_STEP = (
-    "Ask about an approved Curated Dataset in the Semantic Layer instead."
 )
 
 
@@ -36,15 +27,9 @@ def interpret_question(
     semantic_layer: schema.SemanticLayer,
 ) -> contracts.StageResult[contracts.QuestionFrame]:
     """Create a Question Frame by matching Semantic Layer business labels."""
-    normalized_question = _normalize(question)
-    if _mentions_unsupported_data(normalized_question):
-        return contracts.NonAnswer(
-            stage="question_interpreter",
-            reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_DATA,
-            reason=_UNSUPPORTED_DATA_REASON,
-            unresolved_ambiguities=("unsupported data",),
-            next_step=_UNSUPPORTED_DATA_NEXT_STEP,
-        )
+    normalized_question = interpreter_guards.normalize_question(question)
+    if interpreter_guards.mentions_unsupported_data(normalized_question):
+        return interpreter_guards.unsupported_data_non_answer()
 
     metric = _find_one_label(
         normalized_question,
@@ -137,19 +122,8 @@ def _find_one_label(
         item.label
         for label_group in label_groups
         for item in label_group
-        if _normalize(item.label) in normalized_question
+        if interpreter_guards.normalize_question(item.label) in normalized_question
     }
     if len(matching_labels) != 1:
         return None
     return next(iter(matching_labels))
-
-
-def _normalize(question: str) -> str:
-    return " ".join(question.casefold().strip().split())
-
-
-def _mentions_unsupported_data(normalized_question: str) -> bool:
-    return any(
-        pattern.search(normalized_question)
-        for pattern in _UNSUPPORTED_DATA_PATTERNS
-    )
