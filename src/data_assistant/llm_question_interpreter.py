@@ -78,7 +78,7 @@ class QuestionInterpreterProvider(typing.Protocol):
         *,
         question: str,
         prompt_context: dict[str, object],
-        ) -> object:
+    ) -> object:
         """Return an untrusted Question Frame proposal or failure."""
 
 

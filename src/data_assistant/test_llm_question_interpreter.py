@@ -304,6 +304,39 @@ def test_provider_backed_interpreter_rejects_invalid_provider_output() -> None:
     )
 
 
+def test_provider_backed_interpreter_records_invalid_provider_output() -> None:
+    recorder = llm_question_interpreter.InMemoryDecisionTrailRecorder()
+
+    result = llm_question_interpreter.interpret_question(
+        question="What was total revenue by region in January 2026?",
+        semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
+        provider=_payload_provider({"hello": "world"}),
+        recorder=recorder,
+    )
+
+    assert result == contracts.NonAnswer(
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+        reason="The Question Interpreter provider returned invalid output.",
+        unresolved_ambiguities=("provider output",),
+        next_step="Fix the provider contract before retrying.",
+    )
+    assert recorder.events == (
+        llm_question_interpreter.DecisionTrailEvent(
+            event_type=llm_question_interpreter.DecisionTrailEventType.PROPOSAL_RECEIVED,
+            question_frame=None,
+            reason_code=None,
+            unresolved_ambiguities=(),
+        ),
+        llm_question_interpreter.DecisionTrailEvent(
+            event_type=llm_question_interpreter.DecisionTrailEventType.INVALID_PROVIDER_OUTPUT,
+            question_frame=None,
+            reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+            unresolved_ambiguities=("provider output",),
+        ),
+    )
+
+
 def test_provider_backed_interpreter_records_validation_rejection() -> None:
     recorder = llm_question_interpreter.InMemoryDecisionTrailRecorder()
 
