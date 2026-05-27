@@ -55,7 +55,8 @@ def test_question_interpreter_returns_non_answer_for_missing_time_range() -> Non
     )
 
     assert result == contracts.NonAnswer(
-        stage="question_interpreter",
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
         reason="The Data Question is missing required interpretation details.",
         unresolved_ambiguities=("time range",),
         next_step="Ask a clarification question before selecting data.",
@@ -71,7 +72,8 @@ def test_question_interpreter_returns_non_answer_for_unsupported_shape() -> None
     )
 
     assert result == contracts.NonAnswer(
-        stage="question_interpreter",
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_SHAPE,
         reason=(
             "The Data Assistant currently supports total revenue by region "
             "for one month."
@@ -92,7 +94,8 @@ def test_question_interpreter_returns_non_answer_for_user_provided_csv() -> None
     )
 
     assert result == contracts.NonAnswer(
-        stage="question_interpreter",
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_DATA,
         reason="User-provided CSV files are not supported data sources.",
         unresolved_ambiguities=("unsupported data",),
         next_step=(

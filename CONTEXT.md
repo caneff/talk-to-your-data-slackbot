@@ -93,7 +93,8 @@ _Avoid_: Parser, prompt analyzer, NLP layer
 
 **Question Frame**:
 The structured interpretation of a **Data Question**, including intent,
-measures, dimensions, filters, time range, and unresolved ambiguities.
+measures, dimensions, filters, time range, and unresolved ambiguities, without
+selecting a **Curated Dataset** or **Dataset Table**.
 _Avoid_: Query, prompt, plan
 
 **Material Ambiguity**:

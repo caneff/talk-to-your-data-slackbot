@@ -34,7 +34,8 @@ def test_semantic_router_returns_non_answer_when_no_dataset_matches(
     result = semantic_router.select_dataset(question_frame, active_semantic_layer)
 
     assert result == contracts.NonAnswer(
-        stage="semantic_router",
+        stage=contracts.NonAnswerStage.SEMANTIC_ROUTER,
+        reason_code=contracts.NonAnswerReasonCode.NO_MATCHING_DATASET,
         reason="No Curated Dataset safely matches the Question Frame.",
         unresolved_ambiguities=("curated dataset",),
         next_step="Ask which approved business data should be used.",
