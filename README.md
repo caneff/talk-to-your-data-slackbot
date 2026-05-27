@@ -6,6 +6,9 @@ Python project scaffold for a Slackbot that helps users talk to their data.
 
 This repo's Slack Runtime Adapter is DM-only.
 
+The MVP Demo Scenario also includes a no-secret local harness that simulates
+Slack-like requests without any Slack app, tokens, or network calls.
+
 Out of scope for this MVP:
 
 - Channel mentions
@@ -13,6 +16,27 @@ Out of scope for this MVP:
 - Progress Updates
 - Trust Detail follow-ups
 - Public HTTP deployment
+
+## Local demo
+
+Run the no-secret local demo:
+
+```bash
+uv run python -m data_assistant.demo
+```
+
+The demo uses a tiny in-memory DuckDB `orders` table and prints:
+
+- Slack-like happy path request
+- Slack Acknowledgement status
+- threaded Final Response
+- Slack-like Non-Answer request
+- threaded Non-Answer Response
+
+The happy path uses the canonical January 2026 fixture with one missing
+`region` and one missing `revenue`, so the Trust Summary shows both caveats.
+
+## Optional manual Slack smoke test
 
 ## Local Slack setup
 
@@ -75,7 +99,7 @@ uv run python -m data_assistant.slack_runtime
 
 For local development, the runtime uses a tiny in-memory DuckDB `orders` table. It is only there to support a manual Slack smoke test. No dataset files are committed.
 
-## Manual smoke test
+## Manual Slack smoke test
 
 1. Start the adapter with `uv run python -m data_assistant.slack_runtime`.
 2. Open a DM with the app in Slack.
