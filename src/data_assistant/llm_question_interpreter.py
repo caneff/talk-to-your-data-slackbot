@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import collections.abc
 import dataclasses
 import datetime
 import typing
@@ -141,6 +140,7 @@ def _promote_provider_result(
     raw_provider_result: object,
     semantic_layer: schema.SemanticLayer,
 ) -> contracts.StageResult[contracts.QuestionFrame]:
+    # First prove the provider returned a mapping we can inspect safely.
     if isinstance(raw_provider_result, ProviderFailure):
         return _provider_failure_non_answer()
     if not isinstance(raw_provider_result, dict):
@@ -150,6 +150,8 @@ def _promote_provider_result(
         return _invalid_provider_output_non_answer()
     proposal_mapping = typing.cast(dict[str, object], raw_mapping)
 
+    # Then enforce the provider's boundary: Question Frame fields only, never
+    # retrieval authority like datasets, tables, SQL, or schema identifiers.
     raw_keys = set(proposal_mapping)
     if raw_keys & _UNSAFE_AUTHORITY_KEYS:
         return contracts.NonAnswer(
@@ -168,27 +170,27 @@ def _promote_provider_result(
     if raw_keys != set(_REQUIRED_PROPOSAL_KEYS):
         return _invalid_provider_output_non_answer()
 
-    intent = proposal_mapping.get("intent")
-    metric = proposal_mapping.get("metric")
-    dimension = proposal_mapping.get("dimension")
-    time_range = proposal_mapping.get("time_range")
-    filters = proposal_mapping.get("filters")
-    if not all(isinstance(value, str) for value in (intent, metric, dimension)):
+    # Normalize provider values into concrete Python types before applying
+    # workflow rules.
+    intent_value = proposal_mapping["intent"]
+    metric_value = proposal_mapping["metric"]
+    dimension_value = proposal_mapping["dimension"]
+    if (
+        not isinstance(intent_value, str)
+        or not isinstance(metric_value, str)
+        or not isinstance(dimension_value, str)
+    ):
         return _invalid_provider_output_non_answer()
-    if not isinstance(filters, (tuple, list)):
+
+    filters_value = _normalize_filters(proposal_mapping["filters"])
+    if filters_value is None:
         return _invalid_provider_output_non_answer()
-    filters_sequence = typing.cast(tuple[object, ...] | list[object], filters)
-    if not all(isinstance(value, str) for value in filters_sequence):
-        return _invalid_provider_output_non_answer()
-    time_range_result = _normalize_time_range(time_range)
+
+    time_range_result = _normalize_time_range(proposal_mapping["time_range"])
     if isinstance(time_range_result, contracts.NonAnswer):
         return time_range_result
 
-    intent_value = typing.cast(str, intent)
-    metric_value = typing.cast(str, metric)
-    dimension_value = typing.cast(str, dimension)
-    filters_value = tuple(typing.cast(collections.abc.Iterable[str], filters_sequence))
-
+    # Apply current workflow limits before promoting to trusted contract.
     if intent_value not in _SUPPORTED_PROVIDER_INTENTS:
         return contracts.NonAnswer(
             stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
@@ -217,6 +219,8 @@ def _promote_provider_result(
             unresolved_ambiguities=("filters",),
             next_step="Ask the Data Question without filters for now.",
         )
+
+    # Finally, prove provider labels are real Semantic Layer labels.
     if metric_value not in _metric_labels(semantic_layer):
         return _unknown_semantic_label_non_answer("metric")
     if dimension_value not in _dimension_labels(semantic_layer):
@@ -301,6 +305,19 @@ def _normalize_time_range(
         end_date=end_date,
     )
     return _validate_time_range(time_range)
+
+
+def _normalize_filters(raw_filters: object) -> tuple[str, ...] | None:
+    if not isinstance(raw_filters, (tuple, list)):
+        return None
+
+    raw_filter_values = typing.cast(tuple[object, ...] | list[object], raw_filters)
+    filter_values: list[str] = []
+    for value in raw_filter_values:
+        if not isinstance(value, str):
+            return None
+        filter_values.append(value)
+    return tuple(filter_values)
 
 
 def _validate_time_range(
