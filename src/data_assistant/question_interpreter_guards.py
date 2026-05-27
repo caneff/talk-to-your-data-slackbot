@@ -36,7 +36,7 @@ def mentions_unsupported_data(normalized_question: str) -> bool:
 def unsupported_data_non_answer() -> contracts.NonAnswer:
     """Return the shared NonAnswer for user-provided data requests."""
     return contracts.NonAnswer(
-        stage="question_interpreter",
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_DATA,
         reason=_UNSUPPORTED_DATA_REASON,
         unresolved_ambiguities=("unsupported data",),

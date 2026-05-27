@@ -50,7 +50,7 @@ def test_response_composer_returns_plain_text_with_trust_summary(
 def test_response_composer_returns_final_response_for_non_answer() -> None:
     response = response_composer.compose_non_answer_response(
         contracts.NonAnswer(
-            stage="question_interpreter",
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
             reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_DATA,
             reason="User-provided CSV files are not supported data sources.",
             unresolved_ambiguities=("unsupported data",),
@@ -80,7 +80,7 @@ def test_response_composer_returns_final_response_for_non_answer() -> None:
 def test_response_composer_returns_safe_access_denial_contract() -> None:
     response = response_composer.compose_non_answer_response(
         contracts.NonAnswer(
-            stage="access_controller",
+            stage=contracts.NonAnswerStage.ACCESS_CONTROLLER,
             reason_code=contracts.NonAnswerReasonCode.ACCESS_DENIED,
             reason="You do not have access to the commerce Curated Dataset.",
             unresolved_ambiguities=(),
@@ -106,7 +106,7 @@ def test_response_composer_returns_safe_access_denial_contract() -> None:
 def test_response_composer_marks_clarification_needed_non_answer() -> None:
     response = response_composer.compose_non_answer_response(
         contracts.NonAnswer(
-            stage="question_interpreter",
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
             reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
             reason="The Data Question is missing required interpretation details.",
             unresolved_ambiguities=("time range",),

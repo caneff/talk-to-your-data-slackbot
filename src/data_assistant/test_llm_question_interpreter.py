@@ -76,7 +76,7 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_missing_time_r
     )
 
     assert result == contracts.NonAnswer(
-        stage="question_interpreter",
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
         reason="The Data Question is missing required interpretation details.",
         unresolved_ambiguities=("time range",),
@@ -108,7 +108,7 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_unsupported_da
     )
 
     assert result == contracts.NonAnswer(
-        stage="question_interpreter",
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_DATA,
         reason="User-provided CSV files are not supported data sources.",
         unresolved_ambiguities=("unsupported data",),
@@ -132,7 +132,7 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_unsupported_in
     )
 
     assert result == contracts.NonAnswer(
-        stage="question_interpreter",
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT,
         reason=(
             "The Data Assistant does not support that Data Question intent "
@@ -156,7 +156,7 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_unknown_metric
     )
 
     assert result == contracts.NonAnswer(
-        stage="question_interpreter",
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         reason_code=contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL,
         reason=(
             "The Data Assistant could not match the requested Semantic Layer "
@@ -180,7 +180,7 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_missing_dimens
     )
 
     assert result == contracts.NonAnswer(
-        stage="question_interpreter",
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
         reason="The Data Question is missing required interpretation details.",
         unresolved_ambiguities=("dimension",),
@@ -201,7 +201,7 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_unsupported_fi
     )
 
     assert result == contracts.NonAnswer(
-        stage="question_interpreter",
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_FILTER,
         reason=(
             "The Data Assistant does not support provider-proposed filters "
@@ -235,7 +235,7 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_provider_failu
     )
 
     assert result == contracts.NonAnswer(
-        stage="question_interpreter",
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         reason_code=contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
         reason=(
             "The Question Interpreter provider could not produce a proposal."
@@ -249,7 +249,28 @@ def test_provider_backed_interpreter_rejects_invalid_provider_output() -> None:
     result = _interpret_with_provider_payload({"hello": "world"})
 
     assert result == contracts.NonAnswer(
-        stage="question_interpreter",
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+        reason="The Question Interpreter provider returned invalid output.",
+        unresolved_ambiguities=("provider output",),
+        next_step="Fix the provider contract before retrying.",
+    )
+
+
+def test_provider_backed_interpreter_rejects_non_string_provider_keys() -> None:
+    result = _interpret_with_provider_payload(
+        {
+            "intent": "summarize",
+            "metric": "total revenue",
+            "dimension": "region",
+            "time_range": _january_2026_time_range_payload(),
+            "filters": (),
+            1: "not valid",
+        }
+    )
+
+    assert result == contracts.NonAnswer(
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
         reason="The Question Interpreter provider returned invalid output.",
         unresolved_ambiguities=("provider output",),
@@ -273,7 +294,7 @@ def test_provider_backed_interpreter_rejects_invalid_time_range_ordering() -> No
     )
 
     assert result == contracts.NonAnswer(
-        stage="question_interpreter",
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
         reason="The Question Interpreter provider returned invalid output.",
         unresolved_ambiguities=("time range",),
@@ -294,7 +315,7 @@ def test_provider_backed_interpreter_rejects_authority_drift_fields() -> None:
     )
 
     assert result == contracts.NonAnswer(
-        stage="question_interpreter",
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         reason_code=contracts.NonAnswerReasonCode.UNSAFE_AUTHORITY_DRIFT,
         reason=(
             "The Question Interpreter provider proposed retrieval authority "
@@ -313,22 +334,27 @@ def test_build_prompt_context_uses_only_business_facing_semantic_layer_fields() 
 
     prompt_context = llm_question_interpreter.build_prompt_context(semantic_layer)
 
-    assert prompt_context.datasets == (
-        llm_question_interpreter.PromptContextDataset(
-            name="Commerce Revenue",
-            information_types=(
-                "revenue",
-                "regional performance",
-                "order activity",
-                "customer metadata",
-            ),
-            example_questions=(
-                "What was total revenue by region in January 2026?",
-            ),
-            metric_labels=("customer count", "total revenue"),
-            dimension_labels=("customer region", "region"),
-        ),
-    )
+    assert prompt_context == {
+        "datasets": [
+            {
+                "name": "Commerce Revenue",
+                "information_types": [
+                    "revenue",
+                    "regional performance",
+                    "order activity",
+                    "customer metadata",
+                ],
+                "example_questions": [
+                    "What was total revenue by region in January 2026?",
+                ],
+                "metric_labels": ["customer count", "total revenue"],
+                "dimension_labels": ["customer region", "region"],
+            },
+        ],
+        "metric_labels": ["customer count", "total revenue"],
+        "dimension_labels": ["customer region", "region"],
+        "supported_intents": ["summarize"],
+    }
     rendered_prompt_context = repr(prompt_context)
     assert "commerce" not in rendered_prompt_context
     assert "orders" not in rendered_prompt_context
@@ -379,7 +405,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
                 "filters": (),
             },
             expected=contracts.NonAnswer(
-                stage="question_interpreter",
+                stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
                 reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
                 reason="The Data Question is missing required interpretation details.",
                 unresolved_ambiguities=("time range",),
@@ -394,7 +420,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
             ),
             provider_payload=None,
             expected=contracts.NonAnswer(
-                stage="question_interpreter",
+                stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
                 reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_DATA,
                 reason="User-provided CSV files are not supported data sources.",
                 unresolved_ambiguities=("unsupported data",),
@@ -414,7 +440,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
                 "filters": (),
             },
             expected=contracts.NonAnswer(
-                stage="question_interpreter",
+                stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
                 reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT,
                 reason=(
                     "The Data Assistant does not support that Data Question "
@@ -434,7 +460,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
                 "filters": (),
             },
             expected=contracts.NonAnswer(
-                stage="question_interpreter",
+                stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
                 reason_code=contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL,
                 reason=(
                     "The Data Assistant could not match the requested "
@@ -454,7 +480,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
                 "filters": (),
             },
             expected=contracts.NonAnswer(
-                stage="question_interpreter",
+                stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
                 reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
                 reason="The Data Question is missing required interpretation details.",
                 unresolved_ambiguities=("dimension",),
@@ -471,7 +497,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
                 "filters": ("region = 'North'",),
             },
             expected=contracts.NonAnswer(
-                stage="question_interpreter",
+                stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
                 reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_FILTER,
                 reason=(
                     "The Data Assistant does not support provider-proposed "
@@ -495,7 +521,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
                 "filters": (),
             },
             expected=contracts.NonAnswer(
-                stage="question_interpreter",
+                stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
                 reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
                 reason="The Question Interpreter provider returned invalid output.",
                 unresolved_ambiguities=("time range",),
@@ -546,7 +572,7 @@ def _payload_provider(
             self,
             *,
             question: str,
-            prompt_context: llm_question_interpreter.PromptContext,
+            prompt_context: dict[str, object],
         ) -> object:
             del question, prompt_context
             return provider_payload

@@ -12,53 +12,34 @@ import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
 
-_REQUIRED_PROPOSAL_KEYS = frozenset(
-    {"intent", "metric", "dimension", "time_range", "filters"}
-)
-_UNSAFE_AUTHORITY_KEYS = frozenset(
-    {
-        "dataset_id",
-        "dataset_ids",
-        "dataset_table",
-        "dataset_tables",
-        "table_id",
-        "table_ids",
-        "table_name",
-        "table_names",
-        "column",
-        "columns",
-        "column_id",
-        "column_ids",
-        "sql",
-        "query",
-        "metric_id",
-        "metric_ids",
-        "dimension_id",
-        "dimension_ids",
-    }
-)
+_REQUIRED_PROPOSAL_KEYS = frozenset({
+    "intent",
+    "metric",
+    "dimension",
+    "time_range",
+    "filters",
+})
+_UNSAFE_AUTHORITY_KEYS = frozenset({
+    "dataset_id",
+    "dataset_ids",
+    "dataset_table",
+    "dataset_tables",
+    "table_id",
+    "table_ids",
+    "table_name",
+    "table_names",
+    "column",
+    "columns",
+    "column_id",
+    "column_ids",
+    "sql",
+    "query",
+    "metric_id",
+    "metric_ids",
+    "dimension_id",
+    "dimension_ids",
+})
 _SUPPORTED_PROVIDER_INTENTS = frozenset({"summarize"})
-
-
-@dataclasses.dataclass(frozen=True)
-class PromptContextDataset:
-    """Business-facing Curated Dataset context for provider prompts."""
-
-    name: str
-    information_types: tuple[str, ...]
-    example_questions: tuple[str, ...]
-    metric_labels: tuple[str, ...]
-    dimension_labels: tuple[str, ...]
-
-
-@dataclasses.dataclass(frozen=True)
-class PromptContext:
-    """Business-facing context passed to a Question Interpreter provider."""
-
-    datasets: tuple[PromptContextDataset, ...]
-    metric_labels: tuple[str, ...]
-    dimension_labels: tuple[str, ...]
-    supported_intents: tuple[str, ...]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -75,13 +56,9 @@ class QuestionInterpreterProvider(typing.Protocol):
         self,
         *,
         question: str,
-        prompt_context: PromptContext,
+        prompt_context: dict[str, object],
     ) -> object:
         """Return an untrusted Question Frame proposal or failure."""
-
-
-ProposalMapping: typing.TypeAlias = dict[str, object]
-TimeRangeMapping: typing.TypeAlias = dict[str, object]
 
 
 def interpret_question(
@@ -109,66 +86,74 @@ def interpret_question(
 
     # Provider output is only a proposal until schema and authority checks
     # promote it into the trusted Question Frame contract.
-    return _promote_provider_result(raw_provider_result, prompt_context)
+    return _promote_provider_result(raw_provider_result, semantic_layer)
 
 
-def build_prompt_context(semantic_layer: schema.SemanticLayer) -> PromptContext:
-    """Collect business-facing prompt context from the Semantic Layer only."""
-    datasets = tuple(
-        PromptContextDataset(
-            name=dataset.name,
-            information_types=dataset.information_types,
-            example_questions=dataset.example_questions,
-            metric_labels=tuple(
-                metric.label
-                for table in semantic_layer_loader.tables_for_dataset(
-                    dataset,
-                    semantic_layer,
-                )
-                for metric in table.metrics
-            ),
-            dimension_labels=tuple(
-                dimension.label
-                for table in semantic_layer_loader.tables_for_dataset(
-                    dataset,
-                    semantic_layer,
-                )
-                for dimension in table.dimensions
-            ),
+def build_prompt_context(semantic_layer: schema.SemanticLayer) -> dict[str, object]:
+    """Collect business-facing prompt context from the Semantic Layer only.
+
+    Build up a dict of just what the Question Interpreter prompt should need (no IDs or
+    table names for instance).
+    """
+    datasets: list[dict[str, object]] = []
+    for dataset in semantic_layer.datasets:
+        dataset_tables = semantic_layer_loader.tables_for_dataset(
+            dataset,
+            semantic_layer,
         )
-        for dataset in semantic_layer.datasets
+        datasets.append({
+            "name": dataset.name,
+            "information_types": list(dataset.information_types),
+            "example_questions": list(dataset.example_questions),
+            "metric_labels": [
+                metric.label for table in dataset_tables for metric in table.metrics
+            ],
+            "dimension_labels": [
+                dimension.label
+                for table in dataset_tables
+                for dimension in table.dimensions
+            ],
+        })
+
+    return {
+        "datasets": datasets,
+        "metric_labels": list(_metric_labels(semantic_layer)),
+        "dimension_labels": list(_dimension_labels(semantic_layer)),
+        "supported_intents": sorted(_SUPPORTED_PROVIDER_INTENTS),
+    }
+
+
+def _metric_labels(semantic_layer: schema.SemanticLayer) -> tuple[str, ...]:
+    return tuple(
+        metric.label for table in semantic_layer.tables for metric in table.metrics
     )
-    metric_labels = tuple(
-        metric.label
-        for table in semantic_layer.tables
-        for metric in table.metrics
-    )
-    dimension_labels = tuple(
+
+
+def _dimension_labels(semantic_layer: schema.SemanticLayer) -> tuple[str, ...]:
+    return tuple(
         dimension.label
         for table in semantic_layer.tables
         for dimension in table.dimensions
-    )
-    return PromptContext(
-        datasets=datasets,
-        metric_labels=metric_labels,
-        dimension_labels=dimension_labels,
-        supported_intents=tuple(sorted(_SUPPORTED_PROVIDER_INTENTS)),
     )
 
 
 def _promote_provider_result(
     raw_provider_result: object,
-    prompt_context: PromptContext,
+    semantic_layer: schema.SemanticLayer,
 ) -> contracts.StageResult[contracts.QuestionFrame]:
     if isinstance(raw_provider_result, ProviderFailure):
         return _provider_failure_non_answer()
     if not isinstance(raw_provider_result, dict):
         return _invalid_provider_output_non_answer()
-    proposal_mapping = typing.cast(ProposalMapping, raw_provider_result)
+    raw_mapping = typing.cast(dict[object, object], raw_provider_result)
+    if not all(isinstance(key, str) for key in raw_mapping):
+        return _invalid_provider_output_non_answer()
+    proposal_mapping = typing.cast(dict[str, object], raw_mapping)
 
-    raw_keys = {str(key) for key in proposal_mapping}
+    raw_keys = set(proposal_mapping)
     if raw_keys & _UNSAFE_AUTHORITY_KEYS:
-        return _non_answer(
+        return contracts.NonAnswer(
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
             reason_code=contracts.NonAnswerReasonCode.UNSAFE_AUTHORITY_DRIFT,
             reason=(
                 "The Question Interpreter provider proposed retrieval authority "
@@ -202,16 +187,14 @@ def _promote_provider_result(
     intent_value = typing.cast(str, intent)
     metric_value = typing.cast(str, metric)
     dimension_value = typing.cast(str, dimension)
-    filters_value = tuple(
-        typing.cast(collections.abc.Iterable[str], filters_sequence)
-    )
+    filters_value = tuple(typing.cast(collections.abc.Iterable[str], filters_sequence))
 
     if intent_value not in _SUPPORTED_PROVIDER_INTENTS:
-        return _non_answer(
+        return contracts.NonAnswer(
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
             reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT,
             reason=(
-                "The Data Assistant does not support that Data Question "
-                "intent yet."
+                "The Data Assistant does not support that Data Question intent yet."
             ),
             unresolved_ambiguities=("supported intent",),
             next_step="Ask: What was total revenue by region in January 2026?",
@@ -225,18 +208,18 @@ def _promote_provider_result(
         return _missing_required_field_non_answer("time range")
     time_range_value = time_range_result
     if filters_value:
-        return _non_answer(
+        return contracts.NonAnswer(
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
             reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_FILTER,
             reason=(
-                "The Data Assistant does not support provider-proposed "
-                "filters yet."
+                "The Data Assistant does not support provider-proposed filters yet."
             ),
             unresolved_ambiguities=("filters",),
             next_step="Ask the Data Question without filters for now.",
         )
-    if metric_value not in prompt_context.metric_labels:
+    if metric_value not in _metric_labels(semantic_layer):
         return _unknown_semantic_label_non_answer("metric")
-    if dimension_value not in prompt_context.dimension_labels:
+    if dimension_value not in _dimension_labels(semantic_layer):
         return _unknown_semantic_label_non_answer("dimension")
 
     return contracts.Success(
@@ -252,7 +235,8 @@ def _promote_provider_result(
 
 
 def _missing_required_field_non_answer(field_name: str) -> contracts.NonAnswer:
-    return _non_answer(
+    return contracts.NonAnswer(
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
         reason="The Data Question is missing required interpretation details.",
         unresolved_ambiguities=(field_name,),
@@ -261,11 +245,11 @@ def _missing_required_field_non_answer(field_name: str) -> contracts.NonAnswer:
 
 
 def _unknown_semantic_label_non_answer(field_name: str) -> contracts.NonAnswer:
-    return _non_answer(
+    return contracts.NonAnswer(
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         reason_code=contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL,
         reason=(
-            "The Data Assistant could not match the requested Semantic Layer "
-            "labels."
+            "The Data Assistant could not match the requested Semantic Layer labels."
         ),
         unresolved_ambiguities=(field_name,),
         next_step="Use exact Semantic Layer metric and dimension labels.",
@@ -273,7 +257,8 @@ def _unknown_semantic_label_non_answer(field_name: str) -> contracts.NonAnswer:
 
 
 def _provider_failure_non_answer() -> contracts.NonAnswer:
-    return _non_answer(
+    return contracts.NonAnswer(
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         reason_code=contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
         reason="The Question Interpreter provider could not produce a proposal.",
         unresolved_ambiguities=("provider failure",),
@@ -282,27 +267,12 @@ def _provider_failure_non_answer() -> contracts.NonAnswer:
 
 
 def _invalid_provider_output_non_answer() -> contracts.NonAnswer:
-    return _non_answer(
+    return contracts.NonAnswer(
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
         reason="The Question Interpreter provider returned invalid output.",
         unresolved_ambiguities=("provider output",),
         next_step="Fix the provider contract before retrying.",
-    )
-
-
-def _non_answer(
-    *,
-    reason_code: contracts.NonAnswerReasonCode,
-    reason: str,
-    unresolved_ambiguities: tuple[str, ...],
-    next_step: str,
-) -> contracts.NonAnswer:
-    return contracts.NonAnswer(
-        stage="question_interpreter",
-        reason_code=reason_code,
-        reason=reason,
-        unresolved_ambiguities=unresolved_ambiguities,
-        next_step=next_step,
     )
 
 
@@ -315,7 +285,7 @@ def _normalize_time_range(
         return _validate_time_range(raw_time_range)
     if not isinstance(raw_time_range, dict):
         return _invalid_time_range_non_answer()
-    time_range_mapping = typing.cast(TimeRangeMapping, raw_time_range)
+    time_range_mapping = typing.cast(dict[str, object], raw_time_range)
     if set(time_range_mapping) != {"label", "start_date", "end_date"}:
         return _invalid_time_range_non_answer()
 
@@ -353,7 +323,8 @@ def _normalize_date(raw_value: object) -> datetime.date | None:
 
 
 def _invalid_time_range_non_answer() -> contracts.NonAnswer:
-    return _non_answer(
+    return contracts.NonAnswer(
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
         reason="The Question Interpreter provider returned invalid output.",
         unresolved_ambiguities=("time range",),

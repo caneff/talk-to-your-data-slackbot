@@ -53,6 +53,15 @@ class Success(typing.Generic[T]):
     value: T
 
 
+class NonAnswerStage(enum.StrEnum):
+    """Pipeline stage that returned a Non-Answer."""
+
+    ACCESS_CONTROLLER = "access_controller"
+    DATA_REQUESTER = "data_requester"
+    QUESTION_INTERPRETER = "question_interpreter"
+    SEMANTIC_ROUTER = "semantic_router"
+
+
 class NonAnswerReasonCode(enum.StrEnum):
     """Typed reason categories for Non-Answer Responses."""
 
@@ -90,7 +99,7 @@ class NonAnswerReasonCode(enum.StrEnum):
 class NonAnswer:
     """Workflow short-circuit when a stage cannot safely proceed."""
 
-    stage: str
+    stage: NonAnswerStage
     reason_code: NonAnswerReasonCode
     reason: str
     unresolved_ambiguities: tuple[str, ...]

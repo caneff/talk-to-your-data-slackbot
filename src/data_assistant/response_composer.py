@@ -88,7 +88,7 @@ def render_trust_summary(trust_summary: contracts.TrustSummary) -> str:
 
 
 def _response_kind_for_non_answer(non_answer: contracts.NonAnswer) -> str:
-    if non_answer.stage == "access_controller":
+    if non_answer.stage == contracts.NonAnswerStage.ACCESS_CONTROLLER:
         return "access_denial"
     if non_answer.unresolved_ambiguities == ("time range",):
         return "clarification_needed"

@@ -52,7 +52,7 @@ def interpret_question(
 
     if unresolved_ambiguities and unresolved_ambiguities != ("time range",):
         return contracts.NonAnswer(
-            stage="question_interpreter",
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
             reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_SHAPE,
             reason=_SUPPORTED_SHAPE_REASON,
             unresolved_ambiguities=("supported shape",),
@@ -61,7 +61,7 @@ def interpret_question(
 
     if unresolved_ambiguities:
         return contracts.NonAnswer(
-            stage="question_interpreter",
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
             reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
             reason="The Data Question is missing required interpretation details.",
             unresolved_ambiguities=unresolved_ambiguities,

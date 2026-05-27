@@ -111,7 +111,7 @@ def test_data_assistant_short_circuits_question_ambiguity(
     assert result is sentinel_response
     assert len(captured_non_answers) == 1
     non_answer = captured_non_answers[0]
-    assert non_answer.stage == "question_interpreter"
+    assert non_answer.stage == contracts.NonAnswerStage.QUESTION_INTERPRETER
     assert non_answer.unresolved_ambiguities == ("time range",)
 
 
@@ -151,7 +151,7 @@ def test_data_assistant_denies_dataset_access_before_request_or_preparation(
     assert result is sentinel_response
     assert len(captured_non_answers) == 1
     non_answer = captured_non_answers[0]
-    assert non_answer.stage == "access_controller"
+    assert non_answer.stage == contracts.NonAnswerStage.ACCESS_CONTROLLER
     assert "commerce Curated Dataset" in non_answer.reason
     assert non_answer.datasets == ("commerce",)
 
@@ -182,6 +182,6 @@ def test_data_assistant_short_circuits_unsupported_question_before_preparing_dat
     assert result is sentinel_response
     assert len(captured_non_answers) == 1
     non_answer = captured_non_answers[0]
-    assert non_answer.stage == "question_interpreter"
+    assert non_answer.stage == contracts.NonAnswerStage.QUESTION_INTERPRETER
     assert non_answer.unresolved_ambiguities == ("unsupported data",)
     assert non_answer.datasets == ()

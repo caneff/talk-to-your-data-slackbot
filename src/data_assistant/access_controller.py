@@ -18,7 +18,7 @@ def authorize_dataset_access(
         allowed_identity_ids = dataset.dataset_access.allowed_identity_ids
         if internal_identity.identity_id not in allowed_identity_ids:
             return contracts.NonAnswer(
-                stage="access_controller",
+                stage=contracts.NonAnswerStage.ACCESS_CONTROLLER,
                 reason_code=contracts.NonAnswerReasonCode.ACCESS_DENIED,
                 reason=(
                     "You do not have access to the "

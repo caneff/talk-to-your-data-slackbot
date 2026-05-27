@@ -20,7 +20,7 @@ def select_dataset(
 
     if not matches:
         return contracts.NonAnswer(
-            stage="semantic_router",
+            stage=contracts.NonAnswerStage.SEMANTIC_ROUTER,
             reason_code=contracts.NonAnswerReasonCode.NO_MATCHING_DATASET,
             reason="No Curated Dataset safely matches the Question Frame.",
             unresolved_ambiguities=("curated dataset",),
@@ -28,7 +28,7 @@ def select_dataset(
         )
     if len(matches) > 1:
         return contracts.NonAnswer(
-            stage="semantic_router",
+            stage=contracts.NonAnswerStage.SEMANTIC_ROUTER,
             reason_code=contracts.NonAnswerReasonCode.AMBIGUOUS_DATASET,
             reason="Multiple Curated Datasets match the Question Frame.",
             unresolved_ambiguities=("curated dataset",),

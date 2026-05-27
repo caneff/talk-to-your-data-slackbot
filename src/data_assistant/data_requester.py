@@ -17,7 +17,7 @@ def create_data_request(
     """Create the Data Request for revenue grouped by region."""
     if len(dataset_selection.selected_datasets) != 1:
         return contracts.NonAnswer(
-            stage="data_requester",
+            stage=contracts.NonAnswerStage.DATA_REQUESTER,
             reason_code=contracts.NonAnswerReasonCode.AMBIGUOUS_DATASET,
             reason="A Data Request requires exactly one Curated Dataset.",
             unresolved_ambiguities=("curated dataset",),
@@ -50,7 +50,7 @@ def create_data_request(
 
     if not table_options:
         return contracts.NonAnswer(
-            stage="data_requester",
+            stage=contracts.NonAnswerStage.DATA_REQUESTER,
             reason_code=contracts.NonAnswerReasonCode.NO_MATCHING_TABLE,
             reason="No Dataset Table can satisfy the Question Frame.",
             unresolved_ambiguities=("dataset table",),
@@ -58,7 +58,7 @@ def create_data_request(
         )
     if len(table_options) > 1:
         return contracts.NonAnswer(
-            stage="data_requester",
+            stage=contracts.NonAnswerStage.DATA_REQUESTER,
             reason_code=contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE,
             reason="Multiple Dataset Tables can satisfy the Question Frame.",
             unresolved_ambiguities=("dataset table",),
