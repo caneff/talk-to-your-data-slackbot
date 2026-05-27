@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime
+import enum
 import typing
 
 import pandas as pd
@@ -52,11 +53,31 @@ class Success(typing.Generic[T]):
     value: T
 
 
+class NonAnswerReasonCode(enum.StrEnum):
+    """Typed reason categories for Non-Answer Responses."""
+
+    ACCESS_DENIED = "access_denied"
+    AMBIGUOUS_DATASET = "ambiguous_dataset"
+    AMBIGUOUS_TABLE = "ambiguous_table"
+    INVALID_PROVIDER_OUTPUT = "invalid_provider_output"
+    MISSING_REQUIRED_FIELD = "missing_required_field"
+    NO_MATCHING_DATASET = "no_matching_dataset"
+    NO_MATCHING_TABLE = "no_matching_table"
+    PROVIDER_FAILURE = "provider_failure"
+    UNKNOWN_SEMANTIC_LABEL = "unknown_semantic_label"
+    UNSAFE_AUTHORITY_DRIFT = "unsafe_authority_drift"
+    UNSUPPORTED_DATA = "unsupported_data"
+    UNSUPPORTED_FILTER = "unsupported_filter"
+    UNSUPPORTED_INTENT = "unsupported_intent"
+    UNSUPPORTED_SHAPE = "unsupported_shape"
+
+
 @dataclasses.dataclass(frozen=True)
 class NonAnswer:
     """Workflow short-circuit when a stage cannot safely proceed."""
 
     stage: str
+    reason_code: NonAnswerReasonCode
     reason: str
     unresolved_ambiguities: tuple[str, ...]
     next_step: str

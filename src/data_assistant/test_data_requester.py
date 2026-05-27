@@ -88,6 +88,7 @@ def test_data_requester_returns_non_answer_for_ambiguous_tables() -> None:
 
     assert result == contracts.NonAnswer(
         stage="data_requester",
+        reason_code=contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE,
         reason="Multiple Dataset Tables can satisfy the Question Frame.",
         unresolved_ambiguities=("dataset table",),
         next_step="Ask which Dataset Table should be used.",

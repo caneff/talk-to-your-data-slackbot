@@ -130,6 +130,7 @@ def test_handle_slack_event_acknowledges_before_running_answer_path(
         assert gateway.acknowledgements == 1
         return contracts.NonAnswer(
             stage="question_interpreter",
+            reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
             reason="Need a time range.",
             unresolved_ambiguities=("time range",),
             next_step="Ask a clarification question before selecting data.",

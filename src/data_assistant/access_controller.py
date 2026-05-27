@@ -19,6 +19,7 @@ def authorize_dataset_access(
         if internal_identity.identity_id not in allowed_identity_ids:
             return contracts.NonAnswer(
                 stage="access_controller",
+                reason_code=contracts.NonAnswerReasonCode.ACCESS_DENIED,
                 reason=(
                     "You do not have access to the "
                     f"{dataset.dataset_id} Curated Dataset."
