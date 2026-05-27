@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import calendar
 import collections.abc
 import dataclasses
 import datetime
@@ -26,7 +25,7 @@ _UNSUPPORTED_DATA_NEXT_STEP = (
     "Ask about an approved Curated Dataset in the Semantic Layer instead."
 )
 _REQUIRED_PROPOSAL_KEYS = frozenset(
-    {"intent", "metric", "dimension", "time_range_label", "filters"}
+    {"intent", "metric", "dimension", "time_range", "filters"}
 )
 _UNSAFE_AUTHORITY_KEYS = frozenset(
     {
@@ -82,8 +81,17 @@ class QuestionFrameProposal:
     intent: str
     metric: str
     dimension: str
-    time_range_label: str
+    time_range: TimeRangeProposal | None
     filters: tuple[str, ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class TimeRangeProposal:
+    """Structured provider proposal for a Question Frame time range."""
+
+    label: str
+    start_date: datetime.date
+    end_date: datetime.date
 
 
 @dataclasses.dataclass(frozen=True)
@@ -106,6 +114,7 @@ class QuestionInterpreterProvider(typing.Protocol):
 
 
 ProposalMapping: typing.TypeAlias = dict[str, object]
+TimeRangeProposalMapping: typing.TypeAlias = dict[str, object]
 
 
 def interpret_question(
@@ -217,24 +226,24 @@ def _normalize_provider_result(
     intent = proposal_mapping.get("intent")
     metric = proposal_mapping.get("metric")
     dimension = proposal_mapping.get("dimension")
-    time_range_label = proposal_mapping.get("time_range_label")
+    time_range = proposal_mapping.get("time_range")
     filters = proposal_mapping.get("filters")
-    if not all(
-        isinstance(value, str)
-        for value in (intent, metric, dimension, time_range_label)
-    ):
+    if not all(isinstance(value, str) for value in (intent, metric, dimension)):
         return _invalid_provider_output_non_answer()
     if not isinstance(filters, (tuple, list)):
         return _invalid_provider_output_non_answer()
     filters_sequence = typing.cast(tuple[object, ...] | list[object], filters)
     if not all(isinstance(value, str) for value in filters_sequence):
         return _invalid_provider_output_non_answer()
+    time_range_result = _normalize_time_range_proposal(time_range)
+    if isinstance(time_range_result, contracts.NonAnswer):
+        return time_range_result
 
     return QuestionFrameProposal(
         intent=typing.cast(str, intent),
         metric=typing.cast(str, metric),
         dimension=typing.cast(str, dimension),
-        time_range_label=typing.cast(str, time_range_label),
+        time_range=time_range_result,
         filters=tuple(typing.cast(collections.abc.Iterable[str], filters_sequence)),
     )
 
@@ -258,9 +267,12 @@ def _validate_proposal(
     if not proposal.dimension:
         return _missing_required_field_non_answer("dimension")
 
-    time_range = _parse_month_year_time_range(proposal.time_range_label)
-    if time_range is None:
+    time_range_result = _promote_time_range(proposal.time_range)
+    if time_range_result is None:
         return _missing_required_field_non_answer("time range")
+    if isinstance(time_range_result, contracts.NonAnswer):
+        return time_range_result
+    time_range = time_range_result
     if proposal.filters:
         return _non_answer(
             reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_FILTER,
@@ -343,21 +355,63 @@ def _non_answer(
     )
 
 
-def _parse_month_year_time_range(label: str) -> contracts.TimeRange | None:
-    try:
-        start_date = datetime.datetime.strptime(label, "%B %Y").date()
-    except ValueError:
+def _normalize_time_range_proposal(
+    raw_time_range: object,
+) -> contracts.NonAnswer | TimeRangeProposal | None:
+    if raw_time_range is None:
         return None
+    if isinstance(raw_time_range, TimeRangeProposal):
+        return raw_time_range
+    if not isinstance(raw_time_range, dict):
+        return _invalid_time_range_non_answer()
+    time_range_mapping = typing.cast(TimeRangeProposalMapping, raw_time_range)
+    if set(time_range_mapping) != {"label", "start_date", "end_date"}:
+        return _invalid_time_range_non_answer()
 
-    end_date = datetime.date(
-        start_date.year,
-        start_date.month,
-        calendar.monthrange(start_date.year, start_date.month)[1],
-    )
-    return contracts.TimeRange(
+    label = time_range_mapping.get("label")
+    start_date = _normalize_date(time_range_mapping.get("start_date"))
+    end_date = _normalize_date(time_range_mapping.get("end_date"))
+    if not isinstance(label, str) or start_date is None or end_date is None:
+        return _invalid_time_range_non_answer()
+
+    return TimeRangeProposal(
         label=label,
         start_date=start_date,
         end_date=end_date,
+    )
+
+
+def _promote_time_range(
+    proposal: TimeRangeProposal | None,
+) -> contracts.NonAnswer | contracts.TimeRange | None:
+    if proposal is None:
+        return None
+    if proposal.start_date > proposal.end_date:
+        return _invalid_time_range_non_answer()
+    return contracts.TimeRange(
+        label=proposal.label,
+        start_date=proposal.start_date,
+        end_date=proposal.end_date,
+    )
+
+
+def _normalize_date(raw_value: object) -> datetime.date | None:
+    if isinstance(raw_value, datetime.date):
+        return raw_value
+    if not isinstance(raw_value, str):
+        return None
+    try:
+        return datetime.date.fromisoformat(raw_value)
+    except ValueError:
+        return None
+
+
+def _invalid_time_range_non_answer() -> contracts.NonAnswer:
+    return _non_answer(
+        reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+        reason="The Question Interpreter provider returned invalid output.",
+        unresolved_ambiguities=("time range",),
+        next_step="Fix the provider contract before retrying.",
     )
 
 

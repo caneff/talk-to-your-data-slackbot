@@ -23,7 +23,11 @@ def test_provider_backed_interpreter_promotes_valid_question_frame_proposal() ->
                 intent="summarize",
                 metric="total revenue",
                 dimension="region",
-                time_range_label="January 2026",
+                time_range=llm_question_interpreter.TimeRangeProposal(
+                    label="January 2026",
+                    start_date=datetime.date(2026, 1, 1),
+                    end_date=datetime.date(2026, 1, 31),
+                ),
                 filters=(),
             )
 
@@ -65,7 +69,7 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_missing_time_r
                 intent="summarize",
                 metric="total revenue",
                 dimension="region",
-                time_range_label="",
+                time_range=None,
                 filters=(),
             )
 
@@ -126,7 +130,7 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_unsupported_in
             "intent": "forecast",
             "metric": "total revenue",
             "dimension": "region",
-            "time_range_label": "January 2026",
+            "time_range": _january_2026_time_range_payload(),
             "filters": (),
         }
     )
@@ -150,7 +154,7 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_unknown_metric
             "intent": "summarize",
             "metric": "gross bookings",
             "dimension": "region",
-            "time_range_label": "January 2026",
+            "time_range": _january_2026_time_range_payload(),
             "filters": (),
         }
     )
@@ -174,7 +178,7 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_missing_dimens
             "intent": "summarize",
             "metric": "total revenue",
             "dimension": "",
-            "time_range_label": "January 2026",
+            "time_range": _january_2026_time_range_payload(),
             "filters": (),
         }
     )
@@ -195,7 +199,7 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_unsupported_fi
             "intent": "summarize",
             "metric": "total revenue",
             "dimension": "region",
-            "time_range_label": "January 2026",
+            "time_range": _january_2026_time_range_payload(),
             "filters": ("region = 'North'",),
         }
     )
@@ -257,13 +261,37 @@ def test_provider_backed_interpreter_rejects_invalid_provider_output() -> None:
     )
 
 
+def test_provider_backed_interpreter_rejects_invalid_time_range_ordering() -> None:
+    result = _interpret_with_provider_payload(
+        {
+            "intent": "summarize",
+            "metric": "total revenue",
+            "dimension": "region",
+            "time_range": {
+                "label": "January 2026",
+                "start_date": "2026-01-31",
+                "end_date": "2026-01-01",
+            },
+            "filters": (),
+        }
+    )
+
+    assert result == contracts.NonAnswer(
+        stage="question_interpreter",
+        reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+        reason="The Question Interpreter provider returned invalid output.",
+        unresolved_ambiguities=("time range",),
+        next_step="Fix the provider contract before retrying.",
+    )
+
+
 def test_provider_backed_interpreter_rejects_authority_drift_fields() -> None:
     result = _interpret_with_provider_payload(
         {
             "intent": "summarize",
             "metric": "total revenue",
             "dimension": "region",
-            "time_range_label": "January 2026",
+            "time_range": _january_2026_time_range_payload(),
             "filters": (),
             "dataset_id": "commerce",
         }
@@ -327,7 +355,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
                 "intent": "summarize",
                 "metric": "total revenue",
                 "dimension": "region",
-                "time_range_label": "January 2026",
+                "time_range": _january_2026_time_range_payload(),
                 "filters": (),
             },
             expected=contracts.Success(
@@ -351,7 +379,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
                 "intent": "summarize",
                 "metric": "total revenue",
                 "dimension": "region",
-                "time_range_label": "",
+                "time_range": None,
                 "filters": (),
             },
             expected=contracts.NonAnswer(
@@ -386,7 +414,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
                 "intent": "forecast",
                 "metric": "total revenue",
                 "dimension": "region",
-                "time_range_label": "January 2026",
+                "time_range": _january_2026_time_range_payload(),
                 "filters": (),
             },
             expected=contracts.NonAnswer(
@@ -406,7 +434,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
                 "intent": "summarize",
                 "metric": "gross bookings",
                 "dimension": "region",
-                "time_range_label": "January 2026",
+                "time_range": _january_2026_time_range_payload(),
                 "filters": (),
             },
             expected=contracts.NonAnswer(
@@ -426,7 +454,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
                 "intent": "summarize",
                 "metric": "total revenue",
                 "dimension": "",
-                "time_range_label": "January 2026",
+                "time_range": _january_2026_time_range_payload(),
                 "filters": (),
             },
             expected=contracts.NonAnswer(
@@ -443,7 +471,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
                 "intent": "summarize",
                 "metric": "total revenue",
                 "dimension": "region",
-                "time_range_label": "January 2026",
+                "time_range": _january_2026_time_range_payload(),
                 "filters": ("region = 'North'",),
             },
             expected=contracts.NonAnswer(
@@ -455,6 +483,27 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
                 ),
                 unresolved_ambiguities=("filters",),
                 next_step="Ask the Data Question without filters for now.",
+            ),
+        ),
+        GoldenEvalCase(
+            name="invalid_time_range_ordering",
+            provider_payload={
+                "intent": "summarize",
+                "metric": "total revenue",
+                "dimension": "region",
+                "time_range": {
+                    "label": "January 2026",
+                    "start_date": "2026-01-31",
+                    "end_date": "2026-01-01",
+                },
+                "filters": (),
+            },
+            expected=contracts.NonAnswer(
+                stage="question_interpreter",
+                reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+                reason="The Question Interpreter provider returned invalid output.",
+                unresolved_ambiguities=("time range",),
+                next_step="Fix the provider contract before retrying.",
             ),
         ),
     )
@@ -507,3 +556,11 @@ def _payload_provider(
             return provider_payload
 
     return FakeProvider()
+
+
+def _january_2026_time_range_payload() -> dict[str, str]:
+    return {
+        "label": "January 2026",
+        "start_date": "2026-01-01",
+        "end_date": "2026-01-31",
+    }
