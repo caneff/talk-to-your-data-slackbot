@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime
+import enum
 import typing
 
 import data_assistant.question_interpreter_guards as interpreter_guards
@@ -41,6 +42,27 @@ _UNSAFE_AUTHORITY_KEYS = frozenset({
 _SUPPORTED_PROVIDER_INTENTS = frozenset({"summarize"})
 
 
+class DecisionTrailEventType(enum.StrEnum):
+    """Typed Decision Trail events for Question Interpreter outcomes."""
+
+    PROPOSAL_RECEIVED = "proposal_received"
+    PROVIDER_FAILURE = "provider_failure"
+    INVALID_PROVIDER_OUTPUT = "invalid_provider_output"
+    PROMOTED = "promoted"
+    VALIDATION_REJECTED = "validation_rejected"
+    UNSUPPORTED_DATA = "unsupported_data"
+
+
+@dataclasses.dataclass(frozen=True)
+class DecisionTrailEvent:
+    """Lean Decision Trail event for Question Interpreter outcomes."""
+
+    event_type: DecisionTrailEventType
+    question_frame: contracts.QuestionFrame | None = None
+    reason_code: contracts.NonAnswerReasonCode | None = None
+    unresolved_ambiguities: tuple[str, ...] = ()
+
+
 @dataclasses.dataclass(frozen=True)
 class ProviderFailure:
     """Provider failed to produce a proposal."""
@@ -56,8 +78,31 @@ class QuestionInterpreterProvider(typing.Protocol):
         *,
         question: str,
         prompt_context: dict[str, object],
-    ) -> object:
+        ) -> object:
         """Return an untrusted Question Frame proposal or failure."""
+
+
+class DecisionTrailRecorder(typing.Protocol):
+    """Recorder boundary for Question Interpreter Decision Trail events."""
+
+    def record(self, event: DecisionTrailEvent) -> None:
+        """Record one Decision Trail event."""
+
+
+class InMemoryDecisionTrailRecorder:
+    """In-memory Decision Trail recorder for tests and demo output."""
+
+    def __init__(self) -> None:
+        self._events: list[DecisionTrailEvent] = []
+
+    @property
+    def events(self) -> tuple[DecisionTrailEvent, ...]:
+        """Return recorded events as an immutable snapshot."""
+        return tuple(self._events)
+
+    def record(self, event: DecisionTrailEvent) -> None:
+        """Append one Decision Trail event."""
+        self._events.append(event)
 
 
 def interpret_question(
@@ -65,12 +110,15 @@ def interpret_question(
     question: str,
     semantic_layer: schema.SemanticLayer,
     provider: QuestionInterpreterProvider,
+    recorder: DecisionTrailRecorder | None = None,
 ) -> contracts.StageResult[contracts.QuestionFrame]:
     """Promote validated provider proposal into a trusted Question Frame."""
     normalized_question = interpreter_guards.normalize_question(question)
     # Some requests are policy-level rejects; do not spend provider work on them.
     if interpreter_guards.mentions_unsupported_data(normalized_question):
-        return interpreter_guards.unsupported_data_non_answer()
+        result = interpreter_guards.unsupported_data_non_answer()
+        _record_stage_result(result, recorder)
+        return result
 
     # Prompt context is intentionally business-facing: labels and examples, not
     # table names, SQL, column names, or access internals.
@@ -81,11 +129,23 @@ def interpret_question(
             prompt_context=prompt_context,
         )
     except Exception:
-        return _provider_failure_non_answer()
+        result = _provider_failure_non_answer()
+        _record_stage_result(result, recorder)
+        return result
+
+    if not isinstance(raw_provider_result, ProviderFailure):
+        _record_event(
+            recorder,
+            DecisionTrailEvent(
+                event_type=DecisionTrailEventType.PROPOSAL_RECEIVED,
+            ),
+        )
 
     # Provider output is only a proposal until schema and authority checks
     # promote it into the trusted Question Frame contract.
-    return _promote_provider_result(raw_provider_result, semantic_layer)
+    result = _promote_provider_result(raw_provider_result, semantic_layer)
+    _record_stage_result(result, recorder)
+    return result
 
 
 def build_prompt_context(semantic_layer: schema.SemanticLayer) -> dict[str, object]:
@@ -347,3 +407,48 @@ def _invalid_time_range_non_answer() -> contracts.NonAnswer:
         unresolved_ambiguities=("time range",),
         next_step="Fix the provider contract before retrying.",
     )
+
+
+def _record_stage_result(
+    result: contracts.StageResult[contracts.QuestionFrame],
+    recorder: DecisionTrailRecorder | None,
+) -> None:
+    if isinstance(result, contracts.Success):
+        _record_event(
+            recorder,
+            DecisionTrailEvent(
+                event_type=DecisionTrailEventType.PROMOTED,
+                question_frame=result.value,
+            ),
+        )
+        return
+
+    _record_event(
+        recorder,
+        DecisionTrailEvent(
+            event_type=_event_type_for_non_answer(result),
+            reason_code=result.reason_code,
+            unresolved_ambiguities=result.unresolved_ambiguities,
+        ),
+    )
+
+
+def _event_type_for_non_answer(
+    result: contracts.NonAnswer,
+) -> DecisionTrailEventType:
+    if result.reason_code is contracts.NonAnswerReasonCode.PROVIDER_FAILURE:
+        return DecisionTrailEventType.PROVIDER_FAILURE
+    if result.reason_code is contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT:
+        return DecisionTrailEventType.INVALID_PROVIDER_OUTPUT
+    if result.reason_code is contracts.NonAnswerReasonCode.UNSUPPORTED_DATA:
+        return DecisionTrailEventType.UNSUPPORTED_DATA
+    return DecisionTrailEventType.VALIDATION_REJECTED
+
+
+def _record_event(
+    recorder: DecisionTrailRecorder | None,
+    event: DecisionTrailEvent,
+) -> None:
+    if recorder is None:
+        return
+    recorder.record(event)

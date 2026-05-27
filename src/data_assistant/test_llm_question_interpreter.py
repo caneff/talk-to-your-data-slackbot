@@ -9,6 +9,7 @@ import data_assistant.workflow.contracts as contracts
 
 def test_provider_backed_interpreter_promotes_valid_question_frame_proposal() -> None:
     semantic_layer = semantic_layer_testing.semantic_layer_with_table()
+    recorder = llm_question_interpreter.InMemoryDecisionTrailRecorder()
 
     class FakeProvider:
         def propose_question_frame(
@@ -31,6 +32,7 @@ def test_provider_backed_interpreter_promotes_valid_question_frame_proposal() ->
         question="What was total revenue by region in January 2026?",
         semantic_layer=semantic_layer,
         provider=FakeProvider(),
+        recorder=recorder,
     )
 
     assert result == contracts.Success(
@@ -46,6 +48,31 @@ def test_provider_backed_interpreter_promotes_valid_question_frame_proposal() ->
             filters=(),
             unresolved_ambiguities=(),
         )
+    )
+    assert recorder.events == (
+        llm_question_interpreter.DecisionTrailEvent(
+            event_type=llm_question_interpreter.DecisionTrailEventType.PROPOSAL_RECEIVED,
+            question_frame=None,
+            reason_code=None,
+            unresolved_ambiguities=(),
+        ),
+        llm_question_interpreter.DecisionTrailEvent(
+            event_type=llm_question_interpreter.DecisionTrailEventType.PROMOTED,
+            question_frame=contracts.QuestionFrame(
+                intent="summarize",
+                metric="total revenue",
+                dimension="region",
+                time_range=contracts.TimeRange(
+                    label="January 2026",
+                    start_date=datetime.date(2026, 1, 1),
+                    end_date=datetime.date(2026, 1, 31),
+                ),
+                filters=(),
+                unresolved_ambiguities=(),
+            ),
+            reason_code=None,
+            unresolved_ambiguities=(),
+        ),
     )
 
 
@@ -87,6 +114,7 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_missing_time_r
 def test_provider_backed_interpreter_returns_typed_non_answer_for_unsupported_data(
 ) -> None:
     semantic_layer = semantic_layer_testing.semantic_layer_with_table()
+    recorder = llm_question_interpreter.InMemoryDecisionTrailRecorder()
 
     class FailIfCalledProvider:
         def propose_question_frame(
@@ -105,6 +133,7 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_unsupported_da
         ),
         semantic_layer=semantic_layer,
         provider=FailIfCalledProvider(),
+        recorder=recorder,
     )
 
     assert result == contracts.NonAnswer(
@@ -115,6 +144,14 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_unsupported_da
         next_step=(
             "Ask about an approved Curated Dataset in the Semantic Layer "
             "instead."
+        ),
+    )
+    assert recorder.events == (
+        llm_question_interpreter.DecisionTrailEvent(
+            event_type=llm_question_interpreter.DecisionTrailEventType.UNSUPPORTED_DATA,
+            question_frame=None,
+            reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_DATA,
+            unresolved_ambiguities=("unsupported data",),
         ),
     )
 
@@ -215,6 +252,7 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_unsupported_fi
 def test_provider_backed_interpreter_returns_typed_non_answer_for_provider_failure(
 ) -> None:
     semantic_layer = semantic_layer_testing.semantic_layer_with_table()
+    recorder = llm_question_interpreter.InMemoryDecisionTrailRecorder()
 
     class FakeProvider:
         def propose_question_frame(
@@ -232,6 +270,7 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_provider_failu
         question="What was total revenue by region in January 2026?",
         semantic_layer=semantic_layer,
         provider=FakeProvider(),
+        recorder=recorder,
     )
 
     assert result == contracts.NonAnswer(
@@ -242,6 +281,14 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_provider_failu
         ),
         unresolved_ambiguities=("provider failure",),
         next_step="Retry after the provider is available again.",
+    )
+    assert recorder.events == (
+        llm_question_interpreter.DecisionTrailEvent(
+            event_type=llm_question_interpreter.DecisionTrailEventType.PROVIDER_FAILURE,
+            question_frame=None,
+            reason_code=contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
+            unresolved_ambiguities=("provider failure",),
+        ),
     )
 
 
@@ -255,6 +302,93 @@ def test_provider_backed_interpreter_rejects_invalid_provider_output() -> None:
         unresolved_ambiguities=("provider output",),
         next_step="Fix the provider contract before retrying.",
     )
+
+
+def test_provider_backed_interpreter_records_validation_rejection() -> None:
+    recorder = llm_question_interpreter.InMemoryDecisionTrailRecorder()
+
+    result = llm_question_interpreter.interpret_question(
+        question="What was total revenue by region?",
+        semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
+        provider=_payload_provider(
+            {
+                "intent": "summarize",
+                "metric": "total revenue",
+                "dimension": "region",
+                "time_range": None,
+                "filters": (),
+            }
+        ),
+        recorder=recorder,
+    )
+
+    assert result == contracts.NonAnswer(
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
+        reason="The Data Question is missing required interpretation details.",
+        unresolved_ambiguities=("time range",),
+        next_step="Ask a clarification question before selecting data.",
+    )
+    assert recorder.events == (
+        llm_question_interpreter.DecisionTrailEvent(
+            event_type=llm_question_interpreter.DecisionTrailEventType.PROPOSAL_RECEIVED,
+            question_frame=None,
+            reason_code=None,
+            unresolved_ambiguities=(),
+        ),
+        llm_question_interpreter.DecisionTrailEvent(
+            event_type=llm_question_interpreter.DecisionTrailEventType.VALIDATION_REJECTED,
+            question_frame=None,
+            reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
+            unresolved_ambiguities=("time range",),
+        ),
+    )
+
+
+def test_decision_trail_event_repr_excludes_raw_question_and_provider_payload() -> None:
+    raw_question = "What was total revenue by region after secret token rotation?"
+    recorder = llm_question_interpreter.InMemoryDecisionTrailRecorder()
+
+    class FakeProvider:
+        def propose_question_frame(
+            self,
+            *,
+            question: str,
+            prompt_context: object,
+        ) -> object:
+            assert question == raw_question
+            assert prompt_context is not None
+            return {
+                "intent": "summarize",
+                "metric": "secret_metric",
+                "dimension": "region",
+                "time_range": {
+                    "label": "SELECT * FROM orders",
+                    "start_date": "2026-01-01",
+                    "end_date": "2026-01-31",
+                },
+                "filters": ("token = secret",),
+            }
+
+    result = llm_question_interpreter.interpret_question(
+        question=raw_question,
+        semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
+        provider=FakeProvider(),
+        recorder=recorder,
+    )
+
+    assert result == contracts.NonAnswer(
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_FILTER,
+        reason="The Data Assistant does not support provider-proposed filters yet.",
+        unresolved_ambiguities=("filters",),
+        next_step="Ask the Data Question without filters for now.",
+    )
+    rendered_events = repr(recorder.events)
+    assert "secret token rotation" not in rendered_events
+    assert "select * from orders" not in rendered_events
+    assert "token" not in rendered_events
+    assert "secret_metric" not in rendered_events
 
 
 def test_provider_backed_interpreter_rejects_non_string_provider_keys() -> None:
