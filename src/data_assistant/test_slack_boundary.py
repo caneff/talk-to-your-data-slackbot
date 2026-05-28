@@ -4,8 +4,8 @@ import dataclasses
 
 import duckdb
 
+import data_assistant.local_orders_fixture as local_orders_fixture
 import data_assistant.slack_boundary as slack_boundary
-import data_assistant.testing_support as testing_support
 import data_assistant.workflow.contracts as contracts
 
 
@@ -69,7 +69,7 @@ def resolve_denied_identity(
 
 def test_handle_slack_event_sends_answer_text_to_original_slack_thread(
     canonical_question: str,
-    connect_orders: testing_support.OrdersConnector,
+    connect_orders: local_orders_fixture.OrdersConnector,
 ) -> None:
     gateway = RecordingSlackGateway()
     final_response = contracts.FinalResponse(
@@ -112,7 +112,7 @@ def test_handle_slack_event_sends_answer_text_to_original_slack_thread(
 
 def test_handle_slack_event_acknowledges_before_running_answer_path(
     canonical_question: str,
-    connect_orders: testing_support.OrdersConnector,
+    connect_orders: local_orders_fixture.OrdersConnector,
 ) -> None:
     gateway = RecordingSlackGateway()
     payload = build_test_payload(text=canonical_question)
@@ -150,7 +150,7 @@ def test_handle_slack_event_acknowledges_before_running_answer_path(
 
 
 def test_handle_slack_event_delivers_non_answer_response(
-    connect_orders: testing_support.OrdersConnector,
+    connect_orders: local_orders_fixture.OrdersConnector,
 ) -> None:
     gateway = RecordingSlackGateway()
     payload = build_test_payload(text="What was total revenue by region?")
@@ -192,7 +192,7 @@ def test_handle_slack_event_delivers_non_answer_response(
 
 def test_handle_slack_event_returns_acknowledged_delivery_result(
     canonical_question: str,
-    connect_orders: testing_support.OrdersConnector,
+    connect_orders: local_orders_fixture.OrdersConnector,
 ) -> None:
     gateway = RecordingSlackGateway()
     payload = build_test_payload(text=canonical_question)
@@ -225,7 +225,7 @@ def test_handle_slack_event_returns_acknowledged_delivery_result(
 
 def test_handle_slack_event_passes_resolved_internal_identity_to_answer_path(
     canonical_question: str,
-    connect_orders: testing_support.OrdersConnector,
+    connect_orders: local_orders_fixture.OrdersConnector,
 ) -> None:
     gateway = RecordingSlackGateway()
     payload = build_test_payload(user="U999", text=canonical_question)
@@ -267,7 +267,7 @@ def test_handle_slack_event_passes_resolved_internal_identity_to_answer_path(
 
 def test_handle_slack_event_delivers_access_denial_for_denied_internal_identity(
     canonical_question: str,
-    connect_orders: testing_support.OrdersConnector,
+    connect_orders: local_orders_fixture.OrdersConnector,
 ) -> None:
     gateway = RecordingSlackGateway()
     payload = build_test_payload(user="U999", text=canonical_question)

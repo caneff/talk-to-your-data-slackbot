@@ -5,7 +5,7 @@ import pytest
 import data_assistant.data_preparation as data_preparation
 import data_assistant.data_requester as data_requester
 import data_assistant.llm_question_interpreter as llm_question_interpreter
-import data_assistant.testing_support as testing_support
+import data_assistant.local_orders_fixture as local_orders_fixture
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
 
@@ -38,7 +38,7 @@ def capture_non_answer_response(
 
 def test_data_assistant_runs_end_to_end(
     canonical_question: str,
-    connect_orders: testing_support.OrdersConnector,
+    connect_orders: local_orders_fixture.OrdersConnector,
     canonical_question_provider: llm_question_interpreter.QuestionInterpreterProvider,
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
@@ -84,7 +84,7 @@ def test_data_assistant_runs_end_to_end(
 
 def test_data_assistant_short_circuits_question_ambiguity(
     monkeypatch: pytest.MonkeyPatch,
-    connect_orders: testing_support.OrdersConnector,
+    connect_orders: local_orders_fixture.OrdersConnector,
     missing_time_range_provider: llm_question_interpreter.QuestionInterpreterProvider,
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
@@ -110,7 +110,7 @@ def test_data_assistant_short_circuits_question_ambiguity(
 def test_data_assistant_denies_dataset_access_before_request_or_preparation(
     monkeypatch: pytest.MonkeyPatch,
     canonical_question: str,
-    connect_orders: testing_support.OrdersConnector,
+    connect_orders: local_orders_fixture.OrdersConnector,
     canonical_question_provider: llm_question_interpreter.QuestionInterpreterProvider,
 ) -> None:
     sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
@@ -152,7 +152,7 @@ def test_data_assistant_denies_dataset_access_before_request_or_preparation(
 
 def test_data_assistant_short_circuits_unsupported_question_before_preparing_data(
     monkeypatch: pytest.MonkeyPatch,
-    connect_orders: testing_support.OrdersConnector,
+    connect_orders: local_orders_fixture.OrdersConnector,
     canonical_question_provider: llm_question_interpreter.QuestionInterpreterProvider,
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
@@ -187,7 +187,7 @@ def test_data_assistant_short_circuits_unsupported_question_before_preparing_dat
 
 def test_data_assistant_uses_required_question_interpreter_provider(
     canonical_question: str,
-    connect_orders: testing_support.OrdersConnector,
+    connect_orders: local_orders_fixture.OrdersConnector,
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
     class FakeProvider:

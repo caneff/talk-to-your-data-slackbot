@@ -11,12 +11,12 @@ import duckdb
 
 import data_assistant.access_controller as access_controller
 import data_assistant.llm_question_interpreter as llm_question_interpreter
+import data_assistant.local_orders_fixture as local_orders_fixture
 import data_assistant.slack_boundary as slack_boundary
-import data_assistant.testing_support as testing_support
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
 
-DEMO_ORDER_ROWS: tuple[testing_support.OrderRow, ...] = (
+DEMO_ORDER_ROWS: tuple[local_orders_fixture.OrderRow, ...] = (
     ("2026-01-03", "North", "1200.00"),
     ("2026-01-10", "North", "300.00"),
     ("2026-01-12", "South", "800.00"),
@@ -77,7 +77,7 @@ class _DemoQuestionInterpreterProvider:
 
 
 def run_demo() -> tuple[DemoScenarioResult, ...]:
-    with testing_support.connect_orders(DEMO_ORDER_ROWS) as connection:
+    with local_orders_fixture.connect_orders(DEMO_ORDER_ROWS) as connection:
         return (
             _run_one_demo_scenario(
                 name="happy_path",

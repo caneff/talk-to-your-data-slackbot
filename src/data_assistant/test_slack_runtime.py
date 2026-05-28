@@ -14,9 +14,9 @@ import duckdb
 import pytest
 
 import data_assistant.llm_question_interpreter as llm_question_interpreter
+import data_assistant.local_orders_fixture as local_orders_fixture
 import data_assistant.slack_boundary as slack_boundary
 import data_assistant.slack_runtime as slack_runtime
-import data_assistant.testing_support as testing_support
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
 
@@ -329,7 +329,7 @@ def sentinel_answer_path(
 
 def test_handle_socket_mode_event_routes_human_dm_through_existing_boundary(
     canonical_question: str,
-    connect_orders: testing_support.OrdersConnector,
+    connect_orders: local_orders_fixture.OrdersConnector,
 ) -> None:
     ack_calls: list[str] = []
     calls: list[str] = []

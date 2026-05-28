@@ -8,10 +8,10 @@ import pytest
 import data_assistant.access_controller as access_controller
 import data_assistant.data_requester as data_requester
 import data_assistant.llm_question_interpreter as llm_question_interpreter
+import data_assistant.local_orders_fixture as local_orders_fixture
 import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_router as semantic_router
-import data_assistant.testing_support as testing_support
 import data_assistant.workflow.contracts as contracts
 
 CANONICAL_DATA_QUESTION = "What was total revenue by region in January 2026?"
@@ -78,9 +78,9 @@ def active_semantic_layer() -> schema.SemanticLayer:
 
 
 @pytest.fixture
-def connect_orders() -> testing_support.OrdersConnector:
+def connect_orders() -> local_orders_fixture.OrdersConnector:
     """Expose the in-memory DuckDB orders connector as a fixture."""
-    return testing_support.connect_orders
+    return local_orders_fixture.connect_orders
 
 
 @pytest.fixture

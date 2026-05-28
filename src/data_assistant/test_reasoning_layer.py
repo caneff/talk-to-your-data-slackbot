@@ -1,14 +1,14 @@
 import pandas.testing as pd_testing
 
 import data_assistant.llm_question_interpreter as llm_question_interpreter
-import data_assistant.testing_support as testing_support
+import data_assistant.local_orders_fixture as local_orders_fixture
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
 
 
 def test_reasoning_layer_produces_answer_draft_from_prepared_data(
     canonical_question: str,
-    connect_orders: testing_support.OrdersConnector,
+    connect_orders: local_orders_fixture.OrdersConnector,
     canonical_question_provider: llm_question_interpreter.QuestionInterpreterProvider,
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
