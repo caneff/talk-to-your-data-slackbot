@@ -148,9 +148,17 @@ def test_openai_provider_returns_question_frame_proposal_from_parsed_response() 
 
 
 def test_openai_provider_maps_refusal_to_provider_failure() -> None:
+    class FakeRefusalContent:
+        type = "refusal"
+        refusal = "cannot comply"
+
+    class FakeMessageOutput:
+        type = "message"
+        content = [FakeRefusalContent()]
+
     class FakeRefusalResponse:
         output_parsed = None
-        refusal = "cannot comply"
+        output = [FakeMessageOutput()]
 
     class FakeResponsesClient:
         def parse(self, **kwargs: object) -> FakeRefusalResponse:

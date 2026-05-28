@@ -118,14 +118,36 @@ class OpenAIQuestionInterpreterProvider:
         except Exception as error:
             return ProviderFailure(reason=str(error) or "OpenAI provider failed")
 
-        refusal = getattr(response, "refusal", None)
-        if isinstance(refusal, str) and refusal:
+        refusal = _extract_response_refusal(response)
+        if refusal:
             return ProviderFailure(reason=refusal)
 
         parsed_output = getattr(response, "output_parsed", None)
         if not isinstance(parsed_output, QuestionFrameProposal):
             return ProviderFailure(reason="OpenAI provider returned no parsed output")
         return parsed_output
+
+
+def _extract_response_refusal(response: object) -> str | None:
+    for output_item in _object_items(getattr(response, "output", ())):
+        if getattr(output_item, "type", None) != "message":
+            continue
+        for content_item in _object_items(getattr(output_item, "content", ())):
+            if getattr(content_item, "type", None) != "refusal":
+                continue
+            refusal = getattr(content_item, "refusal", None)
+            if isinstance(refusal, str) and refusal:
+                return refusal
+    return None
+
+
+def _object_items(value: object) -> tuple[object, ...]:
+    if isinstance(value, (str, bytes)) or not isinstance(
+        value,
+        collections.abc.Iterable,
+    ):
+        return ()
+    return tuple(typing.cast(collections.abc.Iterable[object], value))
 
 
 def _build_openai_input(
