@@ -11,6 +11,7 @@ import json
 import typing
 
 import pydantic
+from openai import OpenAI
 
 import data_assistant.prompts as prompts
 import data_assistant.question_interpreter_guards as interpreter_guards
@@ -129,25 +130,24 @@ class OpenAIQuestionInterpreterProvider:
 
 
 def _extract_response_refusal(response: object) -> str | None:
-    for output_item in _object_items(getattr(response, "output", ())):
+    output_items = typing.cast(
+        collections.abc.Iterable[object],
+        getattr(response, "output", ()),
+    )
+    for output_item in output_items:
         if getattr(output_item, "type", None) != "message":
             continue
-        for content_item in _object_items(getattr(output_item, "content", ())):
+        content_items = typing.cast(
+            collections.abc.Iterable[object],
+            getattr(output_item, "content", ()),
+        )
+        for content_item in content_items:
             if getattr(content_item, "type", None) != "refusal":
                 continue
             refusal = getattr(content_item, "refusal", None)
             if isinstance(refusal, str) and refusal:
                 return refusal
     return None
-
-
-def _object_items(value: object) -> tuple[object, ...]:
-    if isinstance(value, (str, bytes)) or not isinstance(
-        value,
-        collections.abc.Iterable,
-    ):
-        return ()
-    return tuple(typing.cast(collections.abc.Iterable[object], value))
 
 
 def _build_openai_input(
@@ -204,14 +204,16 @@ def build_openai_question_interpreter_provider(
     *,
     client: _OpenAIClient | None = None,
 ) -> OpenAIQuestionInterpreterProvider:
-    """Build the OpenAI provider with env-backed config and a lazy SDK client."""
+    """Build the OpenAI provider with env-backed config and SDK client."""
     config = load_openai_question_interpreter_config(environ)
-    active_client = client
-    if active_client is None:
-        from openai import OpenAI
+    return OpenAIQuestionInterpreterProvider(
+        config=config,
+        client=client or _build_openai_client(config.api_key),
+    )
 
-        active_client = typing.cast(_OpenAIClient, OpenAI(api_key=config.api_key))
-    return OpenAIQuestionInterpreterProvider(config=config, client=active_client)
+
+def _build_openai_client(api_key: str) -> _OpenAIClient:
+    return typing.cast(_OpenAIClient, OpenAI(api_key=api_key))
 
 
 class QuestionInterpreterProvider(typing.Protocol):
