@@ -8,6 +8,8 @@ import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.semantic_layer.testing_support as semantic_layer_testing
 import data_assistant.workflow.contracts as contracts
 
+_DEFAULT_TIME_RANGE = object()
+
 
 def test_load_openai_provider_config_requires_api_key_only_when_selected() -> None:
     with pytest.raises(
@@ -47,11 +49,11 @@ def test_openai_provider_returns_question_frame_proposal_from_parsed_response() 
     parse_calls: list[dict[str, object]] = []
 
     class FakeParsedResponse:
-        output_parsed = llm_question_interpreter.OpenAIQuestionFrameProposal(
+        output_parsed = llm_question_interpreter.QuestionFrameProposal(
             intent="summarize",
             metric="total revenue",
             dimension="region",
-            time_range=llm_question_interpreter.OpenAITimeRangeProposal(
+            time_range=llm_question_interpreter.TimeRangeProposal(
                 label="January 2026",
                 start_date=datetime.date(2026, 1, 1),
                 end_date=datetime.date(2026, 1, 31),
@@ -88,21 +90,11 @@ def test_openai_provider_returns_question_frame_proposal_from_parsed_response() 
         },
     )
 
-    assert result == {
-        "intent": "summarize",
-        "metric": "total revenue",
-        "dimension": "region",
-        "time_range": {
-            "label": "January 2026",
-            "start_date": "2026-01-01",
-            "end_date": "2026-01-31",
-        },
-        "filters": (),
-    }
+    assert result == FakeParsedResponse.output_parsed
     assert len(parse_calls) == 1
     assert parse_calls[0]["model"] == "gpt-test-mini"
     assert parse_calls[0]["text_format"] is (
-        llm_question_interpreter.OpenAIQuestionFrameProposal
+        llm_question_interpreter.QuestionFrameProposal
     )
 
 
@@ -138,6 +130,39 @@ def test_openai_provider_maps_refusal_to_provider_failure() -> None:
     assert result == llm_question_interpreter.ProviderFailure(reason="cannot comply")
 
 
+def test_openai_provider_maps_missing_parsed_output_to_provider_failure() -> None:
+    class FakeMissingParsedResponse:
+        output_parsed = None
+
+    class FakeResponsesClient:
+        def parse(self, **kwargs: object) -> FakeMissingParsedResponse:
+            del kwargs
+            return FakeMissingParsedResponse()
+
+    class FakeOpenAIClient:
+        responses = FakeResponsesClient()
+
+    provider = llm_question_interpreter.OpenAIQuestionInterpreterProvider(
+        config=llm_question_interpreter.OpenAIQuestionInterpreterConfig(
+            api_key="test-key",
+            model="gpt-test-mini",
+        ),
+        client=typing.cast(
+            llm_question_interpreter._OpenAIClient,  # pyright: ignore[reportPrivateUsage]
+            FakeOpenAIClient(),
+        ),
+    )
+
+    result = provider.propose_question_frame(
+        question="What was total revenue by region in January 2026?",
+        prompt_context={"datasets": []},
+    )
+
+    assert result == llm_question_interpreter.ProviderFailure(
+        reason="OpenAI provider returned no parsed output"
+    )
+
+
 def test_provider_backed_interpreter_promotes_valid_question_frame_proposal() -> None:
     semantic_layer = semantic_layer_testing.semantic_layer_with_table()
 
@@ -147,16 +172,10 @@ def test_provider_backed_interpreter_promotes_valid_question_frame_proposal() ->
             *,
             question: str,
             prompt_context: object,
-        ) -> object:
+        ) -> llm_question_interpreter.QuestionFrameProposal:
             assert question == "What was total revenue by region in January 2026?"
             assert prompt_context is not None
-            return {
-                "intent": "summarize",
-                "metric": "total revenue",
-                "dimension": "region",
-                "time_range": _january_2026_time_range_payload(),
-                "filters": (),
-            }
+            return _question_frame_proposal()
 
     result = llm_question_interpreter.interpret_question(
         question="What was total revenue by region in January 2026?",
@@ -190,15 +209,9 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_missing_time_r
             *,
             question: str,
             prompt_context: object,
-        ) -> object:
+        ) -> llm_question_interpreter.QuestionFrameProposal:
             del question, prompt_context
-            return {
-                "intent": "summarize",
-                "metric": "total revenue",
-                "dimension": "region",
-                "time_range": None,
-                "filters": (),
-            }
+            return _question_frame_proposal(time_range=None)
 
     result = llm_question_interpreter.interpret_question(
         question="What was total revenue by region?",
@@ -225,7 +238,7 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_unsupported_da
             *,
             question: str,
             prompt_context: object,
-        ) -> object:
+        ) -> llm_question_interpreter.ProviderFailure:
             del question, prompt_context
             raise AssertionError("provider should not be called")
 
@@ -252,14 +265,8 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_unsupported_da
 
 def test_provider_backed_interpreter_returns_typed_non_answer_for_unsupported_intent(
 ) -> None:
-    result = _interpret_with_provider_payload(
-        {
-            "intent": "forecast",
-            "metric": "total revenue",
-            "dimension": "region",
-            "time_range": _january_2026_time_range_payload(),
-            "filters": (),
-        }
+    result = _interpret_with_provider_proposal(
+        _question_frame_proposal(intent="forecast")
     )
 
     assert result == contracts.NonAnswer(
@@ -276,14 +283,8 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_unsupported_in
 
 def test_provider_backed_interpreter_returns_typed_non_answer_for_unknown_metric(
 ) -> None:
-    result = _interpret_with_provider_payload(
-        {
-            "intent": "summarize",
-            "metric": "gross bookings",
-            "dimension": "region",
-            "time_range": _january_2026_time_range_payload(),
-            "filters": (),
-        }
+    result = _interpret_with_provider_proposal(
+        _question_frame_proposal(metric="gross bookings")
     )
 
     assert result == contracts.NonAnswer(
@@ -300,14 +301,8 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_unknown_metric
 
 def test_provider_backed_interpreter_returns_typed_non_answer_for_missing_dimension(
 ) -> None:
-    result = _interpret_with_provider_payload(
-        {
-            "intent": "summarize",
-            "metric": "total revenue",
-            "dimension": "",
-            "time_range": _january_2026_time_range_payload(),
-            "filters": (),
-        }
+    result = _interpret_with_provider_proposal(
+        _question_frame_proposal(dimension="")
     )
 
     assert result == contracts.NonAnswer(
@@ -321,14 +316,8 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_missing_dimens
 
 def test_provider_backed_interpreter_returns_typed_non_answer_for_unsupported_filters(
 ) -> None:
-    result = _interpret_with_provider_payload(
-        {
-            "intent": "summarize",
-            "metric": "total revenue",
-            "dimension": "region",
-            "time_range": _january_2026_time_range_payload(),
-            "filters": ("region = 'North'",),
-        }
+    result = _interpret_with_provider_proposal(
+        _question_frame_proposal(filters=("region = 'North'",))
     )
 
     assert result == contracts.NonAnswer(
@@ -353,7 +342,7 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_provider_failu
             *,
             question: str,
             prompt_context: object,
-        ) -> object:
+        ) -> llm_question_interpreter.ProviderFailure:
             del question, prompt_context
             return llm_question_interpreter.ProviderFailure(
                 reason="provider unavailable",
@@ -377,28 +366,7 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_provider_failu
 
 
 def test_provider_backed_interpreter_rejects_invalid_provider_output() -> None:
-    result = _interpret_with_provider_payload({"hello": "world"})
-
-    assert result == contracts.NonAnswer(
-        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-        reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
-        reason="The Question Interpreter provider returned invalid output.",
-        unresolved_ambiguities=("provider output",),
-        next_step="Fix the provider contract before retrying.",
-    )
-
-
-def test_provider_backed_interpreter_rejects_non_string_provider_keys() -> None:
-    result = _interpret_with_provider_payload(
-        {
-            "intent": "summarize",
-            "metric": "total revenue",
-            "dimension": "region",
-            "time_range": _january_2026_time_range_payload(),
-            "filters": (),
-            1: "not valid",
-        }
-    )
+    result = _interpret_with_bad_provider_result({"hello": "world"})
 
     assert result == contracts.NonAnswer(
         stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
@@ -410,18 +378,14 @@ def test_provider_backed_interpreter_rejects_non_string_provider_keys() -> None:
 
 
 def test_provider_backed_interpreter_rejects_invalid_time_range_ordering() -> None:
-    result = _interpret_with_provider_payload(
-        {
-            "intent": "summarize",
-            "metric": "total revenue",
-            "dimension": "region",
-            "time_range": {
-                "label": "January 2026",
-                "start_date": "2026-01-31",
-                "end_date": "2026-01-01",
-            },
-            "filters": (),
-        }
+    result = _interpret_with_provider_proposal(
+        _question_frame_proposal(
+            time_range=llm_question_interpreter.TimeRangeProposal(
+                label="January 2026",
+                start_date=datetime.date(2026, 1, 31),
+                end_date=datetime.date(2026, 1, 1),
+            )
+        )
     )
 
     assert result == contracts.NonAnswer(
@@ -431,34 +395,6 @@ def test_provider_backed_interpreter_rejects_invalid_time_range_ordering() -> No
         unresolved_ambiguities=("time range",),
         next_step="Fix the provider contract before retrying.",
     )
-
-
-def test_provider_backed_interpreter_rejects_authority_drift_fields() -> None:
-    result = _interpret_with_provider_payload(
-        {
-            "intent": "summarize",
-            "metric": "total revenue",
-            "dimension": "region",
-            "time_range": _january_2026_time_range_payload(),
-            "filters": (),
-            "dataset_id": "commerce",
-        }
-    )
-
-    assert result == contracts.NonAnswer(
-        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-        reason_code=contracts.NonAnswerReasonCode.UNSAFE_AUTHORITY_DRIFT,
-        reason=(
-            "The Question Interpreter provider proposed retrieval authority "
-            "it does not own."
-        ),
-        unresolved_ambiguities=("authority drift",),
-        next_step=(
-            "Remove dataset, table, SQL, and raw schema authority from the "
-            "provider output."
-        ),
-    )
-
 
 def test_build_prompt_context_uses_only_business_facing_semantic_layer_fields() -> None:
     semantic_layer = semantic_layer_loader.load_semantic_layer()
@@ -504,13 +440,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
     eval_cases = (
         GoldenEvalCase(
             name="happy_path",
-            provider_payload={
-                "intent": "summarize",
-                "metric": "total revenue",
-                "dimension": "region",
-                "time_range": _january_2026_time_range_payload(),
-                "filters": (),
-            },
+            provider_proposal=_question_frame_proposal(),
             expected=contracts.Success(
                 contracts.QuestionFrame(
                     intent="summarize",
@@ -528,13 +458,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
         ),
         GoldenEvalCase(
             name="missing_time_range",
-            provider_payload={
-                "intent": "summarize",
-                "metric": "total revenue",
-                "dimension": "region",
-                "time_range": None,
-                "filters": (),
-            },
+            provider_proposal=_question_frame_proposal(time_range=None),
             expected=contracts.NonAnswer(
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
                 reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
@@ -549,7 +473,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
                 "Can you use my CSV file to show total revenue by region in "
                 "January 2026?"
             ),
-            provider_payload=None,
+            provider_proposal=None,
             expected=contracts.NonAnswer(
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
                 reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_DATA,
@@ -563,13 +487,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
         ),
         GoldenEvalCase(
             name="unsupported_intent",
-            provider_payload={
-                "intent": "forecast",
-                "metric": "total revenue",
-                "dimension": "region",
-                "time_range": _january_2026_time_range_payload(),
-                "filters": (),
-            },
+            provider_proposal=_question_frame_proposal(intent="forecast"),
             expected=contracts.NonAnswer(
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
                 reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT,
@@ -583,13 +501,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
         ),
         GoldenEvalCase(
             name="hallucinated_metric",
-            provider_payload={
-                "intent": "summarize",
-                "metric": "gross bookings",
-                "dimension": "region",
-                "time_range": _january_2026_time_range_payload(),
-                "filters": (),
-            },
+            provider_proposal=_question_frame_proposal(metric="gross bookings"),
             expected=contracts.NonAnswer(
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
                 reason_code=contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL,
@@ -603,13 +515,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
         ),
         GoldenEvalCase(
             name="missing_dimension",
-            provider_payload={
-                "intent": "summarize",
-                "metric": "total revenue",
-                "dimension": "",
-                "time_range": _january_2026_time_range_payload(),
-                "filters": (),
-            },
+            provider_proposal=_question_frame_proposal(dimension=""),
             expected=contracts.NonAnswer(
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
                 reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
@@ -620,13 +526,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
         ),
         GoldenEvalCase(
             name="unsupported_filters",
-            provider_payload={
-                "intent": "summarize",
-                "metric": "total revenue",
-                "dimension": "region",
-                "time_range": _january_2026_time_range_payload(),
-                "filters": ("region = 'North'",),
-            },
+            provider_proposal=_question_frame_proposal(filters=("region = 'North'",)),
             expected=contracts.NonAnswer(
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
                 reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_FILTER,
@@ -640,17 +540,13 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
         ),
         GoldenEvalCase(
             name="invalid_time_range_ordering",
-            provider_payload={
-                "intent": "summarize",
-                "metric": "total revenue",
-                "dimension": "region",
-                "time_range": {
-                    "label": "January 2026",
-                    "start_date": "2026-01-31",
-                    "end_date": "2026-01-01",
-                },
-                "filters": (),
-            },
+            provider_proposal=_question_frame_proposal(
+                time_range=llm_question_interpreter.TimeRangeProposal(
+                    label="January 2026",
+                    start_date=datetime.date(2026, 1, 31),
+                    end_date=datetime.date(2026, 1, 1),
+                )
+            ),
             expected=contracts.NonAnswer(
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
                 reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
@@ -662,7 +558,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
     )
 
     for case in eval_cases:
-        provider = _payload_provider(case.provider_payload)
+        provider = _proposal_provider(case.provider_proposal)
         result = llm_question_interpreter.interpret_question(
             question=case.question,
             semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
@@ -673,7 +569,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
 
 class GoldenEvalCase(typing.NamedTuple):
     name: str
-    provider_payload: object
+    provider_proposal: llm_question_interpreter.QuestionFrameProposal | None
     expected: contracts.StageResult[contracts.QuestionFrame]
     question: str = "What was total revenue by region in January 2026?"
 
@@ -685,18 +581,28 @@ def assert_matches_expected_result(
     assert actual == expected
 
 
-def _interpret_with_provider_payload(
-    provider_payload: object,
+def _interpret_with_provider_proposal(
+    provider_proposal: llm_question_interpreter.QuestionFrameProposal,
 ) -> contracts.StageResult[contracts.QuestionFrame]:
     return llm_question_interpreter.interpret_question(
         question="What was total revenue by region in January 2026?",
         semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
-        provider=_payload_provider(provider_payload),
+        provider=_proposal_provider(provider_proposal),
     )
 
 
-def _payload_provider(
-    provider_payload: object,
+def _interpret_with_bad_provider_result(
+    provider_result: object,
+) -> contracts.StageResult[contracts.QuestionFrame]:
+    return llm_question_interpreter.interpret_question(
+        question="What was total revenue by region in January 2026?",
+        semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
+        provider=_bad_provider(provider_result),
+    )
+
+
+def _proposal_provider(
+    provider_proposal: llm_question_interpreter.QuestionFrameProposal | None,
 ) -> llm_question_interpreter.QuestionInterpreterProvider:
     class FakeProvider:
         def propose_question_frame(
@@ -704,16 +610,62 @@ def _payload_provider(
             *,
             question: str,
             prompt_context: dict[str, object],
-        ) -> object:
+        ) -> llm_question_interpreter.QuestionFrameProposal:
             del question, prompt_context
-            return provider_payload
+            if provider_proposal is None:
+                raise AssertionError("provider should not be called")
+            return provider_proposal
 
     return FakeProvider()
 
 
-def _january_2026_time_range_payload() -> dict[str, str]:
-    return {
-        "label": "January 2026",
-        "start_date": "2026-01-01",
-        "end_date": "2026-01-31",
-    }
+def _bad_provider(
+    provider_result: object,
+) -> llm_question_interpreter.QuestionInterpreterProvider:
+    class BadProvider:
+        def propose_question_frame(
+            self,
+            *,
+            question: str,
+            prompt_context: dict[str, object],
+        ) -> llm_question_interpreter.QuestionFrameProposal:
+            del question, prompt_context
+            return typing.cast(
+                llm_question_interpreter.QuestionFrameProposal,
+                provider_result,
+            )
+
+    return BadProvider()
+
+
+def _question_frame_proposal(
+    *,
+    intent: str | None = "summarize",
+    metric: str | None = "total revenue",
+    dimension: str | None = "region",
+    time_range: llm_question_interpreter.TimeRangeProposal | None | object = (
+        _DEFAULT_TIME_RANGE
+    ),
+    filters: tuple[str, ...] = (),
+) -> llm_question_interpreter.QuestionFrameProposal:
+    if time_range is _DEFAULT_TIME_RANGE:
+        active_time_range: llm_question_interpreter.TimeRangeProposal | None = (
+            llm_question_interpreter.TimeRangeProposal(
+                label="January 2026",
+                start_date=datetime.date(2026, 1, 1),
+                end_date=datetime.date(2026, 1, 31),
+            )
+        )
+    else:
+        active_time_range = typing.cast(
+            llm_question_interpreter.TimeRangeProposal | None,
+            time_range,
+        )
+
+    return llm_question_interpreter.QuestionFrameProposal(
+        intent=intent,
+        metric=metric,
+        dimension=dimension,
+        time_range=active_time_range,
+        filters=filters,
+    )

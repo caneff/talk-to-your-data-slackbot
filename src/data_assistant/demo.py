@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import dataclasses
+import datetime
 import sys
 import typing
 
 import duckdb
 
 import data_assistant.access_controller as access_controller
+import data_assistant.llm_question_interpreter as llm_question_interpreter
 import data_assistant.slack_boundary as slack_boundary
 import data_assistant.testing_support as testing_support
 import data_assistant.workflow.contracts as contracts
@@ -51,27 +53,27 @@ class _DemoQuestionInterpreterProvider:
         *,
         question: str,
         prompt_context: dict[str, object],
-    ) -> object:
+    ) -> llm_question_interpreter.QuestionFrameProposal:
         del prompt_context
         if question == "What was total revenue by region?":
-            return {
-                "intent": "summarize",
-                "metric": "total revenue",
-                "dimension": "region",
-                "time_range": None,
-                "filters": (),
-            }
-        return {
-            "intent": "summarize",
-            "metric": "total revenue",
-            "dimension": "region",
-            "time_range": {
-                "label": "January 2026",
-                "start_date": "2026-01-01",
-                "end_date": "2026-01-31",
-            },
-            "filters": (),
-        }
+            return llm_question_interpreter.QuestionFrameProposal(
+                intent="summarize",
+                metric="total revenue",
+                dimension="region",
+                time_range=None,
+                filters=(),
+            )
+        return llm_question_interpreter.QuestionFrameProposal(
+            intent="summarize",
+            metric="total revenue",
+            dimension="region",
+            time_range=llm_question_interpreter.TimeRangeProposal(
+                label="January 2026",
+                start_date=datetime.date(2026, 1, 1),
+                end_date=datetime.date(2026, 1, 31),
+            ),
+            filters=(),
+        )
 
 
 def run_demo() -> tuple[DemoScenarioResult, ...]:

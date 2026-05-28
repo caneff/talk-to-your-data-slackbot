@@ -1,3 +1,6 @@
+"""Shared pytest fixtures for Data Assistant workflow tests."""
+
+import datetime
 import typing
 
 import pytest
@@ -16,79 +19,94 @@ T = typing.TypeVar("T")
 
 
 def unwrap_stage_result(result: contracts.StageResult[T]) -> T:
+    """Return a successful stage value or fail the test with the NonAnswer."""
     if isinstance(result, contracts.NonAnswer):
         raise AssertionError(result)
     return result.value
 
 
 class StaticQuestionInterpreterProvider:
-    def __init__(self, provider_payload: object) -> None:
-        self._provider_payload = provider_payload
+    """Deterministic test double for the LLM question interpreter provider."""
+
+    def __init__(
+        self,
+        proposal: llm_question_interpreter.QuestionFrameProposal,
+    ) -> None:
+        self._proposal = proposal
 
     def propose_question_frame(
         self,
         *,
         question: str,
         prompt_context: dict[str, object],
-    ) -> object:
+    ) -> llm_question_interpreter.QuestionFrameProposal:
+        """Return the configured proposal without calling an LLM."""
         del question, prompt_context
-        return self._provider_payload
+        return self._proposal
 
 
-def canonical_question_provider_payload() -> dict[str, object]:
-    return {
-        "intent": "summarize",
-        "metric": "total revenue",
-        "dimension": "region",
-        "time_range": {
-            "label": "January 2026",
-            "start_date": "2026-01-01",
-            "end_date": "2026-01-31",
-        },
-        "filters": (),
-    }
+def canonical_question_proposal() -> llm_question_interpreter.QuestionFrameProposal:
+    """Return provider proposal for the canonical revenue-by-region question."""
+    return llm_question_interpreter.QuestionFrameProposal(
+        intent="summarize",
+        metric="total revenue",
+        dimension="region",
+        time_range=llm_question_interpreter.TimeRangeProposal(
+            label="January 2026",
+            start_date=datetime.date(2026, 1, 1),
+            end_date=datetime.date(2026, 1, 31),
+        ),
+        filters=(),
+    )
 
 
-def missing_time_range_provider_payload() -> dict[str, object]:
-    return {
-        "intent": "summarize",
-        "metric": "total revenue",
-        "dimension": "region",
-        "time_range": None,
-        "filters": (),
-    }
+def missing_time_range_proposal() -> llm_question_interpreter.QuestionFrameProposal:
+    """Return provider proposal that omits the required time range."""
+    return llm_question_interpreter.QuestionFrameProposal(
+        intent="summarize",
+        metric="total revenue",
+        dimension="region",
+        time_range=None,
+        filters=(),
+    )
 
 
 @pytest.fixture
 def active_semantic_layer() -> schema.SemanticLayer:
+    """Load the configured Semantic Layer used by workflow tests."""
     return semantic_layer_loader.load_semantic_layer()
 
 
 @pytest.fixture
 def connect_orders() -> testing_support.OrdersConnector:
+    """Expose the in-memory DuckDB orders connector as a fixture."""
     return testing_support.connect_orders
 
 
 @pytest.fixture
 def canonical_question() -> str:
+    """Return the shared question covered by the demo dataset."""
     return CANONICAL_DATA_QUESTION
 
 
 @pytest.fixture
 def allowed_internal_identity() -> contracts.InternalIdentity:
+    """Return an identity allowed to access the demo commerce dataset."""
     return access_controller.DEFAULT_LOCAL_ALLOWED_IDENTITY
 
 
 @pytest.fixture
 def canonical_question_provider(
 ) -> llm_question_interpreter.QuestionInterpreterProvider:
-    return StaticQuestionInterpreterProvider(canonical_question_provider_payload())
+    """Return a fake provider that can answer the canonical question."""
+    return StaticQuestionInterpreterProvider(canonical_question_proposal())
 
 
 @pytest.fixture
 def missing_time_range_provider(
 ) -> llm_question_interpreter.QuestionInterpreterProvider:
-    return StaticQuestionInterpreterProvider(missing_time_range_provider_payload())
+    """Return a fake provider that triggers missing-time-range NonAnswer."""
+    return StaticQuestionInterpreterProvider(missing_time_range_proposal())
 
 
 @pytest.fixture
@@ -97,6 +115,7 @@ def question_frame(
     active_semantic_layer: schema.SemanticLayer,
     canonical_question_provider: llm_question_interpreter.QuestionInterpreterProvider,
 ) -> contracts.QuestionFrame:
+    """Build a valid Question Frame through the interpreter boundary."""
     return unwrap_stage_result(
         llm_question_interpreter.interpret_question(
             question=canonical_question,
@@ -111,6 +130,7 @@ def dataset_selection(
     question_frame: contracts.QuestionFrame,
     active_semantic_layer: schema.SemanticLayer,
 ) -> contracts.DatasetSelection:
+    """Build the canonical Dataset Selection through the semantic router."""
     return unwrap_stage_result(
         semantic_router.select_dataset(question_frame, active_semantic_layer)
     )
@@ -122,6 +142,7 @@ def data_request(
     dataset_selection: contracts.DatasetSelection,
     active_semantic_layer: schema.SemanticLayer,
 ) -> contracts.DataRequest:
+    """Build the canonical Data Request through the requester boundary."""
     return unwrap_stage_result(
         data_requester.create_data_request(
             question_frame,

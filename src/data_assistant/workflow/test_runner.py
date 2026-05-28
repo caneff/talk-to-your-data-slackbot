@@ -196,20 +196,20 @@ def test_data_assistant_uses_required_question_interpreter_provider(
             *,
             question: str,
             prompt_context: dict[str, object],
-        ) -> object:
+        ) -> llm_question_interpreter.QuestionFrameProposal:
             assert question == canonical_question
             assert "metric_labels" in prompt_context
-            return {
-                "intent": "summarize",
-                "metric": "total revenue",
-                "dimension": "region",
-                "time_range": {
-                    "label": "January 2026",
-                    "start_date": "2026-01-01",
-                    "end_date": "2026-01-31",
-                },
-                "filters": (),
-            }
+            return llm_question_interpreter.QuestionFrameProposal(
+                intent="summarize",
+                metric="total revenue",
+                dimension="region",
+                time_range=llm_question_interpreter.TimeRangeProposal(
+                    label="January 2026",
+                    start_date=datetime.date(2026, 1, 1),
+                    end_date=datetime.date(2026, 1, 31),
+                ),
+                filters=(),
+            )
 
     with connect_orders((("2026-01-03", "North", "1200.00"),)) as connection:
         run = workflow_runner.run_data_assistant(
