@@ -71,9 +71,9 @@ def test_build_openai_answer_path_uses_openai_provider_without_fallback(
     def fake_build_openai_provider(
         environ: collections.abc.Mapping[str, str],
         *,
-        client_factory: object | None = None,
+        client: object | None = None,
     ) -> FakeProvider:
-        del client_factory
+        del client
         assert environ["OPENAI_API_KEY"] == "test-key"
         return FakeProvider()
 

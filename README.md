@@ -81,7 +81,7 @@ For the live OpenAI Question Interpreter, also set:
 
 - `OPENAI_API_KEY`
 - optional `OPENAI_MODEL`
-  default is `gpt-5.5`
+  default is `gpt-4o-mini`
 
 The runtime loads `.env` automatically with `python-dotenv`. Explicitly exported
 environment variables still take precedence over values in `.env`. The `.env`

@@ -36,7 +36,7 @@ def test_load_openai_provider_config_uses_default_model_and_allows_override() ->
 
     assert default_config == llm_question_interpreter.OpenAIQuestionInterpreterConfig(
         api_key="test-key",
-        model="gpt-5.5",
+        model="gpt-4o-mini",
     )
     assert override_config == (
         llm_question_interpreter.OpenAIQuestionInterpreterConfig(
@@ -44,6 +44,35 @@ def test_load_openai_provider_config_uses_default_model_and_allows_override() ->
             model="gpt-test-mini",
         )
     )
+
+
+def test_build_openai_provider_accepts_injected_client() -> None:
+    class FakeResponsesClient:
+        def parse(self, **kwargs: object) -> object:
+            assert kwargs["model"] == "gpt-test-mini"
+            return FakeParsedResponse()
+
+    class FakeParsedResponse:
+        output_parsed = _question_frame_proposal()
+
+    class FakeOpenAIClient:
+        responses = FakeResponsesClient()
+
+    client = typing.cast(
+        llm_question_interpreter._OpenAIClient,  # pyright: ignore[reportPrivateUsage]
+        FakeOpenAIClient(),
+    )
+
+    provider = llm_question_interpreter.build_openai_question_interpreter_provider(
+        {"OPENAI_API_KEY": "test-key", "OPENAI_MODEL": "gpt-test-mini"},
+        client=client,
+    )
+
+    result = provider.propose_question_frame(
+        question="What was total revenue by region in January 2026?",
+        semantic_layer_context={"datasets": []},
+    )
+    assert result == FakeParsedResponse.output_parsed
 
 
 def test_openai_provider_returns_question_frame_proposal_from_parsed_response() -> None:

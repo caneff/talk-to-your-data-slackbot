@@ -19,7 +19,7 @@ import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
 
 _SUPPORTED_PROVIDER_INTENTS = frozenset({"summarize"})
-_DEFAULT_OPENAI_MODEL = "gpt-5.5"
+_DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 OpenAIInputMessage: typing.TypeAlias = dict[str, str]
 _QUESTION_INTERPRETER_DEVELOPER_PROMPT = "question_interpreter_developer.md"
 
@@ -86,9 +86,6 @@ class _OpenAIResponsesClient(typing.Protocol):
 
 class _OpenAIClient(typing.Protocol):
     responses: _OpenAIResponsesClient
-
-
-OpenAIClientFactory: typing.TypeAlias = collections.abc.Callable[..., _OpenAIClient]
 
 
 class OpenAIQuestionInterpreterProvider:
@@ -183,21 +180,16 @@ def _user_message(
 def build_openai_question_interpreter_provider(
     environ: collections.abc.Mapping[str, str],
     *,
-    client_factory: OpenAIClientFactory | None = None,
+    client: _OpenAIClient | None = None,
 ) -> OpenAIQuestionInterpreterProvider:
     """Build the OpenAI provider with env-backed config and a lazy SDK client."""
     config = load_openai_question_interpreter_config(environ)
-    active_client_factory = client_factory
-    if active_client_factory is None:
-        active_client_factory = _default_openai_client_factory
-    client = active_client_factory(api_key=config.api_key)
-    return OpenAIQuestionInterpreterProvider(config=config, client=client)
+    active_client = client
+    if active_client is None:
+        from openai import OpenAI
 
-
-def _default_openai_client_factory(*, api_key: str) -> _OpenAIClient:
-    from openai import OpenAI
-
-    return typing.cast(_OpenAIClient, OpenAI(api_key=api_key))
+        active_client = typing.cast(_OpenAIClient, OpenAI(api_key=config.api_key))
+    return OpenAIQuestionInterpreterProvider(config=config, client=active_client)
 
 
 class QuestionInterpreterProvider(typing.Protocol):
