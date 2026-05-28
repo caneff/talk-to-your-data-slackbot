@@ -195,10 +195,10 @@ def test_data_assistant_uses_required_question_interpreter_provider(
             self,
             *,
             question: str,
-            prompt_context: dict[str, object],
+            semantic_layer_context: dict[str, object],
         ) -> llm_question_interpreter.QuestionFrameProposal:
             assert question == canonical_question
-            assert "metric_labels" in prompt_context
+            assert "all_metric_labels" in semantic_layer_context
             return llm_question_interpreter.QuestionFrameProposal(
                 intent="summarize",
                 metric="total revenue",

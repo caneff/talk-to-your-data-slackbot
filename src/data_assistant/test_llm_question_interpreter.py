@@ -1,4 +1,5 @@
 import datetime
+import json
 import typing
 
 import pytest
@@ -82,9 +83,9 @@ def test_openai_provider_returns_question_frame_proposal_from_parsed_response() 
 
     result = provider.propose_question_frame(
         question="What was total revenue by region in January 2026?",
-        prompt_context={
-            "metric_labels": ["total revenue"],
-            "dimension_labels": ["region"],
+        semantic_layer_context={
+            "all_metric_labels": ["total revenue"],
+            "all_dimension_labels": ["region"],
             "supported_intents": ["summarize"],
             "datasets": [],
         },
@@ -96,6 +97,25 @@ def test_openai_provider_returns_question_frame_proposal_from_parsed_response() 
     assert parse_calls[0]["text_format"] is (
         llm_question_interpreter.QuestionFrameProposal
     )
+    input_messages = typing.cast(
+        list[dict[str, str]],
+        parse_calls[0]["input"],
+    )
+    assert [message["role"] for message in input_messages] == ["developer", "user"]
+    assert input_messages[0]["content"] == (
+        llm_question_interpreter._developer_instructions()  # pyright: ignore[reportPrivateUsage]
+    )
+    user_payload = json.loads(input_messages[1]["content"])
+    assert user_payload == {
+        "question": "What was total revenue by region in January 2026?",
+        "semantic_layer_context": {
+            "all_metric_labels": ["total revenue"],
+            "all_dimension_labels": ["region"],
+            "supported_intents": ["summarize"],
+            "datasets": [],
+        },
+    }
+    assert "prompt_context" not in user_payload
 
 
 def test_openai_provider_maps_refusal_to_provider_failure() -> None:
@@ -124,7 +144,7 @@ def test_openai_provider_maps_refusal_to_provider_failure() -> None:
 
     result = provider.propose_question_frame(
         question="What was total revenue by region in January 2026?",
-        prompt_context={"datasets": []},
+        semantic_layer_context={"datasets": []},
     )
 
     assert result == llm_question_interpreter.ProviderFailure(reason="cannot comply")
@@ -155,7 +175,7 @@ def test_openai_provider_maps_missing_parsed_output_to_provider_failure() -> Non
 
     result = provider.propose_question_frame(
         question="What was total revenue by region in January 2026?",
-        prompt_context={"datasets": []},
+        semantic_layer_context={"datasets": []},
     )
 
     assert result == llm_question_interpreter.ProviderFailure(
@@ -171,10 +191,10 @@ def test_provider_backed_interpreter_promotes_valid_question_frame_proposal() ->
             self,
             *,
             question: str,
-            prompt_context: object,
+            semantic_layer_context: object,
         ) -> llm_question_interpreter.QuestionFrameProposal:
             assert question == "What was total revenue by region in January 2026?"
-            assert prompt_context is not None
+            assert semantic_layer_context is not None
             return _question_frame_proposal()
 
     result = llm_question_interpreter.interpret_question(
@@ -208,9 +228,9 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_missing_time_r
             self,
             *,
             question: str,
-            prompt_context: object,
+            semantic_layer_context: object,
         ) -> llm_question_interpreter.QuestionFrameProposal:
-            del question, prompt_context
+            del question, semantic_layer_context
             return _question_frame_proposal(time_range=None)
 
     result = llm_question_interpreter.interpret_question(
@@ -237,9 +257,9 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_unsupported_da
             self,
             *,
             question: str,
-            prompt_context: object,
+            semantic_layer_context: object,
         ) -> llm_question_interpreter.ProviderFailure:
-            del question, prompt_context
+            del question, semantic_layer_context
             raise AssertionError("provider should not be called")
 
     result = llm_question_interpreter.interpret_question(
@@ -341,9 +361,9 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_provider_failu
             self,
             *,
             question: str,
-            prompt_context: object,
+            semantic_layer_context: object,
         ) -> llm_question_interpreter.ProviderFailure:
-            del question, prompt_context
+            del question, semantic_layer_context
             return llm_question_interpreter.ProviderFailure(
                 reason="provider unavailable",
             )
@@ -396,12 +416,14 @@ def test_provider_backed_interpreter_rejects_invalid_time_range_ordering() -> No
         next_step="Fix the provider contract before retrying.",
     )
 
-def test_build_prompt_context_uses_only_business_facing_semantic_layer_fields() -> None:
+def test_build_semantic_layer_context_uses_only_business_facing_fields() -> None:
     semantic_layer = semantic_layer_loader.load_semantic_layer()
 
-    prompt_context = llm_question_interpreter.build_prompt_context(semantic_layer)
+    semantic_layer_context = llm_question_interpreter.build_semantic_layer_context(
+        semantic_layer
+    )
 
-    assert prompt_context == {
+    assert semantic_layer_context == {
         "datasets": [
             {
                 "name": "Commerce Revenue",
@@ -414,25 +436,25 @@ def test_build_prompt_context_uses_only_business_facing_semantic_layer_fields() 
                 "example_questions": [
                     "What was total revenue by region in January 2026?",
                 ],
-                "metric_labels": ["customer count", "total revenue"],
-                "dimension_labels": ["customer region", "region"],
+                "available_metric_labels": ["customer count", "total revenue"],
+                "available_dimension_labels": ["customer region", "region"],
             },
         ],
-        "metric_labels": ["customer count", "total revenue"],
-        "dimension_labels": ["customer region", "region"],
+        "all_metric_labels": ["customer count", "total revenue"],
+        "all_dimension_labels": ["customer region", "region"],
         "supported_intents": ["summarize"],
     }
-    rendered_prompt_context = repr(prompt_context)
-    assert "commerce" not in rendered_prompt_context
-    assert "orders" not in rendered_prompt_context
-    assert "customers" not in rendered_prompt_context
-    assert "total_revenue" not in rendered_prompt_context
-    assert "customer_region" not in rendered_prompt_context
-    assert "sum(revenue)" not in rendered_prompt_context
-    assert "allowed_identity_ids" not in rendered_prompt_context
+    rendered_semantic_layer_context = repr(semantic_layer_context)
+    assert "commerce" not in rendered_semantic_layer_context
+    assert "orders" not in rendered_semantic_layer_context
+    assert "customers" not in rendered_semantic_layer_context
+    assert "total_revenue" not in rendered_semantic_layer_context
+    assert "customer_region" not in rendered_semantic_layer_context
+    assert "sum(revenue)" not in rendered_semantic_layer_context
+    assert "allowed_identity_ids" not in rendered_semantic_layer_context
     assert (
         "Commerce order data refreshed through 2026-01-31."
-        not in rendered_prompt_context
+        not in rendered_semantic_layer_context
     )
 
 
@@ -609,9 +631,9 @@ def _proposal_provider(
             self,
             *,
             question: str,
-            prompt_context: dict[str, object],
+            semantic_layer_context: dict[str, object],
         ) -> llm_question_interpreter.QuestionFrameProposal:
-            del question, prompt_context
+            del question, semantic_layer_context
             if provider_proposal is None:
                 raise AssertionError("provider should not be called")
             return provider_proposal
@@ -627,9 +649,9 @@ def _bad_provider(
             self,
             *,
             question: str,
-            prompt_context: dict[str, object],
+            semantic_layer_context: dict[str, object],
         ) -> llm_question_interpreter.QuestionFrameProposal:
-            del question, prompt_context
+            del question, semantic_layer_context
             return typing.cast(
                 llm_question_interpreter.QuestionFrameProposal,
                 provider_result,

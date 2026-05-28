@@ -52,9 +52,9 @@ class _DemoQuestionInterpreterProvider:
         self,
         *,
         question: str,
-        prompt_context: dict[str, object],
+        semantic_layer_context: dict[str, object],
     ) -> llm_question_interpreter.QuestionFrameProposal:
-        del prompt_context
+        del semantic_layer_context
         if question == "What was total revenue by region?":
             return llm_question_interpreter.QuestionFrameProposal(
                 intent="summarize",

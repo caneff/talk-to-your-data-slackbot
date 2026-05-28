@@ -38,10 +38,10 @@ class StaticQuestionInterpreterProvider:
         self,
         *,
         question: str,
-        prompt_context: dict[str, object],
+        semantic_layer_context: dict[str, object],
     ) -> llm_question_interpreter.QuestionFrameProposal:
         """Return the configured proposal without calling an LLM."""
-        del question, prompt_context
+        del question, semantic_layer_context
         return self._proposal
 
 

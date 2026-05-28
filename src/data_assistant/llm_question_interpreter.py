@@ -5,11 +5,14 @@ from __future__ import annotations
 import collections.abc
 import dataclasses
 import datetime
+import functools
+import importlib.resources
 import json
 import typing
 
 import pydantic
 
+import data_assistant.prompts as prompts
 import data_assistant.question_interpreter_guards as interpreter_guards
 import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.semantic_layer.schema as schema
@@ -17,6 +20,8 @@ import data_assistant.workflow.contracts as contracts
 
 _SUPPORTED_PROVIDER_INTENTS = frozenset({"summarize"})
 _DEFAULT_OPENAI_MODEL = "gpt-5.5"
+OpenAIInputMessage: typing.TypeAlias = dict[str, str]
+_QUESTION_INTERPRETER_DEVELOPER_PROMPT = "question_interpreter_developer.md"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -102,14 +107,14 @@ class OpenAIQuestionInterpreterProvider:
         self,
         *,
         question: str,
-        prompt_context: dict[str, object],
+        semantic_layer_context: dict[str, object],
     ) -> QuestionFrameProposal | ProviderFailure:
         try:
             response = self._client.responses.parse(
                 model=self._config.model,
                 input=_build_openai_input(
                     question=question,
-                    prompt_context=prompt_context,
+                    semantic_layer_context=semantic_layer_context,
                 ),
                 text_format=QuestionFrameProposal,
             )
@@ -129,28 +134,50 @@ class OpenAIQuestionInterpreterProvider:
 def _build_openai_input(
     *,
     question: str,
-    prompt_context: dict[str, object],
-) -> list[dict[str, str]]:
+    semantic_layer_context: dict[str, object],
+) -> list[OpenAIInputMessage]:
     return [
-        {
-            "role": "system",
-            "content": (
-                "Interpret the Data Question into only the allowed structured "
-                "Question Frame proposal fields. Use only business-facing "
-                "Semantic Layer labels from the supplied context."
-            ),
-        },
-        {
-            "role": "user",
-            "content": json.dumps(
-                {
-                    "question": question,
-                    "prompt_context": prompt_context,
-                },
-                sort_keys=True,
-            ),
-        },
+        _developer_message(),
+        _user_message(
+            question=question,
+            semantic_layer_context=semantic_layer_context,
+        ),
     ]
+
+
+def _developer_message() -> OpenAIInputMessage:
+    return {
+        "role": "developer",
+        "content": _developer_instructions(),
+    }
+
+
+@functools.cache
+def _developer_instructions() -> str:
+    return (
+        importlib.resources
+        .files(prompts)
+        .joinpath(_QUESTION_INTERPRETER_DEVELOPER_PROMPT)
+        .read_text(encoding="utf-8")
+        .strip()
+    )
+
+
+def _user_message(
+    *,
+    question: str,
+    semantic_layer_context: dict[str, object],
+) -> OpenAIInputMessage:
+    return {
+        "role": "user",
+        "content": json.dumps(
+            {
+                "question": question,
+                "semantic_layer_context": semantic_layer_context,
+            },
+            sort_keys=True,
+        ),
+    }
 
 
 def build_openai_question_interpreter_provider(
@@ -180,7 +207,7 @@ class QuestionInterpreterProvider(typing.Protocol):
         self,
         *,
         question: str,
-        prompt_context: dict[str, object],
+        semantic_layer_context: dict[str, object],
     ) -> QuestionFrameProposal | ProviderFailure:
         """Return an untrusted Question Frame proposal or failure."""
         ...
@@ -198,27 +225,29 @@ def interpret_question(
     if interpreter_guards.mentions_unsupported_data(normalized_question):
         return interpreter_guards.unsupported_data_non_answer()
 
-    # Prompt context is intentionally business-facing: labels and examples, not
-    # table names, SQL, column names, or access internals.
-    prompt_context = build_prompt_context(semantic_layer)
+    # Semantic Layer context is intentionally business-facing: labels and
+    # examples, not table names, SQL, column names, or access internals.
+    semantic_layer_context = build_semantic_layer_context(semantic_layer)
     try:
         raw_provider_result = provider.propose_question_frame(
             question=question,
-            prompt_context=prompt_context,
+            semantic_layer_context=semantic_layer_context,
         )
     except Exception:
         return _provider_failure_non_answer()
 
-    # Provider output is only a proposal until schema and authority checks
-    # promote it into the trusted Question Frame contract.
+    # Provider output is only a proposal until workflow validation promotes it
+    # into the trusted Question Frame contract.
     return _promote_provider_result(raw_provider_result, semantic_layer)
 
 
-def build_prompt_context(semantic_layer: schema.SemanticLayer) -> dict[str, object]:
-    """Collect business-facing prompt context from the Semantic Layer only.
+def build_semantic_layer_context(
+    semantic_layer: schema.SemanticLayer,
+) -> dict[str, object]:
+    """Collect business-facing context from the Semantic Layer only.
 
-    Build up a dict of just what the Question Interpreter prompt should need (no IDs or
-    table names for instance).
+    Build just what the Question Interpreter should need: labels, examples, and
+    supported intents, without IDs, table names, SQL, columns, or access internals.
     """
     datasets: list[dict[str, object]] = []
     for dataset in semantic_layer.datasets:
@@ -230,20 +259,20 @@ def build_prompt_context(semantic_layer: schema.SemanticLayer) -> dict[str, obje
             "name": dataset.name,
             "information_types": list(dataset.information_types),
             "example_questions": list(dataset.example_questions),
-            "metric_labels": [
+            "available_metric_labels": sorted({
                 metric.label for table in dataset_tables for metric in table.metrics
-            ],
-            "dimension_labels": [
+            }),
+            "available_dimension_labels": sorted({
                 dimension.label
                 for table in dataset_tables
                 for dimension in table.dimensions
-            ],
+            }),
         })
 
     return {
         "datasets": datasets,
-        "metric_labels": list(_metric_labels(semantic_layer)),
-        "dimension_labels": list(_dimension_labels(semantic_layer)),
+        "all_metric_labels": sorted(set(_metric_labels(semantic_layer))),
+        "all_dimension_labels": sorted(set(_dimension_labels(semantic_layer))),
         "supported_intents": sorted(_SUPPORTED_PROVIDER_INTENTS),
     }
 
