@@ -40,6 +40,7 @@ def test_data_assistant_runs_end_to_end(
     canonical_question: str,
     connect_orders: testing_support.OrdersConnector,
     canonical_question_provider: llm_question_interpreter.QuestionInterpreterProvider,
+    allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
     order_rows = (
         ("2026-01-03", "North", "1200.00"),
@@ -56,6 +57,7 @@ def test_data_assistant_runs_end_to_end(
             connection,
             canonical_question,
             question_interpreter_provider=canonical_question_provider,
+            internal_identity=allowed_internal_identity,
         )
 
     assert isinstance(run, contracts.DataAssistantRun)
@@ -80,31 +82,11 @@ def test_data_assistant_runs_end_to_end(
     assert "Trust Summary:" in run.final_response.text
 
 
-def test_data_assistant_runs_end_to_end_with_explicit_internal_identity(
-    canonical_question: str,
-    connect_orders: testing_support.OrdersConnector,
-    canonical_question_provider: llm_question_interpreter.QuestionInterpreterProvider,
-) -> None:
-    order_rows = (
-        ("2026-01-03", "North", "1200.00"),
-        ("2026-01-08", "South", "850.00"),
-    )
-    with connect_orders(order_rows) as connection:
-        run = workflow_runner.run_data_assistant(
-            connection,
-            canonical_question,
-            question_interpreter_provider=canonical_question_provider,
-            internal_identity=contracts.InternalIdentity(identity_id="employee_123"),
-        )
-
-    assert isinstance(run, contracts.DataAssistantRun)
-    assert run.dataset_selection.selected_datasets[0].dataset_id == "commerce"
-
-
 def test_data_assistant_short_circuits_question_ambiguity(
     monkeypatch: pytest.MonkeyPatch,
     connect_orders: testing_support.OrdersConnector,
     missing_time_range_provider: llm_question_interpreter.QuestionInterpreterProvider,
+    allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
     sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
     order_rows = (
@@ -115,6 +97,7 @@ def test_data_assistant_short_circuits_question_ambiguity(
             connection,
             "What was total revenue by region?",
             question_interpreter_provider=missing_time_range_provider,
+            internal_identity=allowed_internal_identity,
         )
 
     assert result is sentinel_response
@@ -171,6 +154,7 @@ def test_data_assistant_short_circuits_unsupported_question_before_preparing_dat
     monkeypatch: pytest.MonkeyPatch,
     connect_orders: testing_support.OrdersConnector,
     canonical_question_provider: llm_question_interpreter.QuestionInterpreterProvider,
+    allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
     sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
 
@@ -190,6 +174,7 @@ def test_data_assistant_short_circuits_unsupported_question_before_preparing_dat
             connection,
             "Can you use my CSV file to show total revenue by region in January 2026?",
             question_interpreter_provider=canonical_question_provider,
+            internal_identity=allowed_internal_identity,
         )
 
     assert result is sentinel_response
@@ -203,6 +188,7 @@ def test_data_assistant_short_circuits_unsupported_question_before_preparing_dat
 def test_data_assistant_uses_required_question_interpreter_provider(
     canonical_question: str,
     connect_orders: testing_support.OrdersConnector,
+    allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
     class FakeProvider:
         def propose_question_frame(
@@ -230,6 +216,7 @@ def test_data_assistant_uses_required_question_interpreter_provider(
             connection,
             canonical_question,
             question_interpreter_provider=FakeProvider(),
+            internal_identity=allowed_internal_identity,
         )
 
     assert isinstance(run, contracts.DataAssistantRun)

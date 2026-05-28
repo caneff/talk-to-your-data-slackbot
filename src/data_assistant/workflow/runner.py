@@ -21,18 +21,39 @@ def run_data_assistant(
     question: str,
     *,
     question_interpreter_provider: llm_question_interpreter.QuestionInterpreterProvider,
-    internal_identity: contracts.InternalIdentity | None = None,
+    internal_identity: contracts.InternalIdentity,
     semantic_layer: schema.SemanticLayer | None = None,
 ) -> contracts.WorkflowResult:
-    """Run the canonical Data Assistant path end to end."""
-    active_semantic_layer: schema.SemanticLayer
-    if semantic_layer is None:
-        active_semantic_layer = semantic_layer_loader.load_semantic_layer()
-    else:
-        active_semantic_layer = semantic_layer
-    active_internal_identity = internal_identity
-    if active_internal_identity is None:
-        active_internal_identity = access_controller.DEFAULT_LOCAL_ALLOWED_IDENTITY
+    """Run the canonical Data Assistant path end to end.
+
+    Parameters
+    ----------
+    connection
+        DuckDB connection used to prepare bounded data.
+    question
+        User question to interpret, route, authorize, query, and answer.
+    question_interpreter_provider
+        Provider for the LLM-backed question interpreter.
+    internal_identity
+        Caller identity for access control.
+    semantic_layer
+        Semantic Layer to route against. Defaults to the configured layer.
+
+    Returns
+    -------
+    contracts.WorkflowResult
+        Composed non-answer, or ``DataAssistantRun`` with intermediate artifacts
+        and final response.
+
+    Notes
+    -----
+    Stages run in order: interpret, route, authorize, request data, prepare
+    data, draft answer, and compose final response. A ``NonAnswer``
+    short-circuits immediately.
+    """
+    active_semantic_layer = (
+        semantic_layer or semantic_layer_loader.load_semantic_layer()
+    )
 
     question_frame_result = llm_question_interpreter.interpret_question(
         question=question,
@@ -53,7 +74,7 @@ def run_data_assistant(
 
     dataset_access_result = access_controller.authorize_dataset_access(
         dataset_selection=dataset_selection,
-        internal_identity=active_internal_identity,
+        internal_identity=internal_identity,
     )
     if isinstance(dataset_access_result, contracts.NonAnswer):
         return response_composer.compose_non_answer_response(dataset_access_result)

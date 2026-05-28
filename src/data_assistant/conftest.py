@@ -2,6 +2,7 @@ import typing
 
 import pytest
 
+import data_assistant.access_controller as access_controller
 import data_assistant.data_requester as data_requester
 import data_assistant.llm_question_interpreter as llm_question_interpreter
 import data_assistant.semantic_layer.loader as semantic_layer_loader
@@ -71,6 +72,11 @@ def connect_orders() -> testing_support.OrdersConnector:
 @pytest.fixture
 def canonical_question() -> str:
     return CANONICAL_DATA_QUESTION
+
+
+@pytest.fixture
+def allowed_internal_identity() -> contracts.InternalIdentity:
+    return access_controller.DEFAULT_LOCAL_ALLOWED_IDENTITY
 
 
 @pytest.fixture

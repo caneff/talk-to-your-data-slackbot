@@ -9,6 +9,7 @@ def test_response_composer_returns_plain_text_with_trust_summary(
     canonical_question: str,
     connect_orders: testing_support.OrdersConnector,
     canonical_question_provider: llm_question_interpreter.QuestionInterpreterProvider,
+    allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
     order_rows = (
         ("2026-01-03", "North", "1200.00"),
@@ -25,6 +26,7 @@ def test_response_composer_returns_plain_text_with_trust_summary(
             connection,
             canonical_question,
             question_interpreter_provider=canonical_question_provider,
+            internal_identity=allowed_internal_identity,
         )
 
     assert isinstance(run, contracts.DataAssistantRun)

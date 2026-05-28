@@ -80,7 +80,7 @@ def test_build_openai_answer_path_uses_openai_provider_without_fallback(
     def fake_run_data_assistant(
         connection: duckdb.DuckDBPyConnection,
         question: str,
-        internal_identity: contracts.InternalIdentity | None = None,
+        internal_identity: contracts.InternalIdentity,
         semantic_layer: object | None = None,
         question_interpreter_provider: object | None = None,
     ) -> contracts.FinalResponse:
