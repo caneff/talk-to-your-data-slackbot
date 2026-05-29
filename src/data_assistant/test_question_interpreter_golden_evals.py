@@ -11,7 +11,9 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
     eval_cases = (
         GoldenEvalCase(
             name="happy_path",
-            provider_proposal=interpreter_support.question_frame_proposal(),
+            provider=interpreter_support.fixed_proposal_provider(
+                interpreter_support.question_frame_proposal()
+            ),
             expected=contracts.Success(
                 contracts.QuestionFrame(
                     intent="summarize",
@@ -29,8 +31,10 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
         ),
         GoldenEvalCase(
             name="missing_time_range",
-            provider_proposal=interpreter_support.question_frame_proposal(
-                time_range=None
+            provider=interpreter_support.fixed_proposal_provider(
+                interpreter_support.question_frame_proposal(
+                    time_range=None
+                )
             ),
             expected=contracts.NonAnswer(
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
@@ -46,7 +50,7 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
                 "Can you use my CSV file to show total revenue by region in "
                 "January 2026?"
             ),
-            provider_proposal=None,
+            provider=interpreter_support.provider_that_must_not_be_called(),
             expected=contracts.NonAnswer(
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
                 reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_DATA,
@@ -60,8 +64,10 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
         ),
         GoldenEvalCase(
             name="unsupported_intent",
-            provider_proposal=interpreter_support.question_frame_proposal(
-                intent="forecast"
+            provider=interpreter_support.fixed_proposal_provider(
+                interpreter_support.question_frame_proposal(
+                    intent="forecast"
+                )
             ),
             expected=contracts.NonAnswer(
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
@@ -76,8 +82,10 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
         ),
         GoldenEvalCase(
             name="hallucinated_metric",
-            provider_proposal=interpreter_support.question_frame_proposal(
-                metric="gross bookings"
+            provider=interpreter_support.fixed_proposal_provider(
+                interpreter_support.question_frame_proposal(
+                    metric="gross bookings"
+                )
             ),
             expected=contracts.NonAnswer(
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
@@ -92,8 +100,10 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
         ),
         GoldenEvalCase(
             name="missing_dimension",
-            provider_proposal=interpreter_support.question_frame_proposal(
-                dimension=""
+            provider=interpreter_support.fixed_proposal_provider(
+                interpreter_support.question_frame_proposal(
+                    dimension=""
+                )
             ),
             expected=contracts.NonAnswer(
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
@@ -105,8 +115,10 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
         ),
         GoldenEvalCase(
             name="unsupported_filters",
-            provider_proposal=interpreter_support.question_frame_proposal(
-                filters=("region = 'North'",)
+            provider=interpreter_support.fixed_proposal_provider(
+                interpreter_support.question_frame_proposal(
+                    filters=("region = 'North'",)
+                )
             ),
             expected=contracts.NonAnswer(
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
@@ -121,11 +133,13 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
         ),
         GoldenEvalCase(
             name="invalid_time_range_ordering",
-            provider_proposal=interpreter_support.question_frame_proposal(
-                time_range=llm_question_interpreter.TimeRangeProposal(
-                    label="January 2026",
-                    start_date=datetime.date(2026, 1, 31),
-                    end_date=datetime.date(2026, 1, 1),
+            provider=interpreter_support.fixed_proposal_provider(
+                interpreter_support.question_frame_proposal(
+                    time_range=llm_question_interpreter.TimeRangeProposal(
+                        label="January 2026",
+                        start_date=datetime.date(2026, 1, 31),
+                        end_date=datetime.date(2026, 1, 1),
+                    )
                 )
             ),
             expected=contracts.NonAnswer(
@@ -139,17 +153,16 @@ def test_golden_question_evals_cover_expected_contracts() -> None:
     )
 
     for case in eval_cases:
-        provider = interpreter_support.proposal_provider(case.provider_proposal)
         result = llm_question_interpreter.interpret_question(
             question=case.question,
             semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
-            provider=provider,
+            provider=case.provider,
         )
         assert result == case.expected, case.name
 
 
 class GoldenEvalCase(typing.NamedTuple):
     name: str
-    provider_proposal: llm_question_interpreter.QuestionFrameProposal | None
+    provider: llm_question_interpreter.QuestionInterpreterProvider
     expected: contracts.StageResult[contracts.QuestionFrame]
     question: str = interpreter_support.CANONICAL_DATA_QUESTION

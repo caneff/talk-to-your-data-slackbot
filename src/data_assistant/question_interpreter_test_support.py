@@ -1,3 +1,9 @@
+"""Shared fixtures and builders for Question Interpreter tests.
+
+These helpers keep behavior-focused test files from repeating provider stubs,
+canonical question setup, and default valid proposal construction.
+"""
+
 import datetime
 import typing
 
@@ -12,27 +18,19 @@ _DEFAULT_TIME_RANGE = object()
 def interpret_with_provider_proposal(
     provider_proposal: llm_question_interpreter.QuestionFrameProposal,
 ) -> contracts.StageResult[contracts.QuestionFrame]:
+    """Interpret the canonical question with a provider that returns one proposal."""
     return llm_question_interpreter.interpret_question(
         question=CANONICAL_DATA_QUESTION,
         semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
-        provider=proposal_provider(provider_proposal),
+        provider=fixed_proposal_provider(provider_proposal),
     )
 
 
-def interpret_with_bad_provider_result(
-    provider_result: object,
-) -> contracts.StageResult[contracts.QuestionFrame]:
-    return llm_question_interpreter.interpret_question(
-        question=CANONICAL_DATA_QUESTION,
-        semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
-        provider=bad_provider(provider_result),
-    )
-
-
-def proposal_provider(
-    provider_proposal: llm_question_interpreter.QuestionFrameProposal | None,
+def fixed_proposal_provider(
+    provider_proposal: llm_question_interpreter.QuestionFrameProposal,
 ) -> llm_question_interpreter.QuestionInterpreterProvider:
-    class FakeProvider:
+    """Build a fake provider that always returns one fixed proposal."""
+    class FixedProposalProvider:
         def propose_question_frame(
             self,
             *,
@@ -40,17 +38,32 @@ def proposal_provider(
             semantic_layer_context: dict[str, object],
         ) -> llm_question_interpreter.QuestionFrameProposal:
             del question, semantic_layer_context
-            if provider_proposal is None:
-                raise AssertionError("provider should not be called")
             return provider_proposal
 
-    return FakeProvider()
+    return FixedProposalProvider()
 
 
-def bad_provider(
+def provider_that_must_not_be_called(
+) -> llm_question_interpreter.QuestionInterpreterProvider:
+    """Build a fake provider that fails if the interpreter calls it."""
+    class MustNotBeCalledProvider:
+        def propose_question_frame(
+            self,
+            *,
+            question: str,
+            semantic_layer_context: dict[str, object],
+        ) -> llm_question_interpreter.QuestionFrameProposal:
+            del question, semantic_layer_context
+            raise AssertionError("provider should not be called")
+
+    return MustNotBeCalledProvider()
+
+
+def invalid_result_provider(
     provider_result: object,
 ) -> llm_question_interpreter.QuestionInterpreterProvider:
-    class BadProvider:
+    """Build a fake provider that violates the provider contract for tests."""
+    class InvalidResultProvider:
         def propose_question_frame(
             self,
             *,
@@ -63,7 +76,7 @@ def bad_provider(
                 provider_result,
             )
 
-    return BadProvider()
+    return InvalidResultProvider()
 
 
 def question_frame_proposal(
@@ -76,6 +89,7 @@ def question_frame_proposal(
     ),
     filters: tuple[str, ...] = (),
 ) -> llm_question_interpreter.QuestionFrameProposal:
+    """Build a valid proposal while allowing each promoted field to be varied."""
     if time_range is _DEFAULT_TIME_RANGE:
         active_time_range: llm_question_interpreter.TimeRangeProposal | None = (
             llm_question_interpreter.TimeRangeProposal(

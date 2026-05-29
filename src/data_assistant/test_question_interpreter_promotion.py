@@ -209,8 +209,10 @@ def test_provider_backed_interpreter_returns_typed_non_answer_for_provider_failu
 
 
 def test_provider_backed_interpreter_rejects_invalid_provider_output() -> None:
-    result = interpreter_support.interpret_with_bad_provider_result(
-        {"hello": "world"}
+    result = llm_question_interpreter.interpret_question(
+        question=interpreter_support.CANONICAL_DATA_QUESTION,
+        semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
+        provider=interpreter_support.invalid_result_provider({"hello": "world"}),
     )
 
     assert result == contracts.NonAnswer(
