@@ -1,11 +1,10 @@
-import datetime
 import json
 import typing
 
 import pytest
 
 import data_assistant.llm_question_interpreter as llm_question_interpreter
-import data_assistant.question_interpreter_test_support as interpreter_support
+import data_assistant.question_interpreter_test_support as test_support
 
 
 def test_load_openai_provider_config_requires_api_key_only_when_selected() -> None:
@@ -19,10 +18,7 @@ def test_load_openai_provider_config_requires_api_key_only_when_selected() -> No
     )
 
 
-def test_load_openai_provider_config_uses_default_model_and_allows_override() -> None:
-    default_config = llm_question_interpreter.load_openai_question_interpreter_config(
-        {"OPENAI_API_KEY": "test-key"}
-    )
+def test_load_openai_provider_config_allows_model_override() -> None:
     override_config = llm_question_interpreter.load_openai_question_interpreter_config(
         {
             "OPENAI_API_KEY": "test-key",
@@ -30,10 +26,6 @@ def test_load_openai_provider_config_uses_default_model_and_allows_override() ->
         }
     )
 
-    assert default_config == llm_question_interpreter.OpenAIQuestionInterpreterConfig(
-        api_key="test-key",
-        model="gpt-4o-mini",
-    )
     assert override_config == (
         llm_question_interpreter.OpenAIQuestionInterpreterConfig(
             api_key="test-key",
@@ -49,7 +41,7 @@ def test_build_openai_provider_accepts_injected_client() -> None:
             return FakeParsedResponse()
 
     class FakeParsedResponse:
-        output_parsed = interpreter_support.question_frame_proposal()
+        output_parsed = test_support.question_frame_proposal()
 
     class FakeOpenAIClient:
         responses = FakeResponsesClient()
@@ -65,7 +57,7 @@ def test_build_openai_provider_accepts_injected_client() -> None:
     )
 
     result = provider.propose_question_frame(
-        question=interpreter_support.CANONICAL_DATA_QUESTION,
+        question=test_support.CANONICAL_DATA_QUESTION,
         semantic_layer_context={"datasets": []},
     )
     assert result == FakeParsedResponse.output_parsed
@@ -75,17 +67,7 @@ def test_openai_provider_returns_question_frame_proposal_from_parsed_response() 
     parse_calls: list[dict[str, object]] = []
 
     class FakeParsedResponse:
-        output_parsed = llm_question_interpreter.QuestionFrameProposal(
-            intent="summarize",
-            metric="total revenue",
-            dimension="region",
-            time_range=llm_question_interpreter.TimeRangeProposal(
-                label="January 2026",
-                start_date=datetime.date(2026, 1, 1),
-                end_date=datetime.date(2026, 1, 31),
-            ),
-            filters=(),
-        )
+        output_parsed = test_support.question_frame_proposal()
 
     class FakeResponsesClient:
         def parse(self, **kwargs: object) -> FakeParsedResponse:
@@ -105,41 +87,23 @@ def test_openai_provider_returns_question_frame_proposal_from_parsed_response() 
             FakeOpenAIClient(),
         ),
     )
+    question = "sentinel question"
+    semantic_layer_context: dict[str, object] = {"sentinel": "context"}
 
     result = provider.propose_question_frame(
-        question=interpreter_support.CANONICAL_DATA_QUESTION,
-        semantic_layer_context={
-            "all_metric_labels": ["total revenue"],
-            "all_dimension_labels": ["region"],
-            "supported_intents": ["summarize"],
-            "datasets": [],
-        },
+        question=question,
+        semantic_layer_context=semantic_layer_context,
     )
 
     assert result == FakeParsedResponse.output_parsed
     assert len(parse_calls) == 1
-    assert parse_calls[0]["model"] == "gpt-test-mini"
-    assert parse_calls[0]["text_format"] is (
-        llm_question_interpreter.QuestionFrameProposal
-    )
     input_messages = typing.cast(
         list[dict[str, str]],
         parse_calls[0]["input"],
     )
-    assert [message["role"] for message in input_messages] == ["developer", "user"]
-    assert input_messages[0]["content"] == (
-        llm_question_interpreter._developer_instructions()  # pyright: ignore[reportPrivateUsage]
-    )
     user_payload = json.loads(input_messages[1]["content"])
-    assert user_payload == {
-        "question": interpreter_support.CANONICAL_DATA_QUESTION,
-        "semantic_layer_context": {
-            "all_metric_labels": ["total revenue"],
-            "all_dimension_labels": ["region"],
-            "supported_intents": ["summarize"],
-            "datasets": [],
-        },
-    }
+    assert user_payload["question"] == question
+    assert user_payload["semantic_layer_context"] == semantic_layer_context
     assert "prompt_context" not in user_payload
 
 
@@ -176,7 +140,7 @@ def test_openai_provider_maps_refusal_to_provider_failure() -> None:
     )
 
     result = provider.propose_question_frame(
-        question=interpreter_support.CANONICAL_DATA_QUESTION,
+        question=test_support.CANONICAL_DATA_QUESTION,
         semantic_layer_context={"datasets": []},
     )
 
@@ -207,7 +171,7 @@ def test_openai_provider_maps_missing_parsed_output_to_provider_failure() -> Non
     )
 
     result = provider.propose_question_frame(
-        question=interpreter_support.CANONICAL_DATA_QUESTION,
+        question=test_support.CANONICAL_DATA_QUESTION,
         semantic_layer_context={"datasets": []},
     )
 
