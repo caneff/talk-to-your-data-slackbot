@@ -87,7 +87,7 @@ class SlackGateway(typing.Protocol):
         """Deliver a threaded Slack response."""
 
 
-SlackWorkflowResult: typing.TypeAlias = contracts.WorkflowResult | contracts.NonAnswer
+SlackWorkflowResult: typing.TypeAlias = contracts.WorkflowResult
 
 AnswerPath: typing.TypeAlias = collections_abc.Callable[
     [duckdb.DuckDBPyConnection, str, contracts.InternalIdentity],
@@ -129,8 +129,7 @@ def handle_slack_event(
     answer_path : AnswerPath
         Callable used to produce the core workflow result. The outer runtime
         must supply the active Question Interpreter provider before calling this
-        boundary. Test doubles may still return a `NonAnswer` directly even
-        when the workflow composes one into a Final Response.
+        boundary.
     internal_identity_resolver : InternalIdentityResolver, optional
         Callable that maps Slack request context to an Internal Identity.
 
@@ -159,12 +158,6 @@ def handle_slack_event(
 
 def _render_workflow_result(result: SlackWorkflowResult) -> str:
     """Render a core workflow result as user-facing Slack text."""
-    if isinstance(result, contracts.NonAnswer):
-        return (
-            f"{result.reason}\n\n"
-            f"Unresolved ambiguities: {', '.join(result.unresolved_ambiguities)}\n"
-            f"Next step: {result.next_step}"
-        )
     if isinstance(result, contracts.FinalResponse):
         return result.text
     return result.final_response.text
