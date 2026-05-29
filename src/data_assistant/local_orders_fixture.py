@@ -1,3 +1,10 @@
+"""Shared local DuckDB fixture for the demo app, tests, and dev runtime.
+
+It is not a production data-loading layer: callers provide the rows they want, and this
+fixture only creates the local schema, inserts those rows, and closes the in-memory
+connection after use.
+"""
+
 from __future__ import annotations
 
 import collections.abc
@@ -16,6 +23,12 @@ OrdersConnector = collections.abc.Callable[
 def connect_orders(
     rows: collections.abc.Iterable[OrderRow],
 ) -> collections.abc.Generator[duckdb.DuckDBPyConnection]:
+    """Yield an in-memory DuckDB connection containing one `orders` table.
+
+    Each row is bound into `(order_date, region, revenue)` columns whose DuckDB
+    types are `date`, `varchar`, and `decimal(12, 2)`. `None` values are allowed
+    where `OrderRow` permits them so tests can model incomplete local data.
+    """
     connection = duckdb.connect(":memory:")
     connection.execute(
         """
