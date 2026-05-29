@@ -10,8 +10,8 @@ import typing
 import duckdb
 
 import data_assistant.access_controller as access_controller
-import data_assistant.llm_question_interpreter as llm_question_interpreter
 import data_assistant.local_orders_fixture as local_orders_fixture
+import data_assistant.question_interpreter as question_interpreter
 import data_assistant.slack_boundary as slack_boundary
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
@@ -53,21 +53,21 @@ class _DemoQuestionInterpreterProvider:
         *,
         question: str,
         semantic_layer_context: dict[str, object],
-    ) -> llm_question_interpreter.QuestionFrameProposal:
+    ) -> question_interpreter.QuestionFrameProposal:
         del semantic_layer_context
         if question == "What was total revenue by region?":
-            return llm_question_interpreter.QuestionFrameProposal(
+            return question_interpreter.QuestionFrameProposal(
                 intent="summarize",
                 metric="total revenue",
                 dimension="region",
                 time_range=None,
                 filters=(),
             )
-        return llm_question_interpreter.QuestionFrameProposal(
+        return question_interpreter.QuestionFrameProposal(
             intent="summarize",
             metric="total revenue",
             dimension="region",
-            time_range=llm_question_interpreter.TimeRangeProposal(
+            time_range=question_interpreter.TimeRangeProposal(
                 label="January 2026",
                 start_date=datetime.date(2026, 1, 1),
                 end_date=datetime.date(2026, 1, 31),

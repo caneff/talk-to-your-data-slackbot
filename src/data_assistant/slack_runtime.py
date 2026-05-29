@@ -14,8 +14,8 @@ import dotenv
 import duckdb
 
 import data_assistant.access_controller as access_controller
-import data_assistant.llm_question_interpreter as llm_question_interpreter
 import data_assistant.local_orders_fixture as local_orders_fixture
+import data_assistant.question_interpreter as question_interpreter
 import data_assistant.slack_boundary as slack_boundary
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
@@ -108,7 +108,7 @@ def build_openai_answer_path(
     environ: collections_abc.Mapping[str, str],
 ) -> slack_boundary.AnswerPath:
     """Build the Slack answer path using the live OpenAI Question Interpreter."""
-    provider = llm_question_interpreter.build_openai_question_interpreter_provider(
+    provider = question_interpreter.build_openai_question_interpreter_provider(
         environ
     )
 
@@ -324,7 +324,7 @@ def main(
         )
     except (
         SlackRuntimeConfigError,
-        llm_question_interpreter.OpenAIQuestionInterpreterConfigError,
+        question_interpreter.OpenAIQuestionInterpreterConfigError,
     ) as error:
         print(str(error), file=sys.stderr)
         return 1
