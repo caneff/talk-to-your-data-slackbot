@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import dataclasses
+import datetime
 import sys
 import typing
 
 import duckdb
 
 import data_assistant.access_controller as access_controller
+import data_assistant.llm_question_interpreter as llm_question_interpreter
+import data_assistant.local_orders_fixture as local_orders_fixture
 import data_assistant.slack_boundary as slack_boundary
-import data_assistant.testing_support as testing_support
 import data_assistant.workflow.contracts as contracts
+import data_assistant.workflow.runner as workflow_runner
 
-DEMO_ORDER_ROWS: tuple[testing_support.OrderRow, ...] = (
+DEMO_ORDER_ROWS: tuple[local_orders_fixture.OrderRow, ...] = (
     ("2026-01-03", "North", "1200.00"),
     ("2026-01-10", "North", "300.00"),
     ("2026-01-12", "South", "800.00"),
@@ -44,8 +47,37 @@ class _RecordingSlackGateway:
         self.delivery = delivery
 
 
+class _DemoQuestionInterpreterProvider:
+    def propose_question_frame(
+        self,
+        *,
+        question: str,
+        semantic_layer_context: dict[str, object],
+    ) -> llm_question_interpreter.QuestionFrameProposal:
+        del semantic_layer_context
+        if question == "What was total revenue by region?":
+            return llm_question_interpreter.QuestionFrameProposal(
+                intent="summarize",
+                metric="total revenue",
+                dimension="region",
+                time_range=None,
+                filters=(),
+            )
+        return llm_question_interpreter.QuestionFrameProposal(
+            intent="summarize",
+            metric="total revenue",
+            dimension="region",
+            time_range=llm_question_interpreter.TimeRangeProposal(
+                label="January 2026",
+                start_date=datetime.date(2026, 1, 1),
+                end_date=datetime.date(2026, 1, 31),
+            ),
+            filters=(),
+        )
+
+
 def run_demo() -> tuple[DemoScenarioResult, ...]:
-    with testing_support.connect_orders(DEMO_ORDER_ROWS) as connection:
+    with local_orders_fixture.connect_orders(DEMO_ORDER_ROWS) as connection:
         return (
             _run_one_demo_scenario(
                 name="happy_path",
@@ -90,6 +122,7 @@ def _run_one_demo_scenario(
         payload=payload,
         connection=connection,
         gateway=gateway,
+        answer_path=_run_demo_answer_path,
         internal_identity_resolver=_resolve_local_demo_identity,
     )
     if gateway.delivery is None:
@@ -108,6 +141,19 @@ def _resolve_local_demo_identity(
     _event: slack_boundary.SlackInnerEvent,
 ) -> contracts.InternalIdentity:
     return access_controller.DEFAULT_LOCAL_ALLOWED_IDENTITY
+
+
+def _run_demo_answer_path(
+    connection: duckdb.DuckDBPyConnection,
+    question: str,
+    internal_identity: contracts.InternalIdentity,
+) -> slack_boundary.SlackWorkflowResult:
+    return workflow_runner.run_data_assistant(
+        connection,
+        question,
+        question_interpreter_provider=_DemoQuestionInterpreterProvider(),
+        internal_identity=internal_identity,
+    )
 
 
 def _write_demo_scenario(

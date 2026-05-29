@@ -14,6 +14,8 @@ import dotenv
 import duckdb
 
 import data_assistant.access_controller as access_controller
+import data_assistant.llm_question_interpreter as llm_question_interpreter
+import data_assistant.local_orders_fixture as local_orders_fixture
 import data_assistant.slack_boundary as slack_boundary
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
@@ -102,17 +104,27 @@ class _SocketModeSlackGateway:
         )
 
 
-def _default_answer_path(
-    connection: duckdb.DuckDBPyConnection,
-    question: str,
-    internal_identity: contracts.InternalIdentity,
-) -> slack_boundary.SlackWorkflowResult:
-    """Use the standard Data Assistant workflow for Slack DM requests."""
-    return workflow_runner.run_data_assistant(
-        connection,
-        question,
-        internal_identity=internal_identity,
+def build_openai_answer_path(
+    environ: collections_abc.Mapping[str, str],
+) -> slack_boundary.AnswerPath:
+    """Build the Slack answer path using the live OpenAI Question Interpreter."""
+    provider = llm_question_interpreter.build_openai_question_interpreter_provider(
+        environ
     )
+
+    def answer_path(
+        connection: duckdb.DuckDBPyConnection,
+        question: str,
+        internal_identity: contracts.InternalIdentity,
+    ) -> slack_boundary.SlackWorkflowResult:
+        return workflow_runner.run_data_assistant(
+            connection,
+            question,
+            question_interpreter_provider=provider,
+            internal_identity=internal_identity,
+        )
+
+    return answer_path
 
 
 def _default_internal_identity_resolver(
@@ -163,7 +175,7 @@ def handle_socket_mode_event(
     ack: Ack,
     client: SlackBoltChatClient,
     connection_factory: ConnectionFactory,
-    answer_path: slack_boundary.AnswerPath = _default_answer_path,
+    answer_path: slack_boundary.AnswerPath,
     internal_identity_resolver: slack_boundary.InternalIdentityResolver = (
         _default_internal_identity_resolver
     ),
@@ -210,7 +222,7 @@ def register_socket_mode_handlers(
     *,
     app: SlackBoltAppEventRegistrar,
     connection_factory: ConnectionFactory,
-    answer_path: slack_boundary.AnswerPath = _default_answer_path,
+    answer_path: slack_boundary.AnswerPath,
     internal_identity_resolver: slack_boundary.InternalIdentityResolver = (
         _default_internal_identity_resolver
     ),
@@ -257,35 +269,13 @@ def _default_socket_mode_handler_factory(
 def _dev_connection_factory(
 ) -> contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]:
     """Provide a tiny local DuckDB fixture for manual Slack smoke testing."""
-    return _connect_dev_orders(
+    return local_orders_fixture.connect_orders(
         (
             ("2026-01-03", "North", "1200.00"),
             ("2026-01-10", "South", "800.00"),
             ("2026-01-17", "North", "300.00"),
         )
     )
-
-
-@contextlib.contextmanager
-def _connect_dev_orders(
-    rows: collections_abc.Iterable[tuple[str, str | None, str | None]],
-) -> collections_abc.Generator[duckdb.DuckDBPyConnection]:
-    """Build the runtime's tiny in-memory orders table for local Slack smoke tests."""
-    connection = duckdb.connect(":memory:")
-    connection.execute(
-        """
-        create table orders (
-            order_date date,
-            region varchar,
-            revenue decimal(12, 2)
-        )
-        """,
-    )
-    connection.executemany("insert into orders values (?, ?, ?)", rows)
-    try:
-        yield connection
-    finally:
-        connection.close()
 
 
 def run_socket_mode_from_env(
@@ -299,14 +289,21 @@ def run_socket_mode_from_env(
     internal_identity_resolver: slack_boundary.InternalIdentityResolver = (
         _default_internal_identity_resolver
     ),
+    answer_path: slack_boundary.AnswerPath | None = None,
 ) -> SocketModeHandler:
     """Build and start the local Slack Runtime Adapter from environment config."""
     config = load_slack_runtime_config(environ)
+    active_answer_path = answer_path
+    if connection_factory is not None and active_answer_path is None:
+        active_answer_path = build_openai_answer_path(environ)
     app = app_factory(token=config.bot_token)
     if connection_factory is not None:
+        if active_answer_path is None:
+            raise AssertionError("answer path should be configured")
         register_socket_mode_handlers(
             app=typing.cast(SlackBoltAppEventRegistrar, app),
             connection_factory=connection_factory,
+            answer_path=active_answer_path,
             internal_identity_resolver=internal_identity_resolver,
         )
     handler = socket_mode_handler_factory(app_token=config.app_token, app=app)
@@ -314,7 +311,10 @@ def run_socket_mode_from_env(
     return handler
 
 
-def main(env_file: str | pathlib.Path = ".env") -> int:
+def main(
+    *,
+    env_file: str | pathlib.Path = ".env",
+) -> int:
     """Run the local Socket Mode entrypoint."""
     try:
         _load_env_file(env_file)
@@ -322,7 +322,10 @@ def main(env_file: str | pathlib.Path = ".env") -> int:
             connection_factory=_dev_connection_factory,
             internal_identity_resolver=_dev_internal_identity_resolver,
         )
-    except SlackRuntimeConfigError as error:
+    except (
+        SlackRuntimeConfigError,
+        llm_question_interpreter.OpenAIQuestionInterpreterConfigError,
+    ) as error:
         print(str(error), file=sys.stderr)
         return 1
     return 0

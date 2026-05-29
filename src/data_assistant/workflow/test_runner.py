@@ -1,8 +1,11 @@
+import datetime
+
 import pytest
 
 import data_assistant.data_preparation as data_preparation
 import data_assistant.data_requester as data_requester
-import data_assistant.testing_support as testing_support
+import data_assistant.llm_question_interpreter as llm_question_interpreter
+import data_assistant.local_orders_fixture as local_orders_fixture
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
 
@@ -35,7 +38,9 @@ def capture_non_answer_response(
 
 def test_data_assistant_runs_end_to_end(
     canonical_question: str,
-    connect_orders: testing_support.OrdersConnector,
+    connect_orders: local_orders_fixture.OrdersConnector,
+    canonical_question_provider: llm_question_interpreter.QuestionInterpreterProvider,
+    allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
     order_rows = (
         ("2026-01-03", "North", "1200.00"),
@@ -51,6 +56,8 @@ def test_data_assistant_runs_end_to_end(
         run = workflow_runner.run_data_assistant(
             connection,
             canonical_question,
+            question_interpreter_provider=canonical_question_provider,
+            internal_identity=allowed_internal_identity,
         )
 
     assert isinstance(run, contracts.DataAssistantRun)
@@ -75,28 +82,11 @@ def test_data_assistant_runs_end_to_end(
     assert "Trust Summary:" in run.final_response.text
 
 
-def test_data_assistant_runs_end_to_end_with_explicit_internal_identity(
-    canonical_question: str,
-    connect_orders: testing_support.OrdersConnector,
-) -> None:
-    order_rows = (
-        ("2026-01-03", "North", "1200.00"),
-        ("2026-01-08", "South", "850.00"),
-    )
-    with connect_orders(order_rows) as connection:
-        run = workflow_runner.run_data_assistant(
-            connection,
-            canonical_question,
-            internal_identity=contracts.InternalIdentity(identity_id="employee_123"),
-        )
-
-    assert isinstance(run, contracts.DataAssistantRun)
-    assert run.dataset_selection.selected_datasets[0].dataset_id == "commerce"
-
-
 def test_data_assistant_short_circuits_question_ambiguity(
     monkeypatch: pytest.MonkeyPatch,
-    connect_orders: testing_support.OrdersConnector,
+    connect_orders: local_orders_fixture.OrdersConnector,
+    missing_time_range_provider: llm_question_interpreter.QuestionInterpreterProvider,
+    allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
     sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
     order_rows = (
@@ -106,6 +96,8 @@ def test_data_assistant_short_circuits_question_ambiguity(
         result = workflow_runner.run_data_assistant(
             connection,
             "What was total revenue by region?",
+            question_interpreter_provider=missing_time_range_provider,
+            internal_identity=allowed_internal_identity,
         )
 
     assert result is sentinel_response
@@ -118,7 +110,8 @@ def test_data_assistant_short_circuits_question_ambiguity(
 def test_data_assistant_denies_dataset_access_before_request_or_preparation(
     monkeypatch: pytest.MonkeyPatch,
     canonical_question: str,
-    connect_orders: testing_support.OrdersConnector,
+    connect_orders: local_orders_fixture.OrdersConnector,
+    canonical_question_provider: llm_question_interpreter.QuestionInterpreterProvider,
 ) -> None:
     sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
 
@@ -145,6 +138,7 @@ def test_data_assistant_denies_dataset_access_before_request_or_preparation(
         result = workflow_runner.run_data_assistant(
             connection,
             canonical_question,
+            question_interpreter_provider=canonical_question_provider,
             internal_identity=contracts.InternalIdentity(identity_id="employee_999"),
         )
 
@@ -158,7 +152,9 @@ def test_data_assistant_denies_dataset_access_before_request_or_preparation(
 
 def test_data_assistant_short_circuits_unsupported_question_before_preparing_data(
     monkeypatch: pytest.MonkeyPatch,
-    connect_orders: testing_support.OrdersConnector,
+    connect_orders: local_orders_fixture.OrdersConnector,
+    canonical_question_provider: llm_question_interpreter.QuestionInterpreterProvider,
+    allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
     sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
 
@@ -177,6 +173,8 @@ def test_data_assistant_short_circuits_unsupported_question_before_preparing_dat
         result = workflow_runner.run_data_assistant(
             connection,
             "Can you use my CSV file to show total revenue by region in January 2026?",
+            question_interpreter_provider=canonical_question_provider,
+            internal_identity=allowed_internal_identity,
         )
 
     assert result is sentinel_response
@@ -185,3 +183,52 @@ def test_data_assistant_short_circuits_unsupported_question_before_preparing_dat
     assert non_answer.stage == contracts.NonAnswerStage.QUESTION_INTERPRETER
     assert non_answer.unresolved_ambiguities == ("unsupported data",)
     assert non_answer.datasets == ()
+
+
+def test_data_assistant_uses_required_question_interpreter_provider(
+    canonical_question: str,
+    connect_orders: local_orders_fixture.OrdersConnector,
+    allowed_internal_identity: contracts.InternalIdentity,
+) -> None:
+    class FakeProvider:
+        def propose_question_frame(
+            self,
+            *,
+            question: str,
+            semantic_layer_context: dict[str, object],
+        ) -> llm_question_interpreter.QuestionFrameProposal:
+            assert question == canonical_question
+            assert "all_metric_labels" in semantic_layer_context
+            return llm_question_interpreter.QuestionFrameProposal(
+                intent="summarize",
+                metric="total revenue",
+                dimension="region",
+                time_range=llm_question_interpreter.TimeRangeProposal(
+                    label="January 2026",
+                    start_date=datetime.date(2026, 1, 1),
+                    end_date=datetime.date(2026, 1, 31),
+                ),
+                filters=(),
+            )
+
+    with connect_orders((("2026-01-03", "North", "1200.00"),)) as connection:
+        run = workflow_runner.run_data_assistant(
+            connection,
+            canonical_question,
+            question_interpreter_provider=FakeProvider(),
+            internal_identity=allowed_internal_identity,
+        )
+
+    assert isinstance(run, contracts.DataAssistantRun)
+    assert run.question_frame == contracts.QuestionFrame(
+        intent="summarize",
+        metric="total revenue",
+        dimension="region",
+        time_range=contracts.TimeRange(
+            label="January 2026",
+            start_date=datetime.date(2026, 1, 1),
+            end_date=datetime.date(2026, 1, 31),
+        ),
+        filters=(),
+        unresolved_ambiguities=(),
+    )

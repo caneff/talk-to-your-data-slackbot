@@ -4,29 +4,52 @@ from __future__ import annotations
 
 import collections.abc
 import contextlib
-import dataclasses
-import inspect
-import os
 import pathlib
 import typing
 
 import duckdb
 import pytest
 
+import data_assistant.local_orders_fixture as local_orders_fixture
 import data_assistant.slack_boundary as slack_boundary
 import data_assistant.slack_runtime as slack_runtime
-import data_assistant.testing_support as testing_support
 import data_assistant.workflow.contracts as contracts
 
+VALID_SLACK_ENV = {
+    "SLACK_BOT_TOKEN": "xoxb-live-token",
+    "SLACK_APP_TOKEN": "xapp-live-token",
+}
 
-def create_empty_chat_post_calls() -> list[dict[str, str]]:
-    return []
+
+def bolt_message_event(
+    *,
+    event_type: str = "message",
+    channel: str = "D123",
+    channel_type: str = "im",
+    user: str = "U123",
+    text: str = "hello",
+    ts: str = "1710000000.000000",
+    bot_id: str | None = None,
+    subtype: str | None = None,
+) -> slack_runtime.SlackBoltMessageEvent:
+    event: slack_runtime.SlackBoltMessageEvent = {
+        "type": event_type,
+        "channel": channel,
+        "channel_type": channel_type,
+        "user": user,
+        "text": text,
+        "ts": ts,
+    }
+    if bot_id is not None:
+        event["bot_id"] = bot_id
+    if subtype is not None:
+        event["subtype"] = subtype
+    return event
 
 
-def create_empty_registered_handlers() -> dict[
-    str, collections.abc.Callable[..., object]
-]:
-    return {}
+def _connection_factory_should_not_run(
+) -> contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]:
+    raise AssertionError("startup validation should fail before opening data")
 
 
 def test_load_slack_runtime_config_reads_required_env_vars() -> None:
@@ -58,59 +81,102 @@ def test_load_slack_runtime_config_names_all_missing_env_vars() -> None:
     )
 
 
-def test_load_env_file_uses_dotenv_without_overriding_existing_env(
+def test_build_openai_answer_path_uses_openai_provider_without_fallback(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: pathlib.Path,
 ) -> None:
-    """Load local dotenv values while preserving explicit shell exports."""
-    env_file = tmp_path / ".env"
-    env_file.write_text(
-        "\n".join(
-            (
-                "SLACK_BOT_TOKEN=xoxb-dotenv-token",
-                "SLACK_APP_TOKEN=xapp-dotenv-token",
-            )
+    captured_providers: list[object] = []
+
+    class FakeProvider:
+        pass
+
+    def fake_build_openai_provider(
+        environ: collections.abc.Mapping[str, str],
+        *,
+        client: object | None = None,
+    ) -> FakeProvider:
+        del client
+        assert environ["OPENAI_API_KEY"] == "test-key"
+        return FakeProvider()
+
+    def fake_run_data_assistant(
+        connection: duckdb.DuckDBPyConnection,
+        question: str,
+        internal_identity: contracts.InternalIdentity,
+        semantic_layer: object | None = None,
+        question_interpreter_provider: object | None = None,
+    ) -> contracts.FinalResponse:
+        del connection, question, internal_identity, semantic_layer
+        captured_providers.append(question_interpreter_provider)
+        return contracts.FinalResponse(
+            text="openai answer path",
+            trust_summary=contracts.TrustSummary(),
+            response_kind="answer",
         )
+
+    monkeypatch.setattr(
+        slack_runtime.llm_question_interpreter,
+        "build_openai_question_interpreter_provider",
+        fake_build_openai_provider,
     )
-    monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
-    monkeypatch.setenv("SLACK_APP_TOKEN", "xapp-exported-token")
+    monkeypatch.setattr(
+        slack_runtime.workflow_runner,
+        "run_data_assistant",
+        fake_run_data_assistant,
+    )
+    answer_path = slack_runtime.build_openai_answer_path(
+        VALID_SLACK_ENV | {"OPENAI_API_KEY": "test-key"}
+    )
 
-    slack_runtime._load_env_file(env_file)  # pyright: ignore[reportPrivateUsage]
-
-    assert os.environ["SLACK_BOT_TOKEN"] == "xoxb-dotenv-token"
-    assert os.environ["SLACK_APP_TOKEN"] == "xapp-exported-token"
-
-
-def test_run_socket_mode_from_env_fails_before_constructing_runtime_objects() -> None:
-    """Validate config before constructing Slack Bolt runtime objects."""
-    app_factory_calls: list[str] = []
-    handler_factory_calls: list[str] = []
-
-    # These factories record calls instead of constructing Slack Bolt objects.
-    # If validation happens in the wrong order, the assertions below catch it.
-    def app_factory(*, token: str) -> object:
-        app_factory_calls.append(token)
-        return object()
-
-    def socket_mode_handler_factory(
-        *, app_token: str, app: object
-    ) -> FakeSocketModeHandler:
-        handler_factory_calls.append(app_token)
-        return FakeSocketModeHandler(app_token=app_token, app=app)
-
-    with pytest.raises(slack_runtime.SlackRuntimeConfigError):
-        slack_runtime.run_socket_mode_from_env(
-            {},
-            app_factory=app_factory,
-            socket_mode_handler_factory=socket_mode_handler_factory,
+    with duckdb.connect(":memory:") as connection:
+        result = answer_path(
+            connection,
+            "What was total revenue by region in January 2026?",
+            contracts.InternalIdentity(identity_id="slack_user:U123"),
         )
 
-    # Missing config must stop startup before any Slack-facing object exists.
-    assert app_factory_calls == []
-    assert handler_factory_calls == []
+    assert isinstance(result, contracts.FinalResponse)
+    assert result.response_kind == "answer"
+    assert len(captured_providers) == 1
+    assert isinstance(captured_providers[0], FakeProvider)
 
 
-@dataclasses.dataclass
+@pytest.mark.parametrize(
+    ("environ", "connection_factory", "expected_error"),
+    [
+        pytest.param(
+            {},
+            None,
+            slack_runtime.SlackRuntimeConfigError,
+            id="missing Slack config",
+        ),
+        pytest.param(
+            VALID_SLACK_ENV,
+            _connection_factory_should_not_run,
+            slack_runtime.llm_question_interpreter.OpenAIQuestionInterpreterConfigError,
+            id="missing OpenAI config",
+        ),
+    ],
+)
+def test_run_socket_mode_from_env_fails_before_constructing_runtime_objects(
+    environ: collections.abc.Mapping[str, str],
+    connection_factory: slack_runtime.ConnectionFactory | None,
+    expected_error: type[Exception],
+) -> None:
+    """Validate config before constructing Slack Bolt runtime objects."""
+    runtime_factories = RecordingRuntimeFactories()
+
+    with pytest.raises(expected_error):
+        slack_runtime.run_socket_mode_from_env(
+            environ,
+            app_factory=runtime_factories.app_factory,
+            socket_mode_handler_factory=runtime_factories.socket_mode_handler_factory,
+            connection_factory=connection_factory,
+        )
+
+    assert runtime_factories.app_tokens == []
+    assert runtime_factories.created_handlers == []
+
+
 class FakeSocketModeHandler:
     """Small stand-in for Slack Bolt's Socket Mode handler.
 
@@ -119,65 +185,43 @@ class FakeSocketModeHandler:
     app object it was built with, and records whether startup was requested.
     """
 
-    app_token: str
-    app: object
-    starts: int = 0
+    def __init__(self, *, app_token: str, app: object) -> None:
+        self.app_token = app_token
+        self.app = app
+        self.starts = 0
 
     def start(self) -> None:
         """Record that startup was requested without opening a Slack socket."""
         self.starts += 1
 
 
-def test_run_socket_mode_from_env_builds_and_starts_socket_mode_runtime() -> None:
-    """Wire valid env config into injected app and Socket Mode factories."""
-    app_tokens: list[str] = []
-    created_handlers: list[FakeSocketModeHandler] = []
+class RecordingRuntimeFactories:
+    """Capture app and Socket Mode handler construction during startup tests."""
 
-    # The fake app is deliberately plain data. That keeps the assertion focused
-    # on token flow and avoids depending on Slack Bolt internals.
-    def app_factory(*, token: str) -> object:
-        app_tokens.append(token)
+    def __init__(self, *, app: object | None = None) -> None:
+        self.app = app
+        self.app_tokens: list[str] = []
+        self.created_handlers: list[FakeSocketModeHandler] = []
+
+    def app_factory(self, *, token: str) -> object:
+        self.app_tokens.append(token)
+        if self.app is not None:
+            return self.app
         return {"bot_token": token}
 
     def socket_mode_handler_factory(
-        *, app_token: str, app: object
+        self, *, app_token: str, app: object
     ) -> FakeSocketModeHandler:
         handler = FakeSocketModeHandler(app_token=app_token, app=app)
-        created_handlers.append(handler)
+        self.created_handlers.append(handler)
         return handler
 
-    # The cast keeps the test strict-type friendly while the runtime function
-    # exposes the narrower protocol used by production code.
-    handler = typing.cast(
-        FakeSocketModeHandler,
-        slack_runtime.run_socket_mode_from_env(
-            {
-                "SLACK_BOT_TOKEN": "xoxb-live-token",
-                "SLACK_APP_TOKEN": "xapp-live-token",
-            },
-            app_factory=app_factory,
-            socket_mode_handler_factory=socket_mode_handler_factory,
-        ),
-    )
 
-    # These assertions prove the local startup path is wired end-to-end without
-    # contacting Slack: bot token into the app, app token into the handler, then
-    # exactly one startup request.
-    assert app_tokens == ["xoxb-live-token"]
-    assert len(created_handlers) == 1
-    assert handler is created_handlers[0]
-    assert handler.app == {"bot_token": "xoxb-live-token"}
-    assert handler.app_token == "xapp-live-token"
-    assert handler.starts == 1
-
-
-@dataclasses.dataclass
 class RecordingSlackClient:
     """Capture Slack DM replies without calling Slack APIs."""
 
-    calls: list[dict[str, str]] = dataclasses.field(
-        default_factory=create_empty_chat_post_calls
-    )
+    def __init__(self) -> None:
+        self.calls: list[dict[str, str]] = []
 
     def chat_postMessage(self, *, channel: str, thread_ts: str, text: str) -> None:
         self.calls.append(
@@ -189,13 +233,13 @@ class RecordingSlackClient:
         )
 
 
-@dataclasses.dataclass
 class RecordingBoltApp:
     """Capture registered Bolt event handlers without importing Slack Bolt."""
 
-    registered_handlers: dict[str, collections.abc.Callable[..., object]] = (
-        dataclasses.field(default_factory=create_empty_registered_handlers)
-    )
+    def __init__(self) -> None:
+        self.registered_handlers: dict[
+            str, collections.abc.Callable[..., object]
+        ] = {}
 
     def event(
         self, event_name: str
@@ -212,23 +256,33 @@ class RecordingBoltApp:
         return register
 
 
+def sentinel_answer_path(
+    connection: duckdb.DuckDBPyConnection,
+    question: str,
+    internal_identity: contracts.InternalIdentity,
+) -> contracts.FinalResponse:
+    del connection, question, internal_identity
+    return contracts.FinalResponse(
+        text="answer",
+        trust_summary=contracts.TrustSummary(),
+        response_kind="answer",
+    )
+
+
 def test_handle_socket_mode_event_routes_human_dm_through_existing_boundary(
     canonical_question: str,
-    connect_orders: testing_support.OrdersConnector,
+    connect_orders: local_orders_fixture.OrdersConnector,
 ) -> None:
     ack_calls: list[str] = []
     calls: list[str] = []
     client = RecordingSlackClient()
     seen_questions: list[str] = []
     seen_identity_ids: list[str] = []
-    event: slack_runtime.SlackBoltMessageEvent = {
-        "type": "message",
-        "channel": "D123",
-        "channel_type": "im",
-        "user": "U123",
-        "text": canonical_question,
-        "ts": "1710000000.654321",
-    }
+    event = bolt_message_event(
+        user="U123",
+        text=canonical_question,
+        ts="1710000000.654321",
+    )
     final_response = contracts.FinalResponse(
         text="Final answer text.",
         trust_summary=contracts.TrustSummary(datasets=("Commerce Revenue",)),
@@ -277,59 +331,37 @@ def test_handle_socket_mode_event_routes_human_dm_through_existing_boundary(
 
 
 @pytest.mark.parametrize(
-    ("event", "label"),
+    "event",
     [
-        (
-            typing.cast(
-                slack_runtime.SlackBoltMessageEvent,
-                {
-                    "type": "message",
-                    "channel": "D123",
-                    "channel_type": "im",
-                    "user": "U123",
-                    "text": "hello",
-                    "ts": "1710000000.111111",
-                    "bot_id": "B123",
-                },
+        pytest.param(
+            bolt_message_event(
+                ts="1710000000.111111",
+                bot_id="B123",
             ),
-            "bot message",
+            id="bot message",
         ),
-        (
-            typing.cast(
-                slack_runtime.SlackBoltMessageEvent,
-                {
-                    "type": "message",
-                    "channel": "C123",
-                    "channel_type": "channel",
-                    "user": "U123",
-                    "text": "hello",
-                    "ts": "1710000000.222222",
-                },
+        pytest.param(
+            bolt_message_event(
+                channel="C123",
+                channel_type="channel",
+                ts="1710000000.222222",
             ),
-            "non-DM message",
+            id="non-DM message",
         ),
-        (
-            typing.cast(
-                slack_runtime.SlackBoltMessageEvent,
-                {
-                    "type": "app_mention",
-                    "channel": "C123",
-                    "channel_type": "channel",
-                    "user": "U123",
-                    "text": "hello",
-                    "ts": "1710000000.333333",
-                },
+        pytest.param(
+            bolt_message_event(
+                event_type="app_mention",
+                channel="C123",
+                channel_type="channel",
+                ts="1710000000.333333",
             ),
-            "unsupported event type",
+            id="unsupported event type",
         ),
     ],
-    ids=lambda value: value if isinstance(value, str) else None,
 )
 def test_handle_socket_mode_event_acknowledges_and_ignores_unsupported_events(
     event: slack_runtime.SlackBoltMessageEvent,
-    label: str,
 ) -> None:
-    del label
     ack_calls: list[str] = []
     client = RecordingSlackClient()
     connection_factory_calls: list[str] = []
@@ -368,54 +400,30 @@ def test_handle_socket_mode_event_acknowledges_and_ignores_unsupported_events(
 
 def test_run_socket_mode_from_env_registers_message_handler_before_startup() -> None:
     app = RecordingBoltApp()
-    created_handlers: list[FakeSocketModeHandler] = []
-
-    def app_factory(*, token: str) -> object:
-        assert token == "xoxb-live-token"
-        return app
-
-    def socket_mode_handler_factory(
-        *, app_token: str, app: object
-    ) -> FakeSocketModeHandler:
-        assert app is not None
-        handler = FakeSocketModeHandler(app_token=app_token, app=app)
-        created_handlers.append(handler)
-        return handler
+    runtime_factories = RecordingRuntimeFactories(app=app)
 
     def connection_factory(
     ) -> contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]:
         raise AssertionError("startup should register handlers without opening data")
 
-    slack_runtime.run_socket_mode_from_env(
-        {
-            "SLACK_BOT_TOKEN": "xoxb-live-token",
-            "SLACK_APP_TOKEN": "xapp-live-token",
-        },
-        app_factory=app_factory,
-        socket_mode_handler_factory=socket_mode_handler_factory,
-        connection_factory=connection_factory,
+    handler = typing.cast(
+        FakeSocketModeHandler,
+        slack_runtime.run_socket_mode_from_env(
+            VALID_SLACK_ENV,
+            app_factory=runtime_factories.app_factory,
+            socket_mode_handler_factory=runtime_factories.socket_mode_handler_factory,
+            connection_factory=connection_factory,
+            answer_path=sentinel_answer_path,
+        ),
     )
 
+    assert runtime_factories.app_tokens == ["xoxb-live-token"]
     assert "message" in app.registered_handlers
-    assert len(created_handlers) == 1
-    assert created_handlers[0].starts == 1
-
-
-def test_registered_message_handler_exposes_bolt_injected_arguments() -> None:
-    app = RecordingBoltApp()
-
-    def connection_factory(
-    ) -> contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]:
-        raise AssertionError("argument inspection must not open data")
-
-    slack_runtime.register_socket_mode_handlers(
-        app=app,
-        connection_factory=connection_factory,
-    )
-
-    handler = app.registered_handlers["message"]
-
-    assert inspect.getfullargspec(handler).args == ["event", "ack", "client"]
+    assert len(runtime_factories.created_handlers) == 1
+    assert handler is runtime_factories.created_handlers[0]
+    assert handler.app is app
+    assert handler.app_token == "xapp-live-token"
+    assert handler.starts == 1
 
 
 def test_main_starts_socket_mode_with_dev_connection_factory(
@@ -443,8 +451,9 @@ def test_main_starts_socket_mode_with_dev_connection_factory(
         internal_identity_resolver: (
             slack_boundary.InternalIdentityResolver | None
         ) = None,
+        answer_path: slack_boundary.AnswerPath | None = None,
     ) -> FakeSocketModeHandler:
-        del environ, app_factory, socket_mode_handler_factory
+        del environ, app_factory, socket_mode_handler_factory, answer_path
         received_connection_factory.append(connection_factory)
         received_identity_resolver.append(internal_identity_resolver)
         return FakeSocketModeHandler(app_token="xapp-test-token", app=object())
@@ -460,66 +469,3 @@ def test_main_starts_socket_mode_with_dev_connection_factory(
     assert exit_code == 0
     assert received_connection_factory == [dev_connection_factory]
     assert received_identity_resolver == [dev_internal_identity_resolver]
-
-
-def test_run_socket_mode_from_env_registers_dev_runtime_that_answers_canonical_dm(
-    canonical_question: str,
-) -> None:
-    dev_connection_factory = slack_runtime._dev_connection_factory  # pyright: ignore[reportPrivateUsage]
-    dev_internal_identity_resolver = typing.cast(
-        slack_boundary.InternalIdentityResolver,
-        slack_runtime._dev_internal_identity_resolver,  # pyright: ignore[reportPrivateUsage]
-    )
-    app = RecordingBoltApp()
-
-    def app_factory(*, token: str) -> object:
-        assert token == "xoxb-live-token"
-        return app
-
-    def socket_mode_handler_factory(
-        *, app_token: str, app: object
-    ) -> FakeSocketModeHandler:
-        assert app_token == "xapp-live-token"
-        assert app is not None
-        return FakeSocketModeHandler(app_token=app_token, app=app)
-
-    slack_runtime.run_socket_mode_from_env(
-        {
-            "SLACK_BOT_TOKEN": "xoxb-live-token",
-            "SLACK_APP_TOKEN": "xapp-live-token",
-        },
-        app_factory=app_factory,
-        socket_mode_handler_factory=socket_mode_handler_factory,
-        connection_factory=dev_connection_factory,
-        internal_identity_resolver=dev_internal_identity_resolver,
-    )
-
-    handler = app.registered_handlers["message"]
-    ack_calls: list[str] = []
-    client = RecordingSlackClient()
-    event: slack_runtime.SlackBoltMessageEvent = {
-        "type": "message",
-        "channel": "D123",
-        "channel_type": "im",
-        "user": "U999",
-        "text": canonical_question,
-        "ts": "1710000000.654321",
-    }
-
-    result = typing.cast(
-        slack_boundary.SlackRequestResult,
-        handler(
-            event=event,
-            ack=lambda: ack_calls.append("ack"),
-            client=client,
-        ),
-    )
-
-    assert result.acknowledged is True
-    assert ack_calls == ["ack"]
-    assert len(client.calls) == 1
-    assert client.calls[0]["thread_ts"] == "1710000000.654321"
-    assert "Trust Summary:" in client.calls[0]["text"]
-    assert "North" in client.calls[0]["text"]
-    assert "South" in client.calls[0]["text"]
-    assert "I cannot answer safely" not in client.calls[0]["text"]

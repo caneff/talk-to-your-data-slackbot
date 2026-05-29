@@ -83,8 +83,6 @@ class NonAnswerReasonCode(enum.StrEnum):
     PROVIDER_FAILURE = "provider_failure"
     # Provider proposed a label outside the Semantic Layer.
     UNKNOWN_SEMANTIC_LABEL = "unknown_semantic_label"
-    # Provider attempted to choose data retrieval or schema authority.
-    UNSAFE_AUTHORITY_DRIFT = "unsafe_authority_drift"
     # Question asks about data outside approved Curated Datasets.
     UNSUPPORTED_DATA = "unsupported_data"
     # Question uses filters not supported by the current workflow.

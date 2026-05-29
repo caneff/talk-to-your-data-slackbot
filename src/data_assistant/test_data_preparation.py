@@ -4,14 +4,14 @@ import pandas as pd
 import pandas.testing as pd_testing
 
 import data_assistant.data_preparation as data_preparation
+import data_assistant.local_orders_fixture as local_orders_fixture
 import data_assistant.semantic_layer.schema as schema
-import data_assistant.testing_support as testing_support
 import data_assistant.workflow.contracts as contracts
 
 
 def test_prepared_data_contains_bounded_grouped_revenue_results(
     data_request: contracts.DataRequest,
-    connect_orders: testing_support.OrdersConnector,
+    connect_orders: local_orders_fixture.OrdersConnector,
 ) -> None:
     order_rows = (
         ("2026-01-03", "North", "1200.00"),
@@ -37,7 +37,7 @@ def test_prepared_data_contains_bounded_grouped_revenue_results(
 
 def test_prepared_data_records_quality_notes_after_time_filtering(
     data_request: contracts.DataRequest,
-    connect_orders: testing_support.OrdersConnector,
+    connect_orders: local_orders_fixture.OrdersConnector,
 ) -> None:
     order_rows = (
         ("2026-01-03", "North", "100.00"),
@@ -65,7 +65,7 @@ def test_prepared_data_records_quality_notes_after_time_filtering(
 
 def test_prepared_data_uses_metric_source_column_for_missing_values(
     data_request: contracts.DataRequest,
-    connect_orders: testing_support.OrdersConnector,
+    connect_orders: local_orders_fixture.OrdersConnector,
 ) -> None:
     data_request = dataclasses.replace(
         data_request,
