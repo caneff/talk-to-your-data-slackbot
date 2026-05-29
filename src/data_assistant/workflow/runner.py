@@ -7,7 +7,7 @@ import duckdb
 import data_assistant.access_controller as access_controller
 import data_assistant.data_preparation as data_preparation
 import data_assistant.data_requester as data_requester
-import data_assistant.llm_question_interpreter as llm_question_interpreter
+import data_assistant.question_interpreter as question_interpreter
 import data_assistant.reasoning_layer as reasoning_layer
 import data_assistant.response_composer as response_composer
 import data_assistant.semantic_layer.loader as semantic_layer_loader
@@ -20,7 +20,7 @@ def run_data_assistant(
     connection: duckdb.DuckDBPyConnection,
     question: str,
     *,
-    question_interpreter_provider: llm_question_interpreter.QuestionInterpreterProvider,
+    question_interpreter_provider: question_interpreter.QuestionInterpreterProvider,
     internal_identity: contracts.InternalIdentity,
     semantic_layer: schema.SemanticLayer | None = None,
 ) -> contracts.WorkflowResult:
@@ -55,7 +55,7 @@ def run_data_assistant(
         semantic_layer or semantic_layer_loader.load_semantic_layer()
     )
 
-    question_frame_result = llm_question_interpreter.interpret_question(
+    question_frame_result = question_interpreter.interpret_question(
         question=question,
         semantic_layer=active_semantic_layer,
         provider=question_interpreter_provider,

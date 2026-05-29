@@ -114,7 +114,7 @@ def test_build_openai_answer_path_uses_openai_provider_without_fallback(
         )
 
     monkeypatch.setattr(
-        slack_runtime.llm_question_interpreter,
+        slack_runtime.question_interpreter,
         "build_openai_question_interpreter_provider",
         fake_build_openai_provider,
     )
@@ -152,7 +152,7 @@ def test_build_openai_answer_path_uses_openai_provider_without_fallback(
         pytest.param(
             VALID_SLACK_ENV,
             _connection_factory_should_not_run,
-            slack_runtime.llm_question_interpreter.OpenAIQuestionInterpreterConfigError,
+            slack_runtime.question_interpreter.OpenAIQuestionInterpreterConfigError,
             id="missing OpenAI config",
         ),
     ],

@@ -3,7 +3,7 @@ import datetime
 
 import pytest
 
-import data_assistant.llm_question_interpreter as llm_question_interpreter
+import data_assistant.question_interpreter as question_interpreter
 import data_assistant.question_interpreter_test_support as interpreter_support
 import data_assistant.semantic_layer.testing_support as semantic_layer_testing
 import data_assistant.workflow.contracts as contracts
@@ -12,7 +12,7 @@ import data_assistant.workflow.contracts as contracts
 @dataclasses.dataclass(frozen=True)
 class ContractSnapshotCase:
     name: str
-    provider: llm_question_interpreter.QuestionInterpreterProvider
+    provider: question_interpreter.QuestionInterpreterProvider
     expected: contracts.StageResult[contracts.QuestionFrame]
     question: str = interpreter_support.CANONICAL_DATA_QUESTION
 
@@ -23,15 +23,15 @@ class ProviderFailureProvider:
         *,
         question: str,
         semantic_layer_context: dict[str, object],
-    ) -> llm_question_interpreter.ProviderFailure:
+    ) -> question_interpreter.ProviderFailure:
         del question, semantic_layer_context
-        return llm_question_interpreter.ProviderFailure(reason="provider unavailable")
+        return question_interpreter.ProviderFailure(reason="provider unavailable")
 
 
 def snapshot_case(
     *,
     name: str,
-    proposal: llm_question_interpreter.QuestionFrameProposal,
+    proposal: question_interpreter.QuestionFrameProposal,
     expected: contracts.StageResult[contracts.QuestionFrame],
     question: str = interpreter_support.CANONICAL_DATA_QUESTION,
 ) -> ContractSnapshotCase:
@@ -46,7 +46,7 @@ def snapshot_case(
 def provider_snapshot_case(
     *,
     name: str,
-    provider: llm_question_interpreter.QuestionInterpreterProvider,
+    provider: question_interpreter.QuestionInterpreterProvider,
     expected: contracts.StageResult[contracts.QuestionFrame],
     question: str = interpreter_support.CANONICAL_DATA_QUESTION,
 ) -> ContractSnapshotCase:
@@ -218,7 +218,7 @@ CONTRACT_SNAPSHOT_CASES = (
     snapshot_case(
         name="invalid_time_range_ordering",
         proposal=interpreter_support.question_frame_proposal(
-            time_range=llm_question_interpreter.TimeRangeProposal(
+            time_range=question_interpreter.TimeRangeProposal(
                 label="January 2026",
                 start_date=datetime.date(2026, 1, 31),
                 end_date=datetime.date(2026, 1, 1),
@@ -247,7 +247,7 @@ def contract_snapshot_id(case: ContractSnapshotCase) -> str:
 def test_question_interpreter_returns_expected_contract(
     case: ContractSnapshotCase,
 ) -> None:
-    result = llm_question_interpreter.interpret_question(
+    result = question_interpreter.interpret_question(
         question=case.question,
         semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
         provider=case.provider,

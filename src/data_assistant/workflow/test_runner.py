@@ -4,8 +4,8 @@ import pytest
 
 import data_assistant.data_preparation as data_preparation
 import data_assistant.data_requester as data_requester
-import data_assistant.llm_question_interpreter as llm_question_interpreter
 import data_assistant.local_orders_fixture as local_orders_fixture
+import data_assistant.question_interpreter as question_interpreter
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
 
@@ -39,7 +39,7 @@ def capture_non_answer_response(
 def test_data_assistant_runs_end_to_end(
     canonical_question: str,
     connect_orders: local_orders_fixture.OrdersConnector,
-    canonical_question_provider: llm_question_interpreter.QuestionInterpreterProvider,
+    canonical_question_provider: question_interpreter.QuestionInterpreterProvider,
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
     order_rows = (
@@ -85,7 +85,7 @@ def test_data_assistant_runs_end_to_end(
 def test_data_assistant_short_circuits_question_ambiguity(
     monkeypatch: pytest.MonkeyPatch,
     connect_orders: local_orders_fixture.OrdersConnector,
-    missing_time_range_provider: llm_question_interpreter.QuestionInterpreterProvider,
+    missing_time_range_provider: question_interpreter.QuestionInterpreterProvider,
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
     sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
@@ -111,7 +111,7 @@ def test_data_assistant_denies_dataset_access_before_request_or_preparation(
     monkeypatch: pytest.MonkeyPatch,
     canonical_question: str,
     connect_orders: local_orders_fixture.OrdersConnector,
-    canonical_question_provider: llm_question_interpreter.QuestionInterpreterProvider,
+    canonical_question_provider: question_interpreter.QuestionInterpreterProvider,
 ) -> None:
     sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
 
@@ -153,7 +153,7 @@ def test_data_assistant_denies_dataset_access_before_request_or_preparation(
 def test_data_assistant_short_circuits_unsupported_question_before_preparing_data(
     monkeypatch: pytest.MonkeyPatch,
     connect_orders: local_orders_fixture.OrdersConnector,
-    canonical_question_provider: llm_question_interpreter.QuestionInterpreterProvider,
+    canonical_question_provider: question_interpreter.QuestionInterpreterProvider,
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
     sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
@@ -196,14 +196,14 @@ def test_data_assistant_uses_required_question_interpreter_provider(
             *,
             question: str,
             semantic_layer_context: dict[str, object],
-        ) -> llm_question_interpreter.QuestionFrameProposal:
+        ) -> question_interpreter.QuestionFrameProposal:
             assert question == canonical_question
             assert "all_metric_labels" in semantic_layer_context
-            return llm_question_interpreter.QuestionFrameProposal(
+            return question_interpreter.QuestionFrameProposal(
                 intent="summarize",
                 metric="total revenue",
                 dimension="region",
-                time_range=llm_question_interpreter.TimeRangeProposal(
+                time_range=question_interpreter.TimeRangeProposal(
                     label="January 2026",
                     start_date=datetime.date(2026, 1, 1),
                     end_date=datetime.date(2026, 1, 31),

@@ -3,15 +3,15 @@ import typing
 
 import pytest
 
-import data_assistant.llm_question_interpreter as llm_question_interpreter
+import data_assistant.question_interpreter as question_interpreter
 import data_assistant.question_interpreter_test_support as test_support
 
 
 def test_load_openai_provider_config_requires_api_key_only_when_selected() -> None:
     with pytest.raises(
-        llm_question_interpreter.OpenAIQuestionInterpreterConfigError
+        question_interpreter.OpenAIQuestionInterpreterConfigError
     ) as error_info:
-        llm_question_interpreter.load_openai_question_interpreter_config({})
+        question_interpreter.load_openai_question_interpreter_config({})
 
     assert str(error_info.value) == (
         "Missing required OpenAI environment variables: OPENAI_API_KEY"
@@ -19,7 +19,7 @@ def test_load_openai_provider_config_requires_api_key_only_when_selected() -> No
 
 
 def test_load_openai_provider_config_allows_model_override() -> None:
-    override_config = llm_question_interpreter.load_openai_question_interpreter_config(
+    override_config = question_interpreter.load_openai_question_interpreter_config(
         {
             "OPENAI_API_KEY": "test-key",
             "OPENAI_MODEL": "gpt-test-mini",
@@ -27,7 +27,7 @@ def test_load_openai_provider_config_allows_model_override() -> None:
     )
 
     assert override_config == (
-        llm_question_interpreter.OpenAIQuestionInterpreterConfig(
+        question_interpreter.OpenAIQuestionInterpreterConfig(
             api_key="test-key",
             model="gpt-test-mini",
         )
@@ -38,7 +38,7 @@ def _openai_provider_returning(
     response: object,
     *,
     parse_calls: list[dict[str, object]] | None = None,
-) -> llm_question_interpreter.OpenAIQuestionInterpreterProvider:
+) -> question_interpreter.OpenAIQuestionInterpreterProvider:
     """Build a provider with a fake Responses client.
 
     Parameters
@@ -50,7 +50,7 @@ def _openai_provider_returning(
 
     Returns
     -------
-    llm_question_interpreter.OpenAIQuestionInterpreterProvider
+    question_interpreter.OpenAIQuestionInterpreterProvider
         Provider wired to the fake OpenAI client.
     """
     class FakeResponsesClient:
@@ -62,13 +62,13 @@ def _openai_provider_returning(
     class FakeOpenAIClient:
         responses = FakeResponsesClient()
 
-    return llm_question_interpreter.OpenAIQuestionInterpreterProvider(
-        config=llm_question_interpreter.OpenAIQuestionInterpreterConfig(
+    return question_interpreter.OpenAIQuestionInterpreterProvider(
+        config=question_interpreter.OpenAIQuestionInterpreterConfig(
             api_key="test-key",
             model="gpt-test-mini",
         ),
         client=typing.cast(
-            llm_question_interpreter._OpenAIClient,  # pyright: ignore[reportPrivateUsage]
+            question_interpreter._OpenAIClient,  # pyright: ignore[reportPrivateUsage]
             FakeOpenAIClient(),
         ),
     )
@@ -87,11 +87,11 @@ def test_build_openai_provider_accepts_injected_client() -> None:
         responses = FakeResponsesClient()
 
     client = typing.cast(
-        llm_question_interpreter._OpenAIClient,  # pyright: ignore[reportPrivateUsage]
+        question_interpreter._OpenAIClient,  # pyright: ignore[reportPrivateUsage]
         FakeOpenAIClient(),
     )
 
-    provider = llm_question_interpreter.build_openai_question_interpreter_provider(
+    provider = question_interpreter.build_openai_question_interpreter_provider(
         {"OPENAI_API_KEY": "test-key", "OPENAI_MODEL": "gpt-test-mini"},
         client=client,
     )
@@ -153,7 +153,7 @@ def test_openai_provider_maps_refusal_to_provider_failure() -> None:
         semantic_layer_context={"datasets": []},
     )
 
-    assert result == llm_question_interpreter.ProviderFailure(reason="cannot comply")
+    assert result == question_interpreter.ProviderFailure(reason="cannot comply")
 
 
 def test_openai_provider_maps_missing_parsed_output_to_provider_failure() -> None:
@@ -167,6 +167,6 @@ def test_openai_provider_maps_missing_parsed_output_to_provider_failure() -> Non
         semantic_layer_context={"datasets": []},
     )
 
-    assert result == llm_question_interpreter.ProviderFailure(
+    assert result == question_interpreter.ProviderFailure(
         reason="OpenAI provider returned no parsed output"
     )

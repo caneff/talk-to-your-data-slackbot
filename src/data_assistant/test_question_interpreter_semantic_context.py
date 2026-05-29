@@ -1,7 +1,7 @@
 import datetime
 import typing
 
-import data_assistant.llm_question_interpreter as llm_question_interpreter
+import data_assistant.question_interpreter as question_interpreter
 import data_assistant.semantic_layer.schema as schema
 
 
@@ -55,7 +55,7 @@ def test_semantic_layer_context_exposes_business_labels_not_storage_details() ->
         ),
     )
 
-    semantic_layer_context = llm_question_interpreter.build_semantic_layer_context(
+    semantic_layer_context = question_interpreter.build_semantic_layer_context(
         semantic_layer
     )
     dataset_context = _single_dataset_context(semantic_layer_context)
