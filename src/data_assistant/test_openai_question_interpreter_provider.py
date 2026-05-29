@@ -34,6 +34,46 @@ def test_load_openai_provider_config_allows_model_override() -> None:
     )
 
 
+def _openai_provider_returning(
+    response: object,
+    *,
+    parse_calls: list[dict[str, object]] | None = None,
+) -> llm_question_interpreter.OpenAIQuestionInterpreterProvider:
+    """Build a provider with a fake Responses client.
+
+    Parameters
+    ----------
+    response : object
+        Response object returned by the fake `responses.parse` call.
+    parse_calls : list[dict[str, object]] | None, optional
+        Optional sink for captured `responses.parse` keyword arguments.
+
+    Returns
+    -------
+    llm_question_interpreter.OpenAIQuestionInterpreterProvider
+        Provider wired to the fake OpenAI client.
+    """
+    class FakeResponsesClient:
+        def parse(self, **kwargs: object) -> object:
+            if parse_calls is not None:
+                parse_calls.append(kwargs)
+            return response
+
+    class FakeOpenAIClient:
+        responses = FakeResponsesClient()
+
+    return llm_question_interpreter.OpenAIQuestionInterpreterProvider(
+        config=llm_question_interpreter.OpenAIQuestionInterpreterConfig(
+            api_key="test-key",
+            model="gpt-test-mini",
+        ),
+        client=typing.cast(
+            llm_question_interpreter._OpenAIClient,  # pyright: ignore[reportPrivateUsage]
+            FakeOpenAIClient(),
+        ),
+    )
+
+
 def test_build_openai_provider_accepts_injected_client() -> None:
     class FakeResponsesClient:
         def parse(self, **kwargs: object) -> object:
@@ -69,23 +109,9 @@ def test_openai_provider_returns_question_frame_proposal_from_parsed_response() 
     class FakeParsedResponse:
         output_parsed = test_support.question_frame_proposal()
 
-    class FakeResponsesClient:
-        def parse(self, **kwargs: object) -> FakeParsedResponse:
-            parse_calls.append(kwargs)
-            return FakeParsedResponse()
-
-    class FakeOpenAIClient:
-        responses = FakeResponsesClient()
-
-    provider = llm_question_interpreter.OpenAIQuestionInterpreterProvider(
-        config=llm_question_interpreter.OpenAIQuestionInterpreterConfig(
-            api_key="test-key",
-            model="gpt-test-mini",
-        ),
-        client=typing.cast(
-            llm_question_interpreter._OpenAIClient,  # pyright: ignore[reportPrivateUsage]
-            FakeOpenAIClient(),
-        ),
+    provider = _openai_provider_returning(
+        FakeParsedResponse(),
+        parse_calls=parse_calls,
     )
     question = "sentinel question"
     semantic_layer_context: dict[str, object] = {"sentinel": "context"}
@@ -120,24 +146,7 @@ def test_openai_provider_maps_refusal_to_provider_failure() -> None:
         output_parsed = None
         output = [FakeMessageOutput()]
 
-    class FakeResponsesClient:
-        def parse(self, **kwargs: object) -> FakeRefusalResponse:
-            del kwargs
-            return FakeRefusalResponse()
-
-    class FakeOpenAIClient:
-        responses = FakeResponsesClient()
-
-    provider = llm_question_interpreter.OpenAIQuestionInterpreterProvider(
-        config=llm_question_interpreter.OpenAIQuestionInterpreterConfig(
-            api_key="test-key",
-            model="gpt-test-mini",
-        ),
-        client=typing.cast(
-            llm_question_interpreter._OpenAIClient,  # pyright: ignore[reportPrivateUsage]
-            FakeOpenAIClient(),
-        ),
-    )
+    provider = _openai_provider_returning(FakeRefusalResponse())
 
     result = provider.propose_question_frame(
         question=test_support.CANONICAL_DATA_QUESTION,
@@ -151,24 +160,7 @@ def test_openai_provider_maps_missing_parsed_output_to_provider_failure() -> Non
     class FakeMissingParsedResponse:
         output_parsed = None
 
-    class FakeResponsesClient:
-        def parse(self, **kwargs: object) -> FakeMissingParsedResponse:
-            del kwargs
-            return FakeMissingParsedResponse()
-
-    class FakeOpenAIClient:
-        responses = FakeResponsesClient()
-
-    provider = llm_question_interpreter.OpenAIQuestionInterpreterProvider(
-        config=llm_question_interpreter.OpenAIQuestionInterpreterConfig(
-            api_key="test-key",
-            model="gpt-test-mini",
-        ),
-        client=typing.cast(
-            llm_question_interpreter._OpenAIClient,  # pyright: ignore[reportPrivateUsage]
-            FakeOpenAIClient(),
-        ),
-    )
+    provider = _openai_provider_returning(FakeMissingParsedResponse())
 
     result = provider.propose_question_frame(
         question=test_support.CANONICAL_DATA_QUESTION,

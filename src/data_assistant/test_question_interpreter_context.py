@@ -30,15 +30,3 @@ def test_build_semantic_layer_context_uses_only_business_facing_fields() -> None
         "all_dimension_labels": ["customer region", "region"],
         "supported_intents": ["summarize"],
     }
-    rendered_semantic_layer_context = repr(semantic_layer_context)
-    assert "commerce" not in rendered_semantic_layer_context
-    assert "orders" not in rendered_semantic_layer_context
-    assert "customers" not in rendered_semantic_layer_context
-    assert "total_revenue" not in rendered_semantic_layer_context
-    assert "customer_region" not in rendered_semantic_layer_context
-    assert "sum(revenue)" not in rendered_semantic_layer_context
-    assert "allowed_identity_ids" not in rendered_semantic_layer_context
-    assert (
-        "Commerce order data refreshed through 2026-01-31."
-        not in rendered_semantic_layer_context
-    )
