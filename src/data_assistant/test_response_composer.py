@@ -50,7 +50,7 @@ def test_response_composer_returns_plain_text_with_trust_summary() -> None:
         )
     )
 
-    assert response.response_kind == "answer"
+    assert response.response_kind == contracts.ResponseKind.ANSWER
     assert (
         "Total revenue in January 2026 was $2,050.00, grouped across 2 regions."
         in response.text
@@ -84,7 +84,7 @@ def test_response_composer_returns_final_response_for_non_answer() -> None:
         trust_summary=contracts.TrustSummary(
             limitations=("User-provided CSV files are not supported data sources.",),
         ),
-        response_kind="unsupported",
+        response_kind=contracts.ResponseKind.UNSUPPORTED,
     )
 
 
@@ -93,7 +93,7 @@ def test_response_composer_returns_final_response_for_non_answer() -> None:
     [
         pytest.param(
             _non_answer(),
-            "unsupported",
+            contracts.ResponseKind.UNSUPPORTED,
             contracts.TrustSummary(
                 limitations=(
                     "User-provided CSV files are not supported data sources.",
@@ -110,7 +110,7 @@ def test_response_composer_returns_final_response_for_non_answer() -> None:
                 next_step="Ask a data owner to grant Dataset Access.",
                 datasets=("commerce",),
             ),
-            "access_denial",
+            contracts.ResponseKind.ACCESS_DENIAL,
             contracts.TrustSummary(
                 datasets=("commerce",),
                 limitations=(
@@ -123,15 +123,15 @@ def test_response_composer_returns_final_response_for_non_answer() -> None:
             _non_answer(
                 reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
                 reason=(
-                    "The Data Question is missing required interpretation details."
+                    "The Data Question needs a time range before data selection."
                 ),
                 unresolved_ambiguities=("time range",),
                 next_step="Ask a clarification question before selecting data.",
             ),
-            "clarification_needed",
+            contracts.ResponseKind.CLARIFICATION_NEEDED,
             contracts.TrustSummary(
                 limitations=(
-                    "The Data Question is missing required interpretation details.",
+                    "The Data Question needs a time range before data selection.",
                 ),
             ),
             id="clarification needed",
@@ -140,7 +140,7 @@ def test_response_composer_returns_final_response_for_non_answer() -> None:
 )
 def test_response_composer_maps_non_answer_kind_and_trust_summary(
     non_answer: contracts.NonAnswer,
-    expected_response_kind: str,
+    expected_response_kind: contracts.ResponseKind,
     expected_trust_summary: contracts.TrustSummary,
 ) -> None:
     response = response_composer.compose_non_answer_response(non_answer)
@@ -148,6 +148,21 @@ def test_response_composer_maps_non_answer_kind_and_trust_summary(
     assert response.response_kind == expected_response_kind
     assert response.trust_summary == expected_trust_summary
     assert non_answer.next_step in response.text
+
+
+def test_response_composer_uses_clarification_wording_for_ambiguous_dataset() -> None:
+    response = response_composer.compose_non_answer_response(
+        _non_answer(
+            stage=contracts.NonAnswerStage.SEMANTIC_ROUTER,
+            reason_code=contracts.NonAnswerReasonCode.AMBIGUOUS_DATASET,
+            reason="Multiple Curated Datasets could answer this Data Question.",
+            unresolved_ambiguities=("dataset choice",),
+            next_step="Ask which Curated Dataset the team member wants.",
+        )
+    )
+
+    assert response.response_kind == contracts.ResponseKind.CLARIFICATION_NEEDED
+    assert response.text.startswith("I cannot answer safely yet because")
 
 
 def test_response_composer_omits_sensitive_details_from_access_denial() -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import data_assistant.non_answer_catalog as non_answer_catalog
 import data_assistant.workflow.contracts as contracts
 
 
@@ -35,7 +36,7 @@ def compose_final_response(
     return contracts.FinalResponse(
         text=text,
         trust_summary=trust_summary,
-        response_kind="answer",
+        response_kind=contracts.ResponseKind.ANSWER,
     )
 
 
@@ -43,14 +44,13 @@ def compose_non_answer_response(
     non_answer: contracts.NonAnswer,
 ) -> contracts.FinalResponse:
     """Compose a plain-text Final Response for a workflow Non-Answer."""
+    response_kind = non_answer_catalog.response_kind_for(non_answer.reason_code)
     adverb = (
         " yet"
-        if non_answer.reason
-        == "The Data Question is missing required interpretation details."
+        if response_kind == contracts.ResponseKind.CLARIFICATION_NEEDED
         else ""
     )
     reason = non_answer.reason[0].lower() + non_answer.reason[1:]
-    response_kind = _response_kind_for_non_answer(non_answer)
     trust_summary = contracts.TrustSummary(
         datasets=non_answer.datasets,
         limitations=(non_answer.reason,),
@@ -85,14 +85,6 @@ def render_trust_summary(trust_summary: contracts.TrustSummary) -> str:
     if trust_summary.limitations:
         segments.append(f"Limitations: {' '.join(trust_summary.limitations)}")
     return "Trust Summary: " + " ".join(segments)
-
-
-def _response_kind_for_non_answer(non_answer: contracts.NonAnswer) -> str:
-    if non_answer.stage == contracts.NonAnswerStage.ACCESS_CONTROLLER:
-        return "access_denial"
-    if non_answer.unresolved_ambiguities == ("time range",):
-        return "clarification_needed"
-    return "unsupported"
 
 
 def _format_money(value: float) -> str:

@@ -110,7 +110,7 @@ def test_build_openai_answer_path_uses_openai_provider_without_fallback(
         return contracts.FinalResponse(
             text="openai answer path",
             trust_summary=contracts.TrustSummary(),
-            response_kind="answer",
+            response_kind=contracts.ResponseKind.ANSWER,
         )
 
     monkeypatch.setattr(
@@ -135,7 +135,7 @@ def test_build_openai_answer_path_uses_openai_provider_without_fallback(
         )
 
     assert isinstance(result, contracts.FinalResponse)
-    assert result.response_kind == "answer"
+    assert result.response_kind == contracts.ResponseKind.ANSWER
     assert len(captured_providers) == 1
     assert isinstance(captured_providers[0], FakeProvider)
 
@@ -265,7 +265,7 @@ def sentinel_answer_path(
     return contracts.FinalResponse(
         text="answer",
         trust_summary=contracts.TrustSummary(),
-        response_kind="answer",
+        response_kind=contracts.ResponseKind.ANSWER,
     )
 
 
@@ -286,7 +286,7 @@ def test_handle_socket_mode_event_routes_human_dm_through_existing_boundary(
     final_response = contracts.FinalResponse(
         text="Final answer text.",
         trust_summary=contracts.TrustSummary(datasets=("Commerce Revenue",)),
-        response_kind="answer",
+        response_kind=contracts.ResponseKind.ANSWER,
     )
 
     def acknowledge() -> None:

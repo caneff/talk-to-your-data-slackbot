@@ -44,7 +44,7 @@ def _final_response(text: str = "Final answer text.") -> contracts.FinalResponse
     return contracts.FinalResponse(
         text=text,
         trust_summary=contracts.TrustSummary(datasets=("Commerce Revenue",)),
-        response_kind="answer",
+        response_kind=contracts.ResponseKind.ANSWER,
     )
 
 

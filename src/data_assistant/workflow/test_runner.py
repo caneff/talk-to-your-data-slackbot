@@ -19,7 +19,7 @@ def capture_non_answer_response(
         trust_summary=contracts.TrustSummary(
             limitations=("non-answer trust summary",),
         ),
-        response_kind="unsupported",
+        response_kind=contracts.ResponseKind.UNSUPPORTED,
     )
 
     def compose_non_answer_response(
@@ -79,7 +79,7 @@ def test_data_assistant_runs_end_to_end(
     )
     assert "- Unknown: $250.00" in run.final_response.text
     assert "$5,150.00" in run.final_response.text
-    assert run.final_response.response_kind == "answer"
+    assert run.final_response.response_kind == contracts.ResponseKind.ANSWER
     assert run.final_response.trust_summary.freshness == (
         "Commerce order data refreshed through 2026-01-31."
     )

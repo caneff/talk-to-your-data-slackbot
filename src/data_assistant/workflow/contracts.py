@@ -93,6 +93,15 @@ class NonAnswerReasonCode(enum.StrEnum):
     UNSUPPORTED_SHAPE = "unsupported_shape"
 
 
+class ResponseKind(enum.StrEnum):
+    """User-facing final response classification."""
+
+    ACCESS_DENIAL = "access_denial"
+    ANSWER = "answer"
+    CLARIFICATION_NEEDED = "clarification_needed"
+    UNSUPPORTED = "unsupported"
+
+
 @dataclasses.dataclass(frozen=True)
 class NonAnswer:
     """Workflow short-circuit when a stage cannot safely proceed."""
@@ -191,7 +200,7 @@ class FinalResponse:
 
     text: str
     trust_summary: TrustSummary
-    response_kind: str
+    response_kind: ResponseKind
 
 
 @dataclasses.dataclass(frozen=True)
