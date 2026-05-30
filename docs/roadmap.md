@@ -97,6 +97,11 @@ Question to a Final Response grounded in one approved Curated Dataset.
 - Support approved joins across multiple Curated Datasets.
 - Add Result Access checks for sensitive fields, segments, and aggregation
   levels.
+- Consider access-aware Dataset Selection so "several datasets match but the
+  caller can access only one" resolves to an answer instead of an ambiguity
+  Non-Answer. Per ADR-0006 this is a deliberate redefinition of whether the
+  Semantic Router owns authorization, not a tiebreaker; it needs its own ADR and
+  must preserve the exists-but-forbidden (`ACCESS_DENIED`) distinction.
 - Let the Reasoning Layer emit More Data Requests that return through the
   Workflow Orchestrator.
 

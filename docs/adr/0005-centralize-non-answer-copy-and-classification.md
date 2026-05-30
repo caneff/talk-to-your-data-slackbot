@@ -23,6 +23,7 @@ Response Composer looks it up from the catalog and owns only sentence rendering.
 
 - `response_kind` becomes a typed `ResponseKind` on the Final Response; adding a
   reason code without classifying it is a type error, not a runtime surprise.
-- `stage` stays on the Non-Answer as informational metadata only. It is not
-  derivable from the reason code: `AMBIGUOUS_DATASET` is raised by both the
-  Semantic Router and the Data Requester.
+- `stage` stays on the Non-Answer as informational metadata only. It records
+  which workflow stage detected the condition and is deliberately kept distinct
+  from the reason code, which carries meaning and classification; the Response
+  Composer never reads `stage`.
