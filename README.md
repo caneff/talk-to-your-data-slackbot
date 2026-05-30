@@ -125,6 +125,44 @@ For local development, the runtime uses a tiny in-memory DuckDB `orders` table. 
    `What was total revenue by region?`
 8. Verify the bot replies with a Non-Answer Response that asks for clarification and includes a Trust Summary.
 
+## Manual live Question Interpreter eval
+
+Run the provider-only live eval suite with a real OpenAI key:
+
+```bash
+OPENAI_API_KEY=your-key uv run python -m data_assistant.live_question_interpreter_eval
+```
+
+Optional model override:
+
+```bash
+OPENAI_API_KEY=your-key OPENAI_MODEL=gpt-4o-mini uv run python -m data_assistant.live_question_interpreter_eval
+```
+
+The suite sends real OpenAI requests for a small set of enabled passing cases
+and compares raw `propose_question_frame(...)` meaning against exact expected:
+
+- `intent`
+- `metric`
+- `dimension`
+- `filters`
+- `time_range.start_date`
+- `time_range.end_date`
+
+`time_range.label` is informational and ignored by the comparison.
+
+Expected output shape:
+
+```text
+Total cases: 3
+Passed: 3
+Failed: 0
+```
+
+If any case fails, output includes each failed case name, question, expected
+proposal, actual provider result, and field-level mismatch reason. Missing
+`OPENAI_API_KEY` exits nonzero with a clear config error.
+
 ## Development
 
 Run checks with `uv`:
