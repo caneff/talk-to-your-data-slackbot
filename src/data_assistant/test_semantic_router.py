@@ -6,6 +6,26 @@ import data_assistant.semantic_router as semantic_router
 import data_assistant.workflow.contracts as contracts
 
 
+def test_semantic_router_resolves_available_data(
+    question_frame: contracts.QuestionFrame,
+    active_semantic_layer: schema.SemanticLayer,
+) -> None:
+    result = semantic_router.resolve_available_data(
+        question_frame,
+        active_semantic_layer,
+    )
+
+    assert not isinstance(result, contracts.NonAnswer)
+    resolution = result.value
+    assert len(resolution.semantic_matches) == 1
+    assert resolution.semantic_matches[0].table.table_id == "orders"
+    assert len(resolution.dataset_selection.selected_datasets) == 1
+    assert (
+        resolution.dataset_selection.selected_datasets[0].dataset_id
+        == "commerce"
+    )
+
+
 def test_dataset_selection_chooses_one_curated_dataset_with_rationale(
     dataset_selection: contracts.DatasetSelection,
 ) -> None:

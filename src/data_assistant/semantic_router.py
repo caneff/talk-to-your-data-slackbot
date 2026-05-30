@@ -2,7 +2,30 @@
 
 from __future__ import annotations
 
+import data_assistant.semantic_layer.schema as schema
+import data_assistant.semantic_matcher as semantic_matcher
 import data_assistant.workflow.contracts as contracts
+
+
+def resolve_available_data(
+    question_frame: contracts.QuestionFrame,
+    semantic_layer: schema.SemanticLayer,
+) -> contracts.StageResult[contracts.AvailableDataResolution]:
+    """Resolve Available Data evidence and Dataset Selection."""
+    semantic_matches = semantic_matcher.find_semantic_matches(
+        question_frame=question_frame,
+        semantic_layer=semantic_layer,
+    )
+    dataset_selection_result = select_dataset(semantic_matches)
+    if isinstance(dataset_selection_result, contracts.NonAnswer):
+        return dataset_selection_result
+
+    return contracts.Success(
+        contracts.AvailableDataResolution(
+            semantic_matches=semantic_matches,
+            dataset_selection=dataset_selection_result.value,
+        ),
+    )
 
 
 def select_dataset(

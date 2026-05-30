@@ -82,8 +82,9 @@ Question**.
 _Avoid_: Table list, data dictionary, source registry
 
 **Workflow Orchestrator**:
-The coordinator that moves a **Data Question** through interpretation, dataset
-selection, permission checks, data retrieval, reasoning, and response delivery.
+The coordinator that moves a **Data Question** through five top-level phases:
+interpret the **Data Question**, resolve **Available Data**, authorize
+**Available Data**, prepare data, and synthesize the **Final Response**.
 _Avoid_: Brain, router, controller
 
 **Conversation Manager**:

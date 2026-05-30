@@ -127,6 +127,14 @@ class SemanticMatch:
 
 
 @dataclasses.dataclass(frozen=True)
+class AvailableDataResolution:
+    """Trace of resolving Available Data for a Question Frame."""
+
+    semantic_matches: tuple[SemanticMatch, ...]
+    dataset_selection: DatasetSelection
+
+
+@dataclasses.dataclass(frozen=True)
 class DataRequest:
     """Constrained request for bounded Prepared Data."""
 
@@ -188,11 +196,10 @@ class FinalResponse:
 
 @dataclasses.dataclass(frozen=True)
 class DataAssistantRun:
-    """Trace of the Data Assistant path for the canonical question."""
+    """Trace of a successful Data Assistant run."""
 
     question_frame: QuestionFrame
-    semantic_matches: tuple[SemanticMatch, ...]
-    dataset_selection: DatasetSelection
+    available_data_resolution: AvailableDataResolution
     data_request: DataRequest
     prepared_data: PreparedData
     answer_draft: AnswerDraft
