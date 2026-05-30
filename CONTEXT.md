@@ -224,6 +224,15 @@ answer, what data or permission is missing, and a useful next step, without
 fabricating numbers or conclusions.
 _Avoid_: Error, refusal, fallback answer
 
+**Non-Answer Catalog**:
+The single registry that owns the canonical definition of every **Non-Answer
+Response**, keyed on reason code: its team-member-facing reason, next step, and
+how the **Response Composer** classifies it. The **Question Interpreter**,
+**Semantic Router**, **Data Requester**, and **Access Controller** build
+Non-Answers through the catalog instead of composing reason text in place, so
+wording and classification live in one place.
+_Avoid_: Error table, message registry, reason enum
+
 **Access Denial Response**:
 A **Non-Answer Response** for denied access that explains the permission limit
 and can name the relevant **Curated Dataset** while avoiding restricted details
