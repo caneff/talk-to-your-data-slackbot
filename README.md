@@ -127,16 +127,16 @@ For local development, the runtime uses a tiny in-memory DuckDB `orders` table. 
 
 ## Manual live Question Interpreter eval
 
-Run the provider-only live eval suite with a real OpenAI key:
+Run the provider-only live eval suite with `OPENAI_API_KEY` in `.env`:
 
 ```bash
-OPENAI_API_KEY=your-key uv run python -m data_assistant.live_question_interpreter_eval
+uv run python -m data_assistant.live_question_interpreter_eval
 ```
 
-Optional model override:
+Optional model override in `.env`:
 
-```bash
-OPENAI_API_KEY=your-key OPENAI_MODEL=gpt-4o-mini uv run python -m data_assistant.live_question_interpreter_eval
+```dotenv
+OPENAI_MODEL=gpt-4o-mini
 ```
 
 The suite sends real OpenAI requests for a small set of enabled passing cases

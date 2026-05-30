@@ -1,9 +1,14 @@
+import collections.abc
 import datetime
 import io
+import pathlib
+
+import pytest
 
 import data_assistant.live_question_interpreter_eval as live_eval
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.question_interpreter_test_support as test_support
+import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_layer.testing_support as semantic_layer_testing
 
 
@@ -121,3 +126,58 @@ def test_main_returns_one_and_prints_missing_api_key_error() -> None:
     assert stderr.getvalue().strip() == (
         "Missing required OpenAI environment variables: OPENAI_API_KEY"
     )
+
+
+def test_main_loads_openai_config_from_dotenv(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    class FakeProvider:
+        def propose_question_frame(
+            self,
+            *,
+            question: str,
+            semantic_layer_context: dict[str, object],
+        ) -> live_eval.ProviderResult:
+            del question, semantic_layer_context
+            raise AssertionError("live eval runner is stubbed")
+
+    def fake_build_openai_provider(
+        environ: collections.abc.Mapping[str, str],
+    ) -> question_interpreter.QuestionInterpreterProvider:
+        assert environ["OPENAI_API_KEY"] == "dotenv-key"
+        return FakeProvider()
+
+    def fake_run_live_eval(
+        *,
+        provider: question_interpreter.QuestionInterpreterProvider,
+        semantic_layer: schema.SemanticLayer,
+        cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
+            live_eval.DEFAULT_CASES
+        ),
+    ) -> live_eval.LiveEvalReport:
+        del provider, semantic_layer, cases
+        return live_eval.LiveEvalReport(total=0, passed=0, failures=())
+
+    monkeypatch.setattr(
+        live_eval.question_interpreter,
+        "build_openai_question_interpreter_provider",
+        fake_build_openai_provider,
+    )
+    monkeypatch.setattr(
+        live_eval,
+        "run_live_question_interpreter_eval",
+        fake_run_live_eval,
+    )
+
+    exit_code = live_eval.main(
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+        env_file=env_file,
+    )
+
+    assert exit_code == 0

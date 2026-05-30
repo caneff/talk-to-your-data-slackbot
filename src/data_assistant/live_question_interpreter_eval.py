@@ -6,8 +6,11 @@ import collections.abc
 import dataclasses
 import datetime
 import os
+import pathlib
 import sys
 import typing
+
+import dotenv
 
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.question_interpreter_test_support as test_support
@@ -201,12 +204,18 @@ def main(
     *,
     stdout: typing.TextIO = sys.stdout,
     stderr: typing.TextIO = sys.stderr,
-    environ: collections.abc.Mapping[str, str] = os.environ,
+    environ: collections.abc.Mapping[str, str] | None = None,
+    env_file: str | pathlib.Path = ".env",
 ) -> int:
     """Run manual live eval suite against real OpenAI provider config."""
+    active_environ = environ
+    if active_environ is None:
+        _load_env_file(env_file)
+        active_environ = os.environ
+
     try:
         provider = question_interpreter.build_openai_question_interpreter_provider(
-            environ
+            active_environ
         )
     except question_interpreter.OpenAIQuestionInterpreterConfigError as error:
         print(str(error), file=stderr)
@@ -220,6 +229,13 @@ def main(
     if report.failed:
         return 1
     return 0
+
+
+def _load_env_file(
+    path: str | pathlib.Path = ".env",
+) -> None:
+    """Load local dotenv values without overriding exported environment vars."""
+    dotenv.load_dotenv(dotenv_path=path, override=False)
 
 
 def _append_scalar_mismatch(

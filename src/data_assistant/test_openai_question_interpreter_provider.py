@@ -133,6 +133,34 @@ def test_openai_provider_returns_question_frame_proposal_from_parsed_response() 
     assert "prompt_context" not in user_payload
 
 
+def test_openai_provider_prompt_extracts_explicit_calendar_month_time_ranges() -> None:
+    parse_calls: list[dict[str, object]] = []
+
+    class FakeParsedResponse:
+        output_parsed = test_support.question_frame_proposal()
+
+    provider = _openai_provider_returning(
+        FakeParsedResponse(),
+        parse_calls=parse_calls,
+    )
+
+    provider.propose_question_frame(
+        question=test_support.CANONICAL_DATA_QUESTION,
+        semantic_layer_context={"datasets": []},
+    )
+
+    input_messages = typing.cast(
+        list[dict[str, str]],
+        parse_calls[0]["input"],
+    )
+    developer_prompt = input_messages[0]["content"]
+    assert "complete calendar month and year" in developer_prompt
+    assert "January 2026" in developer_prompt
+    assert "2026-01-01" in developer_prompt
+    assert "2026-01-31" in developer_prompt
+    assert "not inventing a time range" in developer_prompt
+
+
 def test_openai_provider_maps_refusal_to_provider_failure() -> None:
     class FakeRefusalContent:
         type = "refusal"
