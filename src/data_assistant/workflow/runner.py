@@ -12,6 +12,7 @@ import data_assistant.reasoning_layer as reasoning_layer
 import data_assistant.response_composer as response_composer
 import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.semantic_layer.schema as schema
+import data_assistant.semantic_matcher as semantic_matcher
 import data_assistant.semantic_router as semantic_router
 import data_assistant.workflow.contracts as contracts
 
@@ -47,9 +48,9 @@ def run_data_assistant(
 
     Notes
     -----
-    Stages run in order: interpret, route, authorize, request data, prepare
-    data, draft answer, and compose final response. A ``NonAnswer``
-    short-circuits immediately.
+    Stages run in order: interpret, match semantic objects, route, authorize,
+    request data, prepare data, draft answer, and compose final response. A
+    ``NonAnswer`` short-circuits immediately.
     """
     active_semantic_layer = (
         semantic_layer or semantic_layer_loader.load_semantic_layer()
@@ -64,9 +65,12 @@ def run_data_assistant(
         return response_composer.compose_non_answer_response(question_frame_result)
     question_frame = question_frame_result.value
 
-    dataset_selection_result = semantic_router.select_dataset(
+    semantic_matches = semantic_matcher.find_semantic_matches(
         question_frame=question_frame,
         semantic_layer=active_semantic_layer,
+    )
+    dataset_selection_result = semantic_router.select_dataset(
+        semantic_matches=semantic_matches,
     )
     if isinstance(dataset_selection_result, contracts.NonAnswer):
         return response_composer.compose_non_answer_response(dataset_selection_result)
@@ -82,7 +86,7 @@ def run_data_assistant(
     data_request_result = data_requester.create_data_request(
         question_frame=question_frame,
         dataset_selection=dataset_access_result.value,
-        semantic_layer=active_semantic_layer,
+        semantic_matches=semantic_matches,
     )
     if isinstance(data_request_result, contracts.NonAnswer):
         return response_composer.compose_non_answer_response(data_request_result)
@@ -101,6 +105,7 @@ def run_data_assistant(
 
     return contracts.DataAssistantRun(
         question_frame=question_frame,
+        semantic_matches=semantic_matches,
         dataset_selection=dataset_selection,
         data_request=data_request,
         prepared_data=prepared_data,

@@ -117,6 +117,16 @@ class DatasetSelection:
 
 
 @dataclasses.dataclass(frozen=True)
+class SemanticMatch:
+    """Resolved Semantic Layer objects that match a Question Frame."""
+
+    dataset: schema.CuratedDataset
+    table: schema.DatasetTable
+    metric: schema.Metric
+    dimension: schema.Dimension
+
+
+@dataclasses.dataclass(frozen=True)
 class DataRequest:
     """Constrained request for bounded Prepared Data."""
 
@@ -181,6 +191,7 @@ class DataAssistantRun:
     """Trace of the Data Assistant path for the canonical question."""
 
     question_frame: QuestionFrame
+    semantic_matches: tuple[SemanticMatch, ...]
     dataset_selection: DatasetSelection
     data_request: DataRequest
     prepared_data: PreparedData

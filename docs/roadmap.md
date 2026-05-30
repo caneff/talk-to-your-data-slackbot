@@ -61,6 +61,30 @@ Question to a Final Response grounded in one approved Curated Dataset.
 - Add Visual Payload support for compact Slack-friendly tables and simple chart
   images after LLM-backed interpretation and evals are in place.
 
+### Code Quality Improvements
+
+- Consolidate Semantic Layer matching so the Semantic Router and Data Requester
+  share one canonical match result for Curated Dataset, Dataset Table, metric,
+  and dimension instead of repeating label scans across stages, while Dataset
+  Selection keeps dataset-level rationale.
+- Add load-time Semantic Layer integrity validation and indexed lookups for
+  unique dataset IDs, unique table IDs, Curated Dataset table references, and
+  Dataset Table ownership.
+- Tighten the Data Preparation retrieval boundary so Data Requests carry a
+  prevalidated retrieval plan. Before expanding beyond the local demo, validate
+  or quote SQL identifiers and replace raw metric SQL expressions with typed or
+  whitelisted operations.
+- Decompose Question Interpreter responsibilities before filters, intents, or
+  providers grow: keep the OpenAI provider adapter, business-facing Semantic
+  Layer context builder, and Question Frame proposal promotion in focused
+  modules.
+- Move Non-Answer Response rendering away from exact reason-string and
+  ambiguity-tuple checks. Prefer a reason-code policy map or an explicit
+  response-kind contract.
+- Simplify Slack Runtime startup so live handler registration requires the
+  needed answer path and connection factory explicitly, avoiding nullable mode
+  branches that can start a runtime with no message handler.
+
 ### Better Conversation Flow
 
 - Add bounded Clarification Loops for Material Ambiguity.

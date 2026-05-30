@@ -79,11 +79,25 @@ def test_data_requester_returns_non_answer_for_ambiguous_tables() -> None:
         selected_datasets=(dataset,),
         match_rationale="test",
     )
+    semantic_matches = (
+        contracts.SemanticMatch(
+            dataset=dataset,
+            table=semantic_layer.tables[0],
+            metric=metric,
+            dimension=dimension,
+        ),
+        contracts.SemanticMatch(
+            dataset=dataset,
+            table=semantic_layer.tables[1],
+            metric=metric,
+            dimension=dimension,
+        ),
+    )
 
     result = data_requester.create_data_request(
         question_frame,
         dataset_selection,
-        semantic_layer,
+        semantic_matches,
     )
 
     assert result == contracts.NonAnswer(
@@ -92,6 +106,25 @@ def test_data_requester_returns_non_answer_for_ambiguous_tables() -> None:
         reason="Multiple Dataset Tables can satisfy the Question Frame.",
         unresolved_ambiguities=("dataset table",),
         next_step="Ask which Dataset Table should be used.",
+    )
+
+
+def test_data_requester_returns_non_answer_when_selection_has_no_table_match(
+    question_frame: contracts.QuestionFrame,
+    dataset_selection: contracts.DatasetSelection,
+) -> None:
+    result = data_requester.create_data_request(
+        question_frame,
+        dataset_selection,
+        semantic_matches=(),
+    )
+
+    assert result == contracts.NonAnswer(
+        stage=contracts.NonAnswerStage.DATA_REQUESTER,
+        reason_code=contracts.NonAnswerReasonCode.NO_MATCHING_TABLE,
+        reason="No Dataset Table can satisfy the Question Frame.",
+        unresolved_ambiguities=("dataset table",),
+        next_step="Ask which table-level metric or dimension should be used.",
     )
 
 

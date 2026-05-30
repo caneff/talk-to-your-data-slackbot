@@ -62,6 +62,8 @@ def test_data_assistant_runs_end_to_end(
 
     assert isinstance(run, contracts.DataAssistantRun)
     assert run.question_frame.unresolved_ambiguities == ()
+    assert len(run.semantic_matches) == 1
+    assert run.semantic_matches[0].table.table_id == "orders"
     assert len(run.dataset_selection.selected_datasets) == 1
     assert run.data_request.metric.label == "total revenue"
     assert run.prepared_data.data.loc[0, "dimension_value"] == "West"
@@ -118,9 +120,9 @@ def test_data_assistant_denies_dataset_access_before_request_or_preparation(
     def fail_create_data_request(
         question_frame: contracts.QuestionFrame,
         dataset_selection: contracts.DatasetSelection,
-        semantic_layer: object,
+        semantic_matches: tuple[contracts.SemanticMatch, ...],
     ) -> contracts.StageResult[contracts.DataRequest]:
-        del question_frame, dataset_selection, semantic_layer
+        del question_frame, dataset_selection, semantic_matches
         raise AssertionError("create_data_request should not be called")
 
     def fail_prepare_data(

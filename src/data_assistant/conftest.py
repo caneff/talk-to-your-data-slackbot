@@ -11,6 +11,7 @@ import data_assistant.local_orders_fixture as local_orders_fixture
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.semantic_layer.schema as schema
+import data_assistant.semantic_matcher as semantic_matcher
 import data_assistant.semantic_router as semantic_router
 import data_assistant.workflow.contracts as contracts
 
@@ -126,27 +127,36 @@ def question_frame(
 
 
 @pytest.fixture
-def dataset_selection(
+def semantic_matches(
     question_frame: contracts.QuestionFrame,
     active_semantic_layer: schema.SemanticLayer,
+) -> tuple[contracts.SemanticMatch, ...]:
+    """Build canonical Semantic Layer matches through the matcher boundary."""
+    return semantic_matcher.find_semantic_matches(
+        question_frame,
+        active_semantic_layer,
+    )
+
+
+@pytest.fixture
+def dataset_selection(
+    semantic_matches: tuple[contracts.SemanticMatch, ...],
 ) -> contracts.DatasetSelection:
     """Build the canonical Dataset Selection through the semantic router."""
-    return unwrap_stage_result(
-        semantic_router.select_dataset(question_frame, active_semantic_layer)
-    )
+    return unwrap_stage_result(semantic_router.select_dataset(semantic_matches))
 
 
 @pytest.fixture
 def data_request(
     question_frame: contracts.QuestionFrame,
     dataset_selection: contracts.DatasetSelection,
-    active_semantic_layer: schema.SemanticLayer,
+    semantic_matches: tuple[contracts.SemanticMatch, ...],
 ) -> contracts.DataRequest:
     """Build the canonical Data Request through the requester boundary."""
     return unwrap_stage_result(
         data_requester.create_data_request(
             question_frame,
             dataset_selection,
-            active_semantic_layer,
+            semantic_matches,
         ),
     )

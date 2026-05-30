@@ -70,6 +70,11 @@ metrics, dimensions, joins, permissions, and meanings available to the
 **Data Assistant**.
 _Avoid_: Schema browser, database catalog, prompt context
 
+**Semantic Field**:
+A business-facing attribute in the **Semantic Layer** whose approved uses are
+explicit, such as grouping or filtering a **Data Question**.
+_Avoid_: Raw column, database field, dimension
+
 **Dataset Catalog**:
 The discoverable registry inside the **Semantic Layer** that the **Data
 Assistant** uses to choose which **Curated Datasets** can answer a **Data
@@ -88,13 +93,13 @@ _Avoid_: Slack handler, chat state, dialogue engine
 
 **Question Interpreter**:
 The part of the **Data Assistant** that identifies the intent, constraints,
-entities, time range, and ambiguities in a **Data Question**.
+entities, filters, and ambiguities in a **Data Question**.
 _Avoid_: Parser, prompt analyzer, NLP layer
 
 **Question Frame**:
 The structured interpretation of a **Data Question**, including intent,
-measures, dimensions, filters, time range, and unresolved ambiguities, without
-selecting a **Curated Dataset** or **Dataset Table**.
+measures, **Semantic Fields** used for grouping, filters, and unresolved
+ambiguities, without selecting a **Curated Dataset** or **Dataset Table**.
 _Avoid_: Query, prompt, plan
 
 **Material Ambiguity**:
@@ -140,8 +145,9 @@ _Avoid_: Row permission, output permission, visibility
 
 **Data Request**:
 The constrained request for data prepared for retrieval, including selected
-datasets, selected **Dataset Tables**, approved metrics, dimensions, filters,
-time range, limits, join paths, privacy constraints, and expected output shape.
+datasets, selected **Dataset Tables**, approved metrics, approved **Semantic
+Fields**, filters, limits, join paths, privacy constraints, and expected output
+shape.
 _Avoid_: SQL, query, dataframe
 
 **Prepared Data**:
