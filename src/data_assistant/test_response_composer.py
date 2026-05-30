@@ -88,81 +88,108 @@ def test_response_composer_returns_final_response_for_non_answer() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    ("non_answer", "expected_response_kind", "expected_trust_summary"),
-    [
-        pytest.param(
-            _non_answer(),
-            contracts.ResponseKind.UNSUPPORTED,
-            contracts.TrustSummary(
-                limitations=(
-                    "User-provided CSV files are not supported data sources.",
-                ),
-            ),
-            id="unsupported",
-        ),
-        pytest.param(
-            _non_answer(
-                stage=contracts.NonAnswerStage.ACCESS_CONTROLLER,
-                reason_code=contracts.NonAnswerReasonCode.ACCESS_DENIED,
-                reason="You do not have access to the commerce Curated Dataset.",
-                unresolved_ambiguities=(),
-                next_step="Ask a data owner to grant Dataset Access.",
-                datasets=("commerce",),
-            ),
-            contracts.ResponseKind.ACCESS_DENIAL,
-            contracts.TrustSummary(
-                datasets=("commerce",),
-                limitations=(
-                    "You do not have access to the commerce Curated Dataset.",
-                ),
-            ),
-            id="access denial",
-        ),
-        pytest.param(
-            _non_answer(
-                reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
-                reason=(
-                    "The Data Question needs a time range before data selection."
-                ),
-                unresolved_ambiguities=("time range",),
-                next_step="Ask a clarification question before selecting data.",
-            ),
-            contracts.ResponseKind.CLARIFICATION_NEEDED,
-            contracts.TrustSummary(
-                limitations=(
-                    "The Data Question needs a time range before data selection.",
-                ),
-            ),
-            id="clarification needed",
-        ),
-    ],
-)
-def test_response_composer_maps_non_answer_kind_and_trust_summary(
-    non_answer: contracts.NonAnswer,
-    expected_response_kind: contracts.ResponseKind,
-    expected_trust_summary: contracts.TrustSummary,
-) -> None:
-    response = response_composer.compose_non_answer_response(non_answer)
-
-    assert response.response_kind == expected_response_kind
-    assert response.trust_summary == expected_trust_summary
-    assert non_answer.next_step in response.text
-
-
-def test_response_composer_uses_clarification_wording_for_ambiguous_dataset() -> None:
+def test_response_composer_marks_missing_required_field_as_clarification() -> None:
     response = response_composer.compose_non_answer_response(
         _non_answer(
-            stage=contracts.NonAnswerStage.SEMANTIC_ROUTER,
-            reason_code=contracts.NonAnswerReasonCode.AMBIGUOUS_DATASET,
-            reason="Multiple Curated Datasets could answer this Data Question.",
-            unresolved_ambiguities=("dataset choice",),
-            next_step="Ask which Curated Dataset the team member wants.",
+            reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
+            reason="The Data Question needs a metric before data selection.",
+            unresolved_ambiguities=("metric",),
+            next_step="Ask which business metric the team member wants.",
         )
     )
 
     assert response.response_kind == contracts.ResponseKind.CLARIFICATION_NEEDED
     assert response.text.startswith("I cannot answer safely yet because")
+    assert "The Data Question needs a metric before data selection." in (
+        response.trust_summary.limitations
+    )
+    assert "Ask which business metric the team member wants." in response.text
+
+
+@pytest.mark.parametrize(
+    ("stage", "reason_code", "reason", "unresolved_ambiguities", "next_step"),
+    [
+        pytest.param(
+            contracts.NonAnswerStage.SEMANTIC_ROUTER,
+            contracts.NonAnswerReasonCode.AMBIGUOUS_DATASET,
+            "Multiple Curated Datasets could answer this Data Question.",
+            ("dataset choice",),
+            "Ask which Curated Dataset the team member wants.",
+            id="ambiguous dataset",
+        ),
+        pytest.param(
+            contracts.NonAnswerStage.DATA_REQUESTER,
+            contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE,
+            "Multiple Dataset Tables can satisfy this Data Question.",
+            ("table choice",),
+            "Ask which Dataset Table should be used.",
+            id="ambiguous table",
+        ),
+    ],
+)
+def test_response_composer_marks_ambiguity_as_clarification(
+    stage: contracts.NonAnswerStage,
+    reason_code: contracts.NonAnswerReasonCode,
+    reason: str,
+    unresolved_ambiguities: tuple[str, ...],
+    next_step: str,
+) -> None:
+    response = response_composer.compose_non_answer_response(
+        _non_answer(
+            stage=stage,
+            reason_code=reason_code,
+            reason=reason,
+            unresolved_ambiguities=unresolved_ambiguities,
+            next_step=next_step,
+        )
+    )
+
+    assert response.response_kind == contracts.ResponseKind.CLARIFICATION_NEEDED
+    assert response.text.startswith("I cannot answer safely yet because")
+    assert next_step in response.text
+
+
+@pytest.mark.parametrize(
+    ("reason_code", "reason", "next_step"),
+    [
+        pytest.param(
+            contracts.NonAnswerReasonCode.UNSUPPORTED_DATA,
+            "User-provided CSV files are not supported data sources.",
+            "Ask about an approved Curated Dataset in the Semantic Layer instead.",
+            id="unsupported data",
+        ),
+        pytest.param(
+            contracts.NonAnswerReasonCode.NO_MATCHING_DATASET,
+            "No Curated Dataset can answer this Data Question.",
+            "Ask about available Curated Datasets instead.",
+            id="no matching dataset",
+        ),
+        pytest.param(
+            contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
+            "The Question Interpreter provider failed before returning output.",
+            "Try again or use the deterministic demo path.",
+            id="provider failure",
+        ),
+    ],
+)
+def test_response_composer_marks_unsupported_non_answers_without_yet_wording(
+    reason_code: contracts.NonAnswerReasonCode,
+    reason: str,
+    next_step: str,
+) -> None:
+    response = response_composer.compose_non_answer_response(
+        _non_answer(
+            reason_code=reason_code,
+            reason=reason,
+            unresolved_ambiguities=(),
+            next_step=next_step,
+        )
+    )
+
+    assert response.response_kind == contracts.ResponseKind.UNSUPPORTED
+    assert response.text.startswith("I cannot answer safely because")
+    assert "safely yet" not in response.text
+    assert next_step in response.text
 
 
 def test_response_composer_omits_sensitive_details_from_access_denial() -> None:
