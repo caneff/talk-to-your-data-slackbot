@@ -52,14 +52,70 @@ def test_compare_proposal_reports_field_level_mismatches() -> None:
     assert mismatches == (
         "intent: expected 'summarize', got 'trend'",
         "metric: expected 'total revenue', got 'gross margin'",
-        "field_operations: expected "
-        "(FieldOperationProposal(operation='group_by', field='region', lower=None, "
-        "upper=None, values=()), FieldOperationProposal(operation='range_filter', "
-        "field='order date', lower='2026-01-01', upper='2026-01-31', values=())), "
-        "got (FieldOperationProposal(operation='group_by', field='country', "
-        "lower=None, upper=None, values=()), "
-        "FieldOperationProposal(operation='include_filter', field='region', "
-        "lower=None, upper=None, values=('North',)))",
+        "field_operations[0].field: expected 'region', got 'country'",
+        "field_operations[1].operation: expected 'range_filter', got 'include_filter'",
+        "field_operations[1].field: expected 'order date', got 'region'",
+        "field_operations[1].lower: expected '2026-01-01', got None",
+        "field_operations[1].upper: expected '2026-01-31', got None",
+        "field_operations[1].values: expected (), got ('North',)",
+    )
+
+
+def test_compare_proposal_reports_missing_field_operation() -> None:
+    expected = test_support.question_frame_proposal()
+    actual = test_support.question_frame_proposal(
+        field_operations=(
+            question_interpreter.GroupByOperationProposal(
+                operation="group_by",
+                field="region",
+            ),
+        ),
+    )
+
+    mismatches = live_eval.compare_question_frame_meaning(
+        expected=expected,
+        actual=actual,
+    )
+
+    assert mismatches == (
+        'field_operations[1]: expected {"operation":"range_filter",'
+        '"field":"order date","lower":"2026-01-01","upper":"2026-01-31",'
+        '"values":[]}, got (missing)',
+    )
+
+
+def test_compare_proposal_reports_extra_field_operation() -> None:
+    expected = test_support.question_frame_proposal(
+        field_operations=(
+            question_interpreter.GroupByOperationProposal(
+                operation="group_by",
+                field="region",
+            ),
+        ),
+    )
+    actual = test_support.question_frame_proposal(
+        field_operations=(
+            question_interpreter.GroupByOperationProposal(
+                operation="group_by",
+                field="region",
+            ),
+            question_interpreter.ExcludeFilterOperationProposal(
+                operation="exclude_filter",
+                field="region",
+                values=("North",),
+            ),
+        ),
+    )
+
+    mismatches = live_eval.compare_question_frame_meaning(
+        expected=expected,
+        actual=actual,
+    )
+
+    assert mismatches == (
+        'field_operations[1]: expected (missing), got {"operation":'
+        '"exclude_filter","field":"region","lower":null,"upper":null,'
+        '"values":["North"]}',
     )
 
 
