@@ -271,11 +271,11 @@ def test_data_assistant_uses_required_question_interpreter_provider(
         metric="total revenue",
         field_operations=(
             contracts.SemanticFieldOperation(
-                operation=contracts.FieldOperationKind.GROUP_BY,
+                operation=schema.FieldOperation.GROUP_BY,
                 field="region",
             ),
             contracts.SemanticFieldOperation(
-                operation=contracts.FieldOperationKind.RANGE_FILTER,
+                operation=schema.FieldOperation.RANGE_FILTER,
                 field="order date",
                 lower=datetime.date(2026, 1, 1),
                 upper=datetime.date(2026, 1, 31),

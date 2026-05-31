@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 
+import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
 
 
@@ -63,7 +64,7 @@ def _time_range_label(data_request: contracts.DataRequest) -> str:
     for operation in data_request.filter_operations:
         if operation.field.data_type != "date":
             continue
-        if operation.operation == contracts.FieldOperationKind.RANGE_FILTER:
+        if operation.operation == schema.FieldOperation.RANGE_FILTER:
             lower = _format_date_bound(operation.lower)
             upper = _format_date_bound(operation.upper)
             if lower is not None and upper is not None:
@@ -72,7 +73,7 @@ def _time_range_label(data_request: contracts.DataRequest) -> str:
                 return f"from {lower}"
             if upper is not None:
                 return f"through {upper}"
-        if operation.operation == contracts.FieldOperationKind.INCLUDE_FILTER:
+        if operation.operation == schema.FieldOperation.INCLUDE_FILTER:
             return ", ".join(str(value) for value in operation.values)
     return "all available data"
 

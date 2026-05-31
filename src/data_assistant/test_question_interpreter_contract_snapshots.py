@@ -65,11 +65,11 @@ CONTRACT_SNAPSHOT_CASES = (
                 metric="total revenue",
                 field_operations=(
                     contracts.SemanticFieldOperation(
-                        operation=contracts.FieldOperationKind.GROUP_BY,
+                        operation=schema.FieldOperation.GROUP_BY,
                         field="region",
                     ),
                     contracts.SemanticFieldOperation(
-                        operation=contracts.FieldOperationKind.RANGE_FILTER,
+                        operation=schema.FieldOperation.RANGE_FILTER,
                         field="order date",
                         lower=datetime.date(2026, 1, 1),
                         upper=datetime.date(2026, 1, 31),
@@ -97,7 +97,7 @@ CONTRACT_SNAPSHOT_CASES = (
                 metric="total revenue",
                 field_operations=(
                     contracts.SemanticFieldOperation(
-                        operation=contracts.FieldOperationKind.RANGE_FILTER,
+                        operation=schema.FieldOperation.RANGE_FILTER,
                         field="order date",
                         lower=datetime.date(2026, 1, 1),
                         upper=datetime.date(2026, 1, 31),
@@ -128,11 +128,11 @@ CONTRACT_SNAPSHOT_CASES = (
                 metric="total revenue",
                 field_operations=(
                     contracts.SemanticFieldOperation(
-                        operation=contracts.FieldOperationKind.GROUP_BY,
+                        operation=schema.FieldOperation.GROUP_BY,
                         field="region",
                     ),
                     contracts.SemanticFieldOperation(
-                        operation=contracts.FieldOperationKind.INCLUDE_FILTER,
+                        operation=schema.FieldOperation.INCLUDE_FILTER,
                         field="order date",
                         values=(datetime.date(2026, 1, 15),),
                     ),
@@ -345,10 +345,6 @@ def test_question_interpreter_rejects_non_finite_decimal_filter_values() -> None
     assert result == non_answer_catalog.non_answer(
         contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT, stage=_STAGE
     )
-
-
-def test_field_operation_kind_uses_semantic_layer_enum() -> None:
-    assert contracts.FieldOperationKind is schema.FieldOperation
 
 
 def test_question_interpreter_promotes_semantic_layer_operation_enum() -> None:

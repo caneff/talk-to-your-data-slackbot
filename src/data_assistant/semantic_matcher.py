@@ -54,7 +54,7 @@ def _find_group_by_fields(
     group_by_labels = tuple(
         operation.field
         for operation in question_frame.field_operations
-        if operation.operation == contracts.FieldOperationKind.GROUP_BY
+        if operation.operation == schema.FieldOperation.GROUP_BY
     )
     group_by_fields: list[schema.SemanticField] = []
     for group_by_label in group_by_labels:
@@ -79,7 +79,7 @@ def _table_supports_filter_operations(
 ) -> bool:
     fields_by_label = {field.label: field for field in table.fields}
     for operation in question_frame.field_operations:
-        if operation.operation == contracts.FieldOperationKind.GROUP_BY:
+        if operation.operation == schema.FieldOperation.GROUP_BY:
             continue
         field = fields_by_label.get(operation.field)
         if field is None:

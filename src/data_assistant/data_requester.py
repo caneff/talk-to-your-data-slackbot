@@ -40,7 +40,7 @@ def _resolve_filter_operations(
     fields_by_label = {field.label: field for field in table.fields}
     resolved: list[contracts.ResolvedSemanticFieldOperation] = []
     for operation in field_operations:
-        if operation.operation == contracts.FieldOperationKind.GROUP_BY:
+        if operation.operation == schema.FieldOperation.GROUP_BY:
             continue
         field = fields_by_label.get(operation.field)
         if field is None:

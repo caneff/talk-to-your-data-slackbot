@@ -1,5 +1,6 @@
 import data_assistant.data_requester as data_requester
 import data_assistant.non_answer_catalog as non_answer_catalog
+import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
 
 
@@ -39,7 +40,7 @@ def test_data_requester_returns_non_answer_for_unknown_filter_field(
         field_operations=question_frame.field_operations
         + (
             contracts.SemanticFieldOperation(
-                operation=contracts.FieldOperationKind.INCLUDE_FILTER,
+                operation=schema.FieldOperation.INCLUDE_FILTER,
                 field="missing field",
                 values=("North",),
             ),

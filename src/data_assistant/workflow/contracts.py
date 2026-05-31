@@ -15,9 +15,6 @@ import data_assistant.semantic_layer.schema as schema
 T = typing.TypeVar("T")
 
 
-FieldOperationKind: typing.TypeAlias = schema.FieldOperation
-
-
 # Filter values are validated and typed at the Question Interpreter trust
 # boundary (see docs/adr/0008); downstream stages consume typed values and
 # never re-parse strings.
@@ -28,7 +25,7 @@ FieldValue: typing.TypeAlias = datetime.date | decimal.Decimal | str
 class SemanticFieldOperation:
     """Validated provider-requested operation using Semantic Field labels."""
 
-    operation: FieldOperationKind
+    operation: schema.FieldOperation
     field: str
     lower: FieldValue | None = None
     upper: FieldValue | None = None
@@ -36,9 +33,9 @@ class SemanticFieldOperation:
 
     def filter_label(self) -> str | None:
         """Return user-facing filter summary when this operation filters rows."""
-        if self.operation == FieldOperationKind.GROUP_BY:
+        if self.operation == schema.FieldOperation.GROUP_BY:
             return None
-        if self.operation == FieldOperationKind.RANGE_FILTER:
+        if self.operation == schema.FieldOperation.RANGE_FILTER:
             bounds: list[str] = []
             if self.lower is not None:
                 bounds.append(f">= {_format_field_value(self.lower)}")
@@ -46,7 +43,9 @@ class SemanticFieldOperation:
                 bounds.append(f"<= {_format_field_value(self.upper)}")
             return f"{self.field} {' and '.join(bounds)}"
         values = ", ".join(_format_field_value(value) for value in self.values)
-        verb = "in" if self.operation == FieldOperationKind.INCLUDE_FILTER else "not in"
+        verb = (
+            "in" if self.operation == schema.FieldOperation.INCLUDE_FILTER else "not in"
+        )
         return f"{self.field} {verb} ({values})"
 
 
@@ -54,7 +53,7 @@ class SemanticFieldOperation:
 class ResolvedSemanticFieldOperation:
     """Validated Semantic Field operation resolved to Semantic Layer config."""
 
-    operation: FieldOperationKind
+    operation: schema.FieldOperation
     field: schema.SemanticField
     lower: FieldValue | None = None
     upper: FieldValue | None = None

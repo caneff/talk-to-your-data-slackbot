@@ -53,11 +53,11 @@ def _question_frame(
         metric=metric,
         field_operations=(
             contracts.SemanticFieldOperation(
-                operation=contracts.FieldOperationKind.GROUP_BY,
+                operation=schema.FieldOperation.GROUP_BY,
                 field=field,
             ),
             contracts.SemanticFieldOperation(
-                operation=contracts.FieldOperationKind.RANGE_FILTER,
+                operation=schema.FieldOperation.RANGE_FILTER,
                 field="order date",
                 lower=datetime.date(2026, 1, 1),
                 upper=datetime.date(2026, 1, 31),

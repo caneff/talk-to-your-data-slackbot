@@ -69,7 +69,7 @@ def _prepared_revenue_by_region() -> contracts.PreparedData:
             group_by_fields=(table.fields[0],),
             filter_operations=(
                 contracts.ResolvedSemanticFieldOperation(
-                    operation=contracts.FieldOperationKind.RANGE_FILTER,
+                    operation=schema.FieldOperation.RANGE_FILTER,
                     field=table.fields[1],
                     lower=datetime.date(2026, 1, 1),
                     upper=datetime.date(2026, 1, 31),

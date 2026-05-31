@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import duckdb
 
+import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
 
 
@@ -117,14 +118,14 @@ def _filter_sql(
 
     for index, operation in enumerate(filter_operations):
         column = operation.field.source_column
-        if operation.operation == contracts.FieldOperationKind.RANGE_FILTER:
+        if operation.operation == schema.FieldOperation.RANGE_FILTER:
             if operation.lower is not None:
                 clauses.append(f"{column} >= {bind(index, 'lower', operation.lower)}")
             if operation.upper is not None:
                 clauses.append(f"{column} <= {bind(index, 'upper', operation.upper)}")
         elif operation.operation in (
-            contracts.FieldOperationKind.INCLUDE_FILTER,
-            contracts.FieldOperationKind.EXCLUDE_FILTER,
+            schema.FieldOperation.INCLUDE_FILTER,
+            schema.FieldOperation.EXCLUDE_FILTER,
         ):
             placeholders = ", ".join(
                 bind(index, value_index, value)
@@ -132,7 +133,7 @@ def _filter_sql(
             )
             sql_operator = (
                 "in"
-                if operation.operation == contracts.FieldOperationKind.INCLUDE_FILTER
+                if operation.operation == schema.FieldOperation.INCLUDE_FILTER
                 else "not in"
             )
             clauses.append(f"{column} {sql_operator} ({placeholders})")

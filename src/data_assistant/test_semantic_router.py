@@ -44,7 +44,7 @@ def test_semantic_router_returns_non_answer_when_no_dataset_matches(
         metric="gross bookings",
         field_operations=(
             contracts.SemanticFieldOperation(
-                operation=contracts.FieldOperationKind.GROUP_BY,
+                operation=schema.FieldOperation.GROUP_BY,
                 field="region",
             ),
         ),
@@ -102,7 +102,7 @@ def test_semantic_router_returns_ambiguous_table_for_two_tables_in_one_dataset(
         metric="total revenue",
         field_operations=(
             contracts.SemanticFieldOperation(
-                operation=contracts.FieldOperationKind.GROUP_BY,
+                operation=schema.FieldOperation.GROUP_BY,
                 field="region",
             ),
         ),

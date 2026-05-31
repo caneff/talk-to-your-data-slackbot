@@ -458,13 +458,13 @@ def _promote_field_operations(
                 "field",
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
             )
-        operation = contracts.FieldOperationKind(operation_proposal.operation)
+        operation = schema.FieldOperation(operation_proposal.operation)
         if operation not in field.operations:
             return non_answer_catalog.non_answer(
                 contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION,
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
             )
-        if operation == contracts.FieldOperationKind.GROUP_BY:
+        if operation == schema.FieldOperation.GROUP_BY:
             group_by_count += 1
             if group_by_count > 1:
                 return non_answer_catalog.non_answer(
@@ -478,11 +478,11 @@ def _promote_field_operations(
                 )
             )
             continue
-        if operation == contracts.FieldOperationKind.RANGE_FILTER:
+        if operation == schema.FieldOperation.RANGE_FILTER:
             result = _promote_range_filter(operation_proposal, field, operation)
         elif operation in {
-            contracts.FieldOperationKind.INCLUDE_FILTER,
-            contracts.FieldOperationKind.EXCLUDE_FILTER,
+            schema.FieldOperation.INCLUDE_FILTER,
+            schema.FieldOperation.EXCLUDE_FILTER,
         }:
             result = _promote_values_filter(operation_proposal, field, operation)
         else:
@@ -500,7 +500,7 @@ def _promote_field_operations(
 def _promote_range_filter(
     operation_proposal: FieldOperationProposal,
     field: schema.SemanticField,
-    operation: contracts.FieldOperationKind,
+    operation: schema.FieldOperation,
 ) -> contracts.NonAnswer | contracts.SemanticFieldOperation:
     if operation_proposal.lower is None and operation_proposal.upper is None:
         return non_answer_catalog.non_answer(
@@ -552,7 +552,7 @@ def _range_bounds_are_reversed(
 def _promote_values_filter(
     operation_proposal: FieldOperationProposal,
     field: schema.SemanticField,
-    operation: contracts.FieldOperationKind,
+    operation: schema.FieldOperation,
 ) -> contracts.NonAnswer | contracts.SemanticFieldOperation:
     if not operation_proposal.values:
         return non_answer_catalog.non_answer(

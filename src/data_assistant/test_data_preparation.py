@@ -104,7 +104,7 @@ def test_prepared_data_applies_include_filter_with_parameters(
         data_request,
         filter_operations=(
             contracts.ResolvedSemanticFieldOperation(
-                operation=contracts.FieldOperationKind.INCLUDE_FILTER,
+                operation=schema.FieldOperation.INCLUDE_FILTER,
                 field=region_field,
                 values=("North",),
             ),
@@ -136,7 +136,7 @@ def test_prepared_data_applies_exclude_filter_with_parameters(
         data_request,
         filter_operations=(
             contracts.ResolvedSemanticFieldOperation(
-                operation=contracts.FieldOperationKind.EXCLUDE_FILTER,
+                operation=schema.FieldOperation.EXCLUDE_FILTER,
                 field=region_field,
                 values=("South",),
             ),
