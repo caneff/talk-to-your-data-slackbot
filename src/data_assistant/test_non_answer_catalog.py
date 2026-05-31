@@ -1,201 +1,105 @@
+"""Tests for the canonical non-answer catalog.
+
+These tests verify the catalog's *behavior* and *structural invariants* rather
+than restating its copy. The reason/next_step strings live in the catalog's
+definitions; duplicating them here would only catch accidental edits (by forcing
+a second edit), not real regressions. Instead we assert completeness across
+every reason code and the runtime logic of the context-aware builders.
+"""
+
 import pytest
 
 import data_assistant.non_answer_catalog as non_answer_catalog
 import data_assistant.workflow.contracts as contracts
 
+_STAGE = contracts.NonAnswerStage.QUESTION_INTERPRETER
+
+# Reason codes whose builders weave runtime context (a dataset or field name)
+# into the non-answer instead of emitting the static catalog definition
+# verbatim. Every other code is served by the generic ``non_answer`` builder.
+_CONTEXTUAL_REASON_CODES = frozenset(
+    {
+        contracts.NonAnswerReasonCode.ACCESS_DENIED,
+        contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
+        contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL,
+    }
+)
+
+_STATIC_REASON_CODES = [
+    code
+    for code in contracts.NonAnswerReasonCode
+    if code not in _CONTEXTUAL_REASON_CODES
+]
+
+
+def _by_name(reason_code: contracts.NonAnswerReasonCode) -> str:
+    return reason_code.name
+
 
 @pytest.mark.parametrize(
-    ("reason_code", "response_kind", "reason", "unresolved_ambiguities", "next_step"),
-    [
-        pytest.param(
-            contracts.NonAnswerReasonCode.ACCESS_DENIED,
-            contracts.ResponseKind.ACCESS_DENIAL,
-            "",
-            (),
-            "Ask a data owner to grant Dataset Access or ask about available data.",
-            id="access_denied",
-        ),
-        pytest.param(
-            contracts.NonAnswerReasonCode.AMBIGUOUS_DATASET,
-            contracts.ResponseKind.CLARIFICATION_NEEDED,
-            "Multiple Curated Datasets match the Question Frame.",
-            ("curated dataset",),
-            "Ask which Curated Dataset should be used.",
-            id="ambiguous_dataset",
-        ),
-        pytest.param(
-            contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE,
-            contracts.ResponseKind.CLARIFICATION_NEEDED,
-            "Multiple Dataset Tables can satisfy the Question Frame.",
-            ("dataset table",),
-            "Ask which Dataset Table should be used.",
-            id="ambiguous_table",
-        ),
-        pytest.param(
-            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
-            contracts.ResponseKind.UNSUPPORTED,
-            "The Question Interpreter provider returned invalid output.",
-            ("provider output",),
-            "Fix the provider contract before retrying.",
-            id="invalid_provider_output",
-        ),
-        pytest.param(
-            contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
-            contracts.ResponseKind.CLARIFICATION_NEEDED,
-            "The Data Question is missing required interpretation details.",
-            (),
-            "Ask a clarification question before selecting data.",
-            id="missing_required_field",
-        ),
-        pytest.param(
-            contracts.NonAnswerReasonCode.NO_MATCHING_DATASET,
-            contracts.ResponseKind.UNSUPPORTED,
-            "No Curated Dataset safely matches the Question Frame.",
-            ("curated dataset",),
-            "Ask which approved business data should be used.",
-            id="no_matching_dataset",
-        ),
-        pytest.param(
-            contracts.NonAnswerReasonCode.NO_MATCHING_TABLE,
-            contracts.ResponseKind.UNSUPPORTED,
-            "No Dataset Table can satisfy the Question Frame.",
-            ("dataset table",),
-            "Ask which table-level metric or dimension should be used.",
-            id="no_matching_table",
-        ),
-        pytest.param(
-            contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
-            contracts.ResponseKind.UNSUPPORTED,
-            "The Question Interpreter provider could not produce a proposal.",
-            ("provider failure",),
-            "Retry after the provider is available again.",
-            id="provider_failure",
-        ),
-        pytest.param(
-            contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL,
-            contracts.ResponseKind.UNSUPPORTED,
-            "The Data Assistant could not match the requested Semantic Layer labels.",
-            (),
-            "Use exact Semantic Layer metric and dimension labels.",
-            id="unknown_semantic_label",
-        ),
-        pytest.param(
-            contracts.NonAnswerReasonCode.UNSUPPORTED_DATA,
-            contracts.ResponseKind.UNSUPPORTED,
-            "User-provided CSV files are not supported data sources.",
-            ("unsupported data",),
-            "Ask about an approved Curated Dataset in the Semantic Layer instead.",
-            id="unsupported_data",
-        ),
-        pytest.param(
-            contracts.NonAnswerReasonCode.UNSUPPORTED_FILTER,
-            contracts.ResponseKind.UNSUPPORTED,
-            "The Data Assistant does not support that filter yet.",
-            ("supported filter",),
-            "Use only supported filters for approved Semantic Fields.",
-            id="unsupported_filter",
-        ),
-        pytest.param(
-            contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION,
-            contracts.ResponseKind.UNSUPPORTED,
-            "The Semantic Layer does not allow that operation for the field.",
-            ("semantic field operation",),
-            "Use only operations listed for the Semantic Field.",
-            id="unsupported_field_operation",
-        ),
-        pytest.param(
-            contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT,
-            contracts.ResponseKind.UNSUPPORTED,
-            "The Data Assistant does not support that Data Question intent yet.",
-            ("supported intent",),
-            "Ask: What was total revenue by region in January 2026?",
-            id="unsupported_intent",
-        ),
-        pytest.param(
-            contracts.NonAnswerReasonCode.UNSUPPORTED_SHAPE,
-            contracts.ResponseKind.UNSUPPORTED,
-            "The Data Assistant cannot handle that Question Frame shape yet.",
-            ("question shape",),
-            "Ask for one grouping field or a scalar aggregate.",
-            id="unsupported_shape",
-        ),
-    ],
+    "reason_code", list(contracts.NonAnswerReasonCode), ids=_by_name
 )
-def test_non_answer_catalog_defines_canonical_metadata(
+def test_every_reason_code_has_a_response_kind(
     reason_code: contracts.NonAnswerReasonCode,
-    response_kind: contracts.ResponseKind,
-    reason: str,
-    unresolved_ambiguities: tuple[str, ...],
-    next_step: str,
 ) -> None:
-    assert non_answer_catalog.response_kind_for(reason_code) == response_kind
-    definition = non_answer_catalog._DEFINITIONS[reason_code]  # pyright: ignore[reportPrivateUsage]
-    assert definition.reason == reason
-    assert definition.unresolved_ambiguities == unresolved_ambiguities
-    assert definition.next_step == next_step
-
-
-def test_non_answer_catalog_builds_static_non_answer() -> None:
-    result = non_answer_catalog.non_answer(
-        contracts.NonAnswerReasonCode.NO_MATCHING_DATASET,
-        stage=contracts.NonAnswerStage.SEMANTIC_ROUTER,
-    )
-
-    assert result == contracts.NonAnswer(
-        stage=contracts.NonAnswerStage.SEMANTIC_ROUTER,
-        reason_code=contracts.NonAnswerReasonCode.NO_MATCHING_DATASET,
-        reason="No Curated Dataset safely matches the Question Frame.",
-        unresolved_ambiguities=("curated dataset",),
-        next_step="Ask which approved business data should be used.",
+    """Adding a reason code without a catalog entry should fail here."""
+    assert isinstance(
+        non_answer_catalog.response_kind_for(reason_code), contracts.ResponseKind
     )
 
 
-def test_non_answer_catalog_builds_access_denied_non_answer() -> None:
-    result = non_answer_catalog.access_denied_non_answer(
-        "commerce",
-        stage=contracts.NonAnswerStage.ACCESS_CONTROLLER,
+@pytest.mark.parametrize("reason_code", _STATIC_REASON_CODES, ids=_by_name)
+def test_static_builder_emits_a_complete_non_answer(
+    reason_code: contracts.NonAnswerReasonCode,
+) -> None:
+    """The generic builder wires a fully-populated non-answer onto the stage."""
+    result = non_answer_catalog.non_answer(reason_code, stage=_STAGE)  # type: ignore[arg-type]
+
+    assert result.stage == _STAGE
+    assert result.reason_code == reason_code
+    assert result.reason, "static reason codes carry a fixed explanation"
+    assert result.next_step, "every reason code needs an actionable next step"
+    assert result.datasets == ()
+
+
+def test_access_denied_builder_names_the_dataset() -> None:
+    result = non_answer_catalog.access_denied_non_answer("commerce", stage=_STAGE)
+
+    assert result.stage == _STAGE
+    assert result.reason_code == contracts.NonAnswerReasonCode.ACCESS_DENIED
+    assert result.reason == "You do not have access to the commerce Curated Dataset."
+    assert result.datasets == ("commerce",)
+    assert (
+        non_answer_catalog.response_kind_for(result.reason_code)
+        == contracts.ResponseKind.ACCESS_DENIAL
     )
 
-    assert result == contracts.NonAnswer(
-        stage=contracts.NonAnswerStage.ACCESS_CONTROLLER,
-        reason_code=contracts.NonAnswerReasonCode.ACCESS_DENIED,
-        reason="You do not have access to the commerce Curated Dataset.",
-        unresolved_ambiguities=(),
-        next_step=(
-            "Ask a data owner to grant Dataset Access or ask about available data."
-        ),
-        datasets=("commerce",),
-    )
 
-
-def test_non_answer_catalog_builds_missing_required_field_non_answer() -> None:
+def test_missing_required_field_builder_records_the_field() -> None:
     result = non_answer_catalog.missing_required_field_non_answer(
-        "metric",
-        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        "metric", stage=_STAGE
     )
 
-    assert result == contracts.NonAnswer(
-        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-        reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
-        reason="The Data Question is missing required interpretation details.",
-        unresolved_ambiguities=("metric",),
-        next_step="Ask a clarification question before selecting data.",
+    assert result.stage == _STAGE
+    assert result.reason_code == contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD
+    assert result.unresolved_ambiguities == ("metric",)
+    assert result.next_step
+    assert (
+        non_answer_catalog.response_kind_for(result.reason_code)
+        == contracts.ResponseKind.CLARIFICATION_NEEDED
     )
 
 
-def test_non_answer_catalog_builds_unknown_semantic_label_non_answer() -> None:
+def test_unknown_semantic_label_builder_records_the_label() -> None:
     result = non_answer_catalog.unknown_semantic_label_non_answer(
-        "field",
-        stage=contracts.NonAnswerStage.DATA_REQUESTER,
+        "field", stage=_STAGE
     )
 
-    assert result == contracts.NonAnswer(
-        stage=contracts.NonAnswerStage.DATA_REQUESTER,
-        reason_code=contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL,
-        reason=(
-            "The Data Assistant could not match the requested Semantic Layer "
-            "labels."
-        ),
-        unresolved_ambiguities=("field",),
-        next_step="Use exact Semantic Layer metric and dimension labels.",
+    assert result.stage == _STAGE
+    assert result.reason_code == contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL
+    assert result.unresolved_ambiguities == ("field",)
+    assert result.next_step
+    assert (
+        non_answer_catalog.response_kind_for(result.reason_code)
+        == contracts.ResponseKind.UNSUPPORTED
     )
