@@ -85,8 +85,7 @@ def run_data_assistant(
     # 4. Prepare Data.
     data_request_result = data_requester.create_data_request(
         question_frame=question_frame,
-        dataset_selection=dataset_access_result.value,
-        semantic_matches=available_data_resolution.semantic_matches,
+        resolved_match=available_data_resolution.resolved_match,
     )
     if isinstance(data_request_result, contracts.NonAnswer):
         return response_composer.compose_non_answer_response(data_request_result)
