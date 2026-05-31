@@ -16,6 +16,10 @@ def test_semantic_layer_loads_dataset_table_relationship() -> None:
         "employee_123",
         "local_development_user",
     )
+    assert dataset.example_questions == (
+        "What was total revenue by region in January 2026?",
+        "What was customer count by customer region in January 2026?",
+    )
     assert table_ids == {"orders", "customers"}
 
     customers = semantic_layer_loader.find_table("customers", loaded_semantic_layer)

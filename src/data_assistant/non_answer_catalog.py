@@ -114,7 +114,10 @@ _DEFINITIONS: dict[contracts.NonAnswerReasonCode, _NonAnswerDefinition] = {
         response_kind=contracts.ResponseKind.UNSUPPORTED,
         reason="The Data Assistant does not support that Data Question intent yet.",
         context=("supported intent",),
-        next_step="Ask: What was total revenue by region in January 2026?",
+        next_step=(
+            "Ask: What was total revenue by region in January 2026? "
+            "Or: What was customer count by customer region in January 2026?"
+        ),
     ),
     contracts.NonAnswerReasonCode.UNSUPPORTED_SHAPE: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,

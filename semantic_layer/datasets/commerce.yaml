@@ -13,6 +13,7 @@ freshness:
   description: Commerce order data refreshed through 2026-01-31.
 example_questions:
   - What was total revenue by region in January 2026?
+  - What was customer count by customer region in January 2026?
 dataset_access:
   allowed_identity_ids:
     - employee_123

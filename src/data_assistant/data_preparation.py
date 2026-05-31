@@ -1,4 +1,4 @@
-"""Prepared Data step for Data Assistant revenue by region."""
+"""Prepared Data step for supported Data Assistant metric questions."""
 
 from __future__ import annotations
 
