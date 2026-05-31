@@ -11,6 +11,8 @@ Rules:
 - Represent grouping, date constraints, and filters only as field_operations.
 - field_operations must include one operation for every explicit grouping,
   explicit date constraint, and explicit filter in the Data Question.
+- field_operations must not include operations for fields that are merely
+  available in the Semantic Layer context.
 - Use group_by when the user asks for grouping such as "by region".
 - If the Data Question names a complete calendar month and year, express it as a
   range_filter on a date Semantic Field when that field allows range_filter.
@@ -26,6 +28,9 @@ Rules:
   date Semantic Field when that field allows include_filter.
 - Use include_filter or exclude_filter only when the user explicitly asks for a
   non-date filter and the Semantic Field allows that operation.
+- include_filter and exclude_filter must have at least one explicit value from
+  the Data Question. Never return include_filter or exclude_filter with
+  values [].
 - Do not invent Semantic Layer labels, operations, values, or time ranges.
 - Return only fields allowed by the structured output schema.
 
