@@ -22,6 +22,5 @@ def normalize_question(question: str) -> str:
 def mentions_unsupported_data(normalized_question: str) -> bool:
     """Return whether question text asks for unsupported data sources."""
     return any(
-        pattern.search(normalized_question)
-        for pattern in _UNSUPPORTED_DATA_PATTERNS
+        pattern.search(normalized_question) for pattern in _UNSUPPORTED_DATA_PATTERNS
     )

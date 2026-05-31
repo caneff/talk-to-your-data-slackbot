@@ -53,6 +53,7 @@ def _openai_provider_returning(
     question_interpreter.OpenAIQuestionInterpreterProvider
         Provider wired to the fake OpenAI client.
     """
+
     class FakeResponsesClient:
         def parse(self, **kwargs: object) -> object:
             if parse_calls is not None:

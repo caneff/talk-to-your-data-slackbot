@@ -25,8 +25,7 @@ def test_response_composer_returns_plain_text_with_trust_summary() -> None:
     response = response_composer.compose_final_response(
         contracts.AnswerDraft(
             summary=(
-                "Total revenue in January 2026 was $2,050.00, grouped across "
-                "2 regions."
+                "Total revenue in January 2026 was $2,050.00, grouped across 2 regions."
             ),
             key_data=pd.DataFrame(
                 {

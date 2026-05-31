@@ -29,6 +29,7 @@ def fixed_proposal_provider(
     provider_proposal: question_interpreter.QuestionFrameProposal,
 ) -> question_interpreter.QuestionInterpreterProvider:
     """Build a fake provider that always returns one fixed proposal."""
+
     class FixedProposalProvider:
         def propose_question_frame(
             self,
@@ -42,9 +43,11 @@ def fixed_proposal_provider(
     return FixedProposalProvider()
 
 
-def provider_that_must_not_be_called(
-) -> question_interpreter.QuestionInterpreterProvider:
+def provider_that_must_not_be_called() -> (
+    question_interpreter.QuestionInterpreterProvider
+):
     """Build a fake provider that fails if the interpreter calls it."""
+
     class MustNotBeCalledProvider:
         def propose_question_frame(
             self,
@@ -62,6 +65,7 @@ def provider_failure_provider(
     reason: str = "provider unavailable",
 ) -> question_interpreter.QuestionInterpreterProvider:
     """Build a fake provider that returns a ProviderFailure."""
+
     class ProviderFailureProvider:
         def propose_question_frame(
             self,
@@ -79,6 +83,7 @@ def invalid_result_provider(
     provider_result: object,
 ) -> question_interpreter.QuestionInterpreterProvider:
     """Build a fake provider that violates the provider contract for tests."""
+
     class InvalidResultProvider:
         def propose_question_frame(
             self,
