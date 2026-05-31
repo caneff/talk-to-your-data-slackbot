@@ -30,80 +30,65 @@ def _proposal(
     )
 
 
+def _group_by_region() -> question_interpreter.GroupByOperationProposal:
+    return question_interpreter.GroupByOperationProposal(
+        operation="group_by",
+        field="region",
+    )
+
+
+def _january_2026_order_date_filter() -> (
+    question_interpreter.RangeFilterOperationProposal
+):
+    return question_interpreter.RangeFilterOperationProposal(
+        operation="range_filter",
+        field="order date",
+        lower="2026-01-01",
+        upper="2026-01-31",
+    )
+
+
+def _january_revenue_by_region_proposal() -> question_interpreter.QuestionFrameProposal:
+    return _proposal(
+        intent="summarize",
+        metric="total revenue",
+        field_operations=(
+            _group_by_region(),
+            _january_2026_order_date_filter(),
+        ),
+    )
+
+
+def _missing_time_range_revenue_by_region_proposal() -> (
+    question_interpreter.QuestionFrameProposal
+):
+    return _proposal(
+        intent="summarize",
+        metric=None,
+        field_operations=(_group_by_region(),),
+    )
+
+
 SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
     SharedQuestionFrameCase(
         name="canonical_question",
         question="What was total revenue by region in January 2026?",
-        expected=_proposal(
-            intent="summarize",
-            metric="total revenue",
-            field_operations=(
-                question_interpreter.GroupByOperationProposal(
-                    operation="group_by",
-                    field="region",
-                ),
-                question_interpreter.RangeFilterOperationProposal(
-                    operation="range_filter",
-                    field="order date",
-                    lower="2026-01-01",
-                    upper="2026-01-31",
-                ),
-            ),
-        ),
+        expected=_january_revenue_by_region_proposal(),
     ),
     SharedQuestionFrameCase(
         name="show_total_revenue_by_region",
         question="Show total revenue by region in January 2026.",
-        expected=_proposal(
-            intent="summarize",
-            metric="total revenue",
-            field_operations=(
-                question_interpreter.GroupByOperationProposal(
-                    operation="group_by",
-                    field="region",
-                ),
-                question_interpreter.RangeFilterOperationProposal(
-                    operation="range_filter",
-                    field="order date",
-                    lower="2026-01-01",
-                    upper="2026-01-31",
-                ),
-            ),
-        ),
+        expected=_january_revenue_by_region_proposal(),
     ),
     SharedQuestionFrameCase(
         name="summarize_total_revenue_by_region",
         question="Summarize total revenue by region for January 2026.",
-        expected=_proposal(
-            intent="summarize",
-            metric="total revenue",
-            field_operations=(
-                question_interpreter.GroupByOperationProposal(
-                    operation="group_by",
-                    field="region",
-                ),
-                question_interpreter.RangeFilterOperationProposal(
-                    operation="range_filter",
-                    field="order date",
-                    lower="2026-01-01",
-                    upper="2026-01-31",
-                ),
-            ),
-        ),
+        expected=_january_revenue_by_region_proposal(),
     ),
     SharedQuestionFrameCase(
         name="safe_non_answer_question",
         question="What was total revenue by region?",
-        expected=_proposal(
-            intent="summarize",
-            metric=None,
-            field_operations=(
-                question_interpreter.GroupByOperationProposal(
-                    operation="group_by",
-                    field="region",
-                ),
-            ),
-        ),
+        expected=_missing_time_range_revenue_by_region_proposal(),
         enabled=False,
     ),
 )
