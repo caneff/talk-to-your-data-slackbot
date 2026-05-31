@@ -7,6 +7,7 @@ import duckdb
 import data_assistant.access_controller as access_controller
 import data_assistant.data_preparation as data_preparation
 import data_assistant.data_requester as data_requester
+import data_assistant.non_answer_catalog as non_answer_catalog
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.reasoning_layer as reasoning_layer
 import data_assistant.response_composer as response_composer
@@ -62,7 +63,10 @@ def run_data_assistant(
         provider=question_interpreter_provider,
     )
     if isinstance(question_frame_result, contracts.NonAnswer):
-        return response_composer.compose_non_answer_response(question_frame_result)
+        return response_composer.compose_non_answer_response(
+            question_frame_result,
+            wording_provider=non_answer_catalog.StaticCatalogWording(),
+        )
     question_frame = question_frame_result.value
 
     # 2. Resolve Available Data.
@@ -71,7 +75,10 @@ def run_data_assistant(
         semantic_layer=active_semantic_layer,
     )
     if isinstance(available_data_result, contracts.NonAnswer):
-        return response_composer.compose_non_answer_response(available_data_result)
+        return response_composer.compose_non_answer_response(
+            available_data_result,
+            wording_provider=non_answer_catalog.StaticCatalogWording(),
+        )
     available_data_resolution = available_data_result.value
 
     # 3. Authorize Available Data.
@@ -80,7 +87,10 @@ def run_data_assistant(
         internal_identity=internal_identity,
     )
     if isinstance(dataset_access_result, contracts.NonAnswer):
-        return response_composer.compose_non_answer_response(dataset_access_result)
+        return response_composer.compose_non_answer_response(
+            dataset_access_result,
+            wording_provider=non_answer_catalog.StaticCatalogWording(),
+        )
 
     # 4. Prepare Data.
     data_request_result = data_requester.create_data_request(
@@ -88,7 +98,10 @@ def run_data_assistant(
         resolved_match=available_data_resolution.resolved_match,
     )
     if isinstance(data_request_result, contracts.NonAnswer):
-        return response_composer.compose_non_answer_response(data_request_result)
+        return response_composer.compose_non_answer_response(
+            data_request_result,
+            wording_provider=non_answer_catalog.StaticCatalogWording(),
+        )
     data_request = data_request_result.value
 
     prepared_data = data_preparation.prepare_data(

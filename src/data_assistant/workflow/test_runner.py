@@ -25,7 +25,10 @@ def capture_non_answer_response(
 
     def compose_non_answer_response(
         non_answer: contracts.NonAnswer,
+        *,
+        wording_provider: object = None,
     ) -> contracts.FinalResponse:
+        del wording_provider
         captured_non_answers.append(non_answer)
         return sentinel_response
 
