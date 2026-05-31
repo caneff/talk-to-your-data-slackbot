@@ -69,9 +69,7 @@ class DataType(enum.StrEnum):
 
     DATE = "date"
     DECIMAL = "decimal"
-    NUMBER = "number"
     STRING = "string"
-    VARCHAR = "varchar"
 
 
 class SemanticField(_SemanticLayerModel):
