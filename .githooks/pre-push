@@ -1,0 +1,27 @@
+#!/bin/sh
+# Shared across all worktrees. Enable once per clone:
+#   git config core.hooksPath .githooks
+#
+# Two guards before code reaches origin. Bypass deliberately with --no-verify.
+
+# 1. No direct pushes to the integration branch. (Local stand-in for a
+#    server-side ruleset, which needs GitHub Pro / a public repo / an org.)
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main | refs/heads/master)
+      echo "" >&2
+      echo "  pre-push: direct push to '$remote_ref' is blocked — integrate via PR." >&2
+      exit 1
+      ;;
+  esac
+done
+
+# 2. Don't push a red tree (the shared-branch hazard).
+if ! uv run pytest -q; then
+  echo "" >&2
+  echo "  pre-push: tests are red — not pushing." >&2
+  echo "  Fix them, or bypass deliberately with: git push --no-verify" >&2
+  exit 1
+fi
+
+exit 0

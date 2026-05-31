@@ -1,0 +1,29 @@
+#!/bin/sh
+# Shared across all worktrees (they share one .git). Enable once per clone:
+#   git config core.hooksPath .githooks
+#
+# Structural guards only — fast, runs on every commit. Tests live in pre-push.
+
+# 1. The primary clone is integration-only: never commit there.
+#    In a linked worktree, <toplevel>/.git is a gitlink file; in the primary
+#    clone it is a directory.
+top=$(git rev-parse --show-toplevel)
+if [ -d "$top/.git" ]; then
+  echo "" >&2
+  echo "  pre-commit: the primary clone is integration-only." >&2
+  echo "  Work in a per-agent worktree (e.g. ttd-claude / ttd-codex)." >&2
+  exit 1
+fi
+
+# 2. No direct commits to the integration branch.
+branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+case "$branch" in
+  main | master)
+    echo "" >&2
+    echo "  pre-commit: no direct commits to '$branch'." >&2
+    echo "  Cut a task branch: git switch -c <agent>/issue-NN origin/main" >&2
+    exit 1
+    ;;
+esac
+
+exit 0
