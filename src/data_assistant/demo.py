@@ -67,7 +67,12 @@ def build_demo_question_interpreter_provider() -> (
 
 
 def run_demo() -> tuple[DemoScenarioResult, ...]:
-    with local_duckdb_fixture.connect_orders(()) as connection:
+    with local_duckdb_fixture.connect_tables(
+        (
+            local_duckdb_fixture.orders_table_spec(()),
+            local_duckdb_fixture.customers_table_spec(()),
+        )
+    ) as connection:
         connection.execute(_DEMO_SEED_PATH.read_text(encoding="utf-8"))
         return (
             _run_one_demo_scenario(
@@ -77,9 +82,17 @@ def run_demo() -> tuple[DemoScenarioResult, ...]:
                 connection=connection,
             ),
             _run_one_demo_scenario(
+                name="customer_count_by_region",
+                request_text=(
+                    "What was customer count by customer region in January 2026?"
+                ),
+                request_ts="1710000000.100002",
+                connection=connection,
+            ),
+            _run_one_demo_scenario(
                 name="safe_non_answer",
                 request_text="What was total revenue by region?",
-                request_ts="1710000000.100002",
+                request_ts="1710000000.100003",
                 connection=connection,
             ),
         )

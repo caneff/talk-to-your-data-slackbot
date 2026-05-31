@@ -36,22 +36,22 @@ def build_semantic_layer_context(
                         for metric in table.metrics
                     }
                 ),
-                "available_fields": sorted(
+                "metric_contexts": sorted(
                     [
                         {
-                            "label": field.label,
-                            "data_type": field.data_type,
-                            "operations": sorted(
-                                operation.value for operation in field.operations
+                            "metric_label": metric.label,
+                            "available_fields": _field_contexts(table.fields),
+                            "available_field_labels": sorted(
+                                field.label for field in table.fields
                             ),
                         }
                         for table in dataset_tables
-                        for field in table.fields
+                        for metric in table.metrics
                     ],
-                    key=lambda field_context: typing.cast(str, field_context["label"]),
-                ),
-                "available_field_labels": sorted(
-                    {field.label for table in dataset_tables for field in table.fields}
+                    key=lambda metric_context: typing.cast(
+                        str,
+                        metric_context["metric_label"],
+                    ),
                 ),
             }
         )
@@ -59,7 +59,6 @@ def build_semantic_layer_context(
     return {
         "datasets": datasets,
         "all_metric_labels": sorted(set(metric_labels(semantic_layer))),
-        "all_field_labels": sorted(set(field_labels(semantic_layer))),
         "supported_intents": sorted(_SUPPORTED_PROVIDER_INTENTS),
     }
 
@@ -73,4 +72,20 @@ def metric_labels(semantic_layer: schema.SemanticLayer) -> tuple[str, ...]:
 def field_labels(semantic_layer: schema.SemanticLayer) -> tuple[str, ...]:
     return tuple(
         field.label for table in semantic_layer.tables for field in table.fields
+    )
+
+
+def _field_contexts(
+    fields: tuple[schema.SemanticField, ...],
+) -> list[dict[str, object]]:
+    return sorted(
+        [
+            {
+                "label": field.label,
+                "data_type": field.data_type,
+                "operations": sorted(operation.value for operation in field.operations),
+            }
+            for field in fields
+        ],
+        key=lambda field_context: typing.cast(str, field_context["label"]),
     )

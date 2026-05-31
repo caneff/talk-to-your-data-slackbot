@@ -151,6 +151,24 @@ def test_openai_provider_schema_guides_supported_summary_intent() -> None:
     assert "show" in intent_schema["description"]
 
 
+def test_openai_provider_schema_rejects_empty_implicit_filters() -> None:
+    response_schema = question_interpreter.QuestionFrameProposal.model_json_schema()
+    field_operation_schema = response_schema["$defs"]["FieldOperationProposal"]
+    field_operations_schema = response_schema["properties"]["field_operations"]
+    operation_schema = field_operation_schema["properties"]["operation"]
+    values_schema = field_operation_schema["properties"]["values"]
+
+    assert "merely available in context" in field_operations_schema["description"]
+    assert (
+        "merely available in semantic_layer_context" in operation_schema["description"]
+    )
+    assert "Non-empty explicit values" in values_schema["description"]
+    assert (
+        "never emit include_filter or exclude_filter with empty values"
+        in (values_schema["description"])
+    )
+
+
 def test_openai_provider_prompt_extracts_explicit_calendar_month_time_ranges() -> None:
     parse_calls: list[dict[str, object]] = []
 
@@ -180,10 +198,60 @@ def test_openai_provider_prompt_extracts_explicit_calendar_month_time_ranges() -
     assert "January 2026" in developer_prompt
     assert "2026-01-01" in developer_prompt
     assert "2026-01-31" in developer_prompt
+    assert "Use only business-facing Semantic Layer labels supplied in" in (
+        developer_prompt
+    )
+    assert "semantic_layer_context" in developer_prompt
+    assert "may come from semantic_layer_context even when" in developer_prompt
+    assert "When the selected metric_context has exactly one date" in (developer_prompt)
+    assert "use that field for a complete calendar month and year" in (developer_prompt)
     assert "Never omit a complete calendar month" in developer_prompt
     assert 'return intent\n"summarize"' in developer_prompt
     assert 'operation "range_filter", field "order date"' in developer_prompt
     assert "not inventing a time range" in developer_prompt
+
+
+def test_openai_provider_prompt_chooses_one_relevant_date_field() -> None:
+    parse_calls: list[dict[str, object]] = []
+
+    class FakeParsedResponse:
+        output_parsed = test_support.question_frame_proposal()
+
+    provider = _openai_provider_returning(
+        FakeParsedResponse(),
+        parse_calls=parse_calls,
+    )
+
+    provider.propose_question_frame(
+        question="What was customer count by customer region in January 2026?",
+        semantic_layer_context={"datasets": []},
+    )
+
+    input_messages = typing.cast(
+        list[dict[str, str]],
+        parse_calls[0]["input"],
+    )
+    developer_prompt = input_messages[0]["content"]
+    assert "One explicit date phrase should produce at most one date" in (
+        developer_prompt
+    )
+    assert "choose the one most" in developer_prompt
+    assert "directly related to the requested metric" in developer_prompt
+    assert "Do not add date" in developer_prompt
+    assert "filters for unrelated fields" in developer_prompt
+    assert "must not include operations for fields that are merely" in (
+        developer_prompt
+    )
+    assert "use the metric_context" in developer_prompt
+    assert "outside the selected metric's compatible fields" in developer_prompt
+    assert "A field that" in developer_prompt
+    assert "appears only under a different metric_context" in developer_prompt
+    assert "Never return include_filter or exclude_filter with" in developer_prompt
+    assert "values []" in developer_prompt
+    assert "What was customer count by customer region in January 2026?" in (
+        developer_prompt
+    )
+    assert 'operation "range_filter", field "created date"' in developer_prompt
 
 
 def test_openai_provider_maps_refusal_to_provider_failure() -> None:

@@ -44,3 +44,18 @@ def test_connect_orders_builds_orders_table_with_typed_schema() -> None:
 
     assert fetched[0][0] == "North"
     assert fetched[1][0] is None
+
+
+def test_connect_customers_builds_customers_table_with_typed_schema() -> None:
+    rows = (
+        ("2026-01-03", "cust-001", "North"),
+        ("2026-01-20", "cust-002", None),
+    )
+
+    with local_duckdb_fixture.connect_customers(rows) as connection:
+        fetched = connection.execute(
+            "select customer_id, customer_region from customers order by created_date"
+        ).fetchall()
+
+    assert fetched[0] == ("cust-001", "North")
+    assert fetched[1] == ("cust-002", None)
