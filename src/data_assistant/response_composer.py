@@ -2,8 +2,21 @@
 
 from __future__ import annotations
 
+import typing
+
 import data_assistant.non_answer_catalog as non_answer_catalog
 import data_assistant.workflow.contracts as contracts
+
+
+class NonAnswerWordingProvider(typing.Protocol):
+    """Provider boundary for Non-Answer team-member-facing copy."""
+
+    def render_wording(
+        self,
+        non_answer: contracts.NonAnswer,
+    ) -> non_answer_catalog.NonAnswerWording:
+        """Return rendered copy for a structured Non-Answer."""
+        ...
 
 
 def compose_final_response(
@@ -42,10 +55,12 @@ def compose_final_response(
 
 def compose_non_answer_response(
     non_answer: contracts.NonAnswer,
+    *,
+    wording_provider: NonAnswerWordingProvider,
 ) -> contracts.FinalResponse:
     """Compose a plain-text Final Response for a workflow Non-Answer."""
     response_kind = non_answer_catalog.response_kind_for(non_answer.reason_code)
-    wording = non_answer_catalog.render_wording(non_answer)
+    wording = wording_provider.render_wording(non_answer)
     adverb = (
         " yet"
         if response_kind == contracts.ResponseKind.CLARIFICATION_NEEDED
