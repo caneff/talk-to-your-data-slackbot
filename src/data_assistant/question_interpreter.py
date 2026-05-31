@@ -38,58 +38,53 @@ class OpenAIQuestionInterpreterConfigError(ValueError):
     """Raised when required OpenAI provider config is missing."""
 
 
-ScalarProposalValue: typing.TypeAlias = (
-    str | int | float | decimal.Decimal | datetime.date
-)
-
-
-class GroupByOperationProposal(pydantic.BaseModel):
-    """Untrusted provider proposal for a group-by Semantic Field operation."""
+class FieldOperationProposal(pydantic.BaseModel):
+    """Untrusted provider proposal for one Semantic Field operation."""
 
     model_config = pydantic.ConfigDict(extra="forbid")
 
-    operation: typing.Literal["group_by"]
-    field: str
+    operation: typing.Literal[
+        "group_by",
+        "range_filter",
+        "include_filter",
+        "exclude_filter",
+    ] = pydantic.Field(
+        description=(
+            "Use group_by for requested grouping, range_filter for complete "
+            "calendar months or date ranges, include_filter for exact dates or "
+            "included values, and exclude_filter for excluded values."
+        ),
+    )
+    field: str = pydantic.Field(
+        description="Business-facing Semantic Field label from semantic_layer_context.",
+    )
+    lower: str | None = pydantic.Field(
+        default=None,
+        description=(
+            "Lower range_filter value. Use ISO YYYY-MM-DD for date ranges. "
+            "Null for group_by, include_filter, and exclude_filter."
+        ),
+    )
+    upper: str | None = pydantic.Field(
+        default=None,
+        description=(
+            "Upper range_filter value. Use ISO YYYY-MM-DD for date ranges. "
+            "Null for group_by, include_filter, and exclude_filter."
+        ),
+    )
+    values: tuple[str, ...] = pydantic.Field(
+        default=(),
+        description=(
+            "Values for include_filter or exclude_filter. Empty for group_by "
+            "and range_filter."
+        ),
+    )
 
 
-class RangeFilterOperationProposal(pydantic.BaseModel):
-    """Untrusted provider proposal for a bounded Semantic Field filter."""
-
-    model_config = pydantic.ConfigDict(extra="forbid")
-
-    operation: typing.Literal["range_filter"]
-    field: str
-    lower: ScalarProposalValue | None = None
-    upper: ScalarProposalValue | None = None
-
-
-class IncludeFilterOperationProposal(pydantic.BaseModel):
-    """Untrusted provider proposal for included Semantic Field values."""
-
-    model_config = pydantic.ConfigDict(extra="forbid")
-
-    operation: typing.Literal["include_filter"]
-    field: str
-    values: tuple[ScalarProposalValue, ...]
-
-
-class ExcludeFilterOperationProposal(pydantic.BaseModel):
-    """Untrusted provider proposal for excluded Semantic Field values."""
-
-    model_config = pydantic.ConfigDict(extra="forbid")
-
-    operation: typing.Literal["exclude_filter"]
-    field: str
-    values: tuple[ScalarProposalValue, ...]
-
-
-FieldOperationProposal: typing.TypeAlias = typing.Annotated[
-    GroupByOperationProposal
-    | RangeFilterOperationProposal
-    | IncludeFilterOperationProposal
-    | ExcludeFilterOperationProposal,
-    pydantic.Field(discriminator="operation"),
-]
+GroupByOperationProposal = FieldOperationProposal
+RangeFilterOperationProposal = FieldOperationProposal
+IncludeFilterOperationProposal = FieldOperationProposal
+ExcludeFilterOperationProposal = FieldOperationProposal
 
 
 class QuestionFrameProposal(pydantic.BaseModel):
@@ -97,9 +92,26 @@ class QuestionFrameProposal(pydantic.BaseModel):
 
     model_config = pydantic.ConfigDict(extra="forbid")
 
-    intent: str | None
-    metric: str | None
-    field_operations: tuple[FieldOperationProposal, ...]
+    intent: str | None = pydantic.Field(
+        description=(
+            "Use summarize for supported Data Questions that ask for historical "
+            "metric totals, summaries, or grouped results, including phrases "
+            "like 'what was', 'show', and 'summarize'. Use null only when no "
+            "supported intent applies."
+        ),
+    )
+    metric: str | None = pydantic.Field(
+        description=(
+            "Business-facing Semantic Metric label from semantic_layer_context, "
+            "or null when no matching metric is present."
+        ),
+    )
+    field_operations: tuple[FieldOperationProposal, ...] = pydantic.Field(
+        description=(
+            "Every explicit grouping, date constraint, and filter from the "
+            "Data Question, represented with Semantic Field labels."
+        ),
+    )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -440,12 +452,12 @@ def _promote_field_operations(
                 )
             )
             continue
-        if isinstance(operation_proposal, RangeFilterOperationProposal):
+        if operation == contracts.FieldOperationKind.RANGE_FILTER:
             result = _promote_range_filter(operation_proposal, field, operation)
-        elif isinstance(
-            operation_proposal,
-            IncludeFilterOperationProposal | ExcludeFilterOperationProposal,
-        ):
+        elif operation in {
+            contracts.FieldOperationKind.INCLUDE_FILTER,
+            contracts.FieldOperationKind.EXCLUDE_FILTER,
+        }:
             result = _promote_values_filter(operation_proposal, field, operation)
         else:
             return _invalid_provider_output_non_answer()
@@ -457,7 +469,7 @@ def _promote_field_operations(
 
 
 def _promote_range_filter(
-    operation_proposal: RangeFilterOperationProposal,
+    operation_proposal: FieldOperationProposal,
     field: schema.SemanticField,
     operation: contracts.FieldOperationKind,
 ) -> contracts.NonAnswer | contracts.SemanticFieldOperation:
@@ -477,6 +489,8 @@ def _promote_range_filter(
     )
     if isinstance(upper, contracts.NonAnswer):
         return upper
+    if _range_bounds_are_reversed(lower, upper):
+        return _invalid_field_operation_non_answer("range filter")
     return contracts.SemanticFieldOperation(
         operation=operation,
         field=field.label,
@@ -485,8 +499,23 @@ def _promote_range_filter(
     )
 
 
+def _range_bounds_are_reversed(
+    lower: contracts.FieldValue | None,
+    upper: contracts.FieldValue | None,
+) -> bool:
+    if lower is None or upper is None:
+        return False
+    if isinstance(lower, datetime.date) and isinstance(upper, datetime.date):
+        return lower > upper
+    if isinstance(lower, decimal.Decimal) and isinstance(upper, decimal.Decimal):
+        return lower > upper
+    if isinstance(lower, str) and isinstance(upper, str):
+        return lower > upper
+    return False
+
+
 def _promote_values_filter(
-    operation_proposal: IncludeFilterOperationProposal | ExcludeFilterOperationProposal,
+    operation_proposal: FieldOperationProposal,
     field: schema.SemanticField,
     operation: contracts.FieldOperationKind,
 ) -> contracts.NonAnswer | contracts.SemanticFieldOperation:
@@ -506,29 +535,24 @@ def _promote_values_filter(
 
 
 def _coerce_field_value(
-    value: ScalarProposalValue,
+    value: str,
     field: schema.SemanticField,
 ) -> contracts.FieldValue | contracts.NonAnswer:
     if field.data_type == "date":
-        if isinstance(value, datetime.date):
-            return value
-        if isinstance(value, str):
-            try:
-                return datetime.date.fromisoformat(value)
-            except ValueError:
-                return _invalid_field_operation_non_answer("date value")
-        return _invalid_field_operation_non_answer("date value")
-    if field.data_type in {"decimal", "number"}:
-        if isinstance(value, datetime.date):
-            return _invalid_field_operation_non_answer("decimal value")
         try:
-            return decimal.Decimal(str(value))
+            return datetime.date.fromisoformat(value)
+        except ValueError:
+            return _invalid_field_operation_non_answer("date value")
+    if field.data_type in {"decimal", "number"}:
+        try:
+            coerced_value = decimal.Decimal(value)
         except decimal.InvalidOperation:
             return _invalid_field_operation_non_answer("decimal value")
+        if not coerced_value.is_finite():
+            return _invalid_field_operation_non_answer("decimal value")
+        return coerced_value
     if field.data_type in {"string", "varchar"}:
-        if isinstance(value, datetime.date):
-            return value.isoformat()
-        return str(value)
+        return value
     return _invalid_field_operation_non_answer("field value")
 
 

@@ -133,6 +133,22 @@ def test_openai_provider_returns_question_frame_proposal_from_parsed_response() 
     assert "prompt_context" not in user_payload
 
 
+def test_openai_provider_schema_avoids_union_items_for_field_operations() -> None:
+    response_schema = question_interpreter.QuestionFrameProposal.model_json_schema()
+    field_operations_schema = response_schema["properties"]["field_operations"]
+
+    assert "oneOf" not in json.dumps(field_operations_schema)
+
+
+def test_openai_provider_schema_guides_supported_summary_intent() -> None:
+    response_schema = question_interpreter.QuestionFrameProposal.model_json_schema()
+    intent_schema = response_schema["properties"]["intent"]
+
+    assert "Use summarize" in intent_schema["description"]
+    assert "what was" in intent_schema["description"]
+    assert "show" in intent_schema["description"]
+
+
 def test_openai_provider_prompt_extracts_explicit_calendar_month_time_ranges() -> None:
     parse_calls: list[dict[str, object]] = []
 
@@ -154,10 +170,17 @@ def test_openai_provider_prompt_extracts_explicit_calendar_month_time_ranges() -
         parse_calls[0]["input"],
     )
     developer_prompt = input_messages[0]["content"]
+    assert 'Use intent "summarize"' in developer_prompt
+    assert '"what was ..."' in developer_prompt
+    assert '"show ..."' in developer_prompt
+    assert '"summarize ..."' in developer_prompt
     assert "complete calendar month and year" in developer_prompt
     assert "January 2026" in developer_prompt
     assert "2026-01-01" in developer_prompt
     assert "2026-01-31" in developer_prompt
+    assert "Never omit a complete calendar month" in developer_prompt
+    assert 'return intent\n"summarize"' in developer_prompt
+    assert 'operation "range_filter", field "order date"' in developer_prompt
     assert "not inventing a time range" in developer_prompt
 
 

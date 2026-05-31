@@ -1,6 +1,5 @@
 """Shared pytest fixtures for Data Assistant workflow tests."""
 
-import datetime
 import typing
 
 import pytest
@@ -59,8 +58,8 @@ def canonical_question_proposal() -> question_interpreter.QuestionFrameProposal:
             question_interpreter.RangeFilterOperationProposal(
                 operation="range_filter",
                 field="order date",
-                lower=datetime.date(2026, 1, 1),
-                upper=datetime.date(2026, 1, 31),
+                lower="2026-01-01",
+                upper="2026-01-31",
             ),
         ),
     )

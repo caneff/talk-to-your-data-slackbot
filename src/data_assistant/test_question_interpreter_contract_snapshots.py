@@ -5,6 +5,7 @@ import pytest
 
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.question_interpreter_test_support as interpreter_support
+import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_layer.testing_support as semantic_layer_testing
 import data_assistant.workflow.contracts as contracts
 
@@ -89,8 +90,8 @@ CONTRACT_SNAPSHOT_CASES = (
                 question_interpreter.RangeFilterOperationProposal(
                     operation="range_filter",
                     field="order date",
-                    lower=datetime.date(2026, 1, 1),
-                    upper=datetime.date(2026, 1, 31),
+                    lower="2026-01-01",
+                    upper="2026-01-31",
                 ),
             ),
         ),
@@ -258,7 +259,7 @@ CONTRACT_SNAPSHOT_CASES = (
                     operation="range_filter",
                     field="order date",
                     lower="not-a-date",
-                    upper=datetime.date(2026, 1, 31),
+                    upper="2026-01-31",
                 ),
             ),
         ),
@@ -267,6 +268,26 @@ CONTRACT_SNAPSHOT_CASES = (
             reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
             reason="The Question Interpreter provider returned invalid output.",
             unresolved_ambiguities=("date value",),
+            next_step="Fix the provider contract before retrying.",
+        ),
+    ),
+    snapshot_case(
+        name="invalid_reversed_range",
+        proposal=interpreter_support.question_frame_proposal(
+            field_operations=(
+                question_interpreter.RangeFilterOperationProposal(
+                    operation="range_filter",
+                    field="order date",
+                    lower="2026-01-31",
+                    upper="2026-01-01",
+                ),
+            ),
+        ),
+        expected=contracts.NonAnswer(
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+            reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+            reason="The Question Interpreter provider returned invalid output.",
+            unresolved_ambiguities=("range filter",),
             next_step="Fix the provider contract before retrying.",
         ),
     ),
@@ -355,3 +376,42 @@ def test_question_interpreter_returns_expected_contract(
     )
 
     assert result == case.expected
+
+
+def test_question_interpreter_rejects_non_finite_decimal_filter_values() -> None:
+    semantic_layer = semantic_layer_testing.semantic_layer_with_table(
+        fields=(
+            schema.SemanticField(
+                field_id="revenue",
+                label="revenue",
+                source_column="revenue",
+                data_type=schema.DataType.DECIMAL,
+                operations=(schema.FieldOperation.RANGE_FILTER,),
+            ),
+        ),
+    )
+    proposal = question_interpreter.QuestionFrameProposal(
+        intent="summarize",
+        metric="total revenue",
+        field_operations=(
+            question_interpreter.RangeFilterOperationProposal(
+                operation="range_filter",
+                field="revenue",
+                lower="NaN",
+            ),
+        ),
+    )
+
+    result = question_interpreter.interpret_question(
+        question=interpreter_support.CANONICAL_DATA_QUESTION,
+        semantic_layer=semantic_layer,
+        provider=interpreter_support.fixed_proposal_provider(proposal),
+    )
+
+    assert result == contracts.NonAnswer(
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+        reason="The Question Interpreter provider returned invalid output.",
+        unresolved_ambiguities=("decimal value",),
+        next_step="Fix the provider contract before retrying.",
+    )

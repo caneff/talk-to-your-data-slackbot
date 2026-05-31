@@ -4,7 +4,6 @@ These helpers keep behavior-focused test files from repeating provider stubs,
 canonical question setup, and default valid proposal construction.
 """
 
-import datetime
 import typing
 
 import data_assistant.question_interpreter as question_interpreter
@@ -97,8 +96,8 @@ def question_frame_proposal(
             question_interpreter.RangeFilterOperationProposal(
                 operation="range_filter",
                 field="order date",
-                lower=datetime.date(2026, 1, 1),
-                upper=datetime.date(2026, 1, 31),
+                lower="2026-01-01",
+                upper="2026-01-31",
             ),
         )
     else:

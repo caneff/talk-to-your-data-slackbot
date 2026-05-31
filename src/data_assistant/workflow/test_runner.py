@@ -218,8 +218,8 @@ def test_data_assistant_uses_required_question_interpreter_provider(
                     question_interpreter.RangeFilterOperationProposal(
                         operation="range_filter",
                         field="order date",
-                        lower=datetime.date(2026, 1, 1),
-                        upper=datetime.date(2026, 1, 31),
+                        lower="2026-01-01",
+                        upper="2026-01-31",
                     ),
                 ),
             )

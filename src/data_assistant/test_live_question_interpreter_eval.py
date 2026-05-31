@@ -51,12 +51,13 @@ def test_compare_proposal_reports_field_level_mismatches() -> None:
         "intent: expected 'summarize', got 'trend'",
         "metric: expected 'total revenue', got 'gross margin'",
         "field_operations: expected "
-        "(GroupByOperationProposal(operation='group_by', field='region'), "
-        "RangeFilterOperationProposal(operation='range_filter', field='order date', "
-        "lower=datetime.date(2026, 1, 1), upper=datetime.date(2026, 1, 31))), "
-        "got (GroupByOperationProposal(operation='group_by', field='country'), "
-        "IncludeFilterOperationProposal(operation='include_filter', field='region', "
-        "values=('North',)))",
+        "(FieldOperationProposal(operation='group_by', field='region', lower=None, "
+        "upper=None, values=()), FieldOperationProposal(operation='range_filter', "
+        "field='order date', lower='2026-01-01', upper='2026-01-31', values=())), "
+        "got (FieldOperationProposal(operation='group_by', field='country', "
+        "lower=None, upper=None, values=()), "
+        "FieldOperationProposal(operation='include_filter', field='region', "
+        "lower=None, upper=None, values=('North',)))",
     )
 
 
