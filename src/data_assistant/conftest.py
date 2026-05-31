@@ -104,15 +104,13 @@ def allowed_internal_identity() -> contracts.InternalIdentity:
 
 
 @pytest.fixture
-def canonical_question_provider(
-) -> question_interpreter.QuestionInterpreterProvider:
+def canonical_question_provider() -> question_interpreter.QuestionInterpreterProvider:
     """Return a fake provider that can answer the canonical question."""
     return StaticQuestionInterpreterProvider(canonical_question_proposal())
 
 
 @pytest.fixture
-def missing_time_range_provider(
-) -> question_interpreter.QuestionInterpreterProvider:
+def missing_time_range_provider() -> question_interpreter.QuestionInterpreterProvider:
     """Return a fake provider that triggers missing-time-range NonAnswer."""
     return StaticQuestionInterpreterProvider(missing_time_range_proposal())
 

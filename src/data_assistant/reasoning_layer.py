@@ -33,9 +33,8 @@ def draft_answer(
             .format_map(summary_values)
         )
     else:
-        summary = (
-            "{metric} in {time_range} was {metric_value}."
-            .format_map(summary_values)
+        summary = "{metric} in {time_range} was {metric_value}.".format_map(
+            summary_values
         )
 
     return contracts.AnswerDraft(

@@ -82,9 +82,7 @@ def test_missing_required_field_builder_records_the_field() -> None:
 
 
 def test_unknown_semantic_label_builder_records_the_label() -> None:
-    result = non_answer_catalog.unknown_semantic_label_non_answer(
-        "field", stage=_STAGE
-    )
+    result = non_answer_catalog.unknown_semantic_label_non_answer("field", stage=_STAGE)
 
     assert result.stage == _STAGE
     assert result.reason_code == contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL
@@ -103,8 +101,7 @@ _GOLDEN_WORDING: tuple[
         non_answer_catalog.NonAnswerWording(
             reason="You do not have access to the commerce Curated Dataset.",
             next_step=(
-                "Ask a data owner to grant Dataset Access or ask about "
-                "available data."
+                "Ask a data owner to grant Dataset Access or ask about available data."
             ),
         ),
     ),
@@ -186,8 +183,7 @@ _GOLDEN_WORDING: tuple[
         non_answer_catalog.NonAnswerWording(
             reason="User-provided CSV files are not supported data sources.",
             next_step=(
-                "Ask about an approved Curated Dataset in the Semantic Layer "
-                "instead."
+                "Ask about an approved Curated Dataset in the Semantic Layer instead."
             ),
         ),
     ),

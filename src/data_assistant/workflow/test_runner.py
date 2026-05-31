@@ -64,10 +64,7 @@ def test_data_assistant_runs_end_to_end(
     assert isinstance(run, contracts.DataAssistantRun)
     assert run.question_frame.unresolved_ambiguities == ()
     assert run.available_data_resolution.resolved_match.table.table_id == "orders"
-    assert (
-        len(run.available_data_resolution.dataset_selection.selected_datasets)
-        == 1
-    )
+    assert len(run.available_data_resolution.dataset_selection.selected_datasets) == 1
     assert run.data_request.metric.label == "total revenue"
     assert run.prepared_data.data.loc[0, "dimension_value"] == "West"
     assert run.prepared_data.quality_notes == (
@@ -94,9 +91,7 @@ def test_data_assistant_short_circuits_question_ambiguity(
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
     sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
-    order_rows = (
-        ("2026-01-03", "North", "1200.00"),
-    )
+    order_rows = (("2026-01-03", "North", "1200.00"),)
     with connect_orders(order_rows) as connection:
         result = workflow_runner.run_data_assistant(
             connection,
@@ -206,9 +201,7 @@ def test_data_assistant_short_circuits_unsupported_question_before_preparing_dat
         raise AssertionError("prepare_data should not be called")
 
     monkeypatch.setattr(data_preparation, "prepare_data", fail_prepare_data)
-    order_rows = (
-        ("2026-01-03", "North", "1200.00"),
-    )
+    order_rows = (("2026-01-03", "North", "1200.00"),)
 
     with connect_orders(order_rows) as connection:
         result = workflow_runner.run_data_assistant(

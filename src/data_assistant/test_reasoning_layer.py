@@ -104,9 +104,7 @@ def test_reasoning_layer_produces_answer_draft_from_prepared_data() -> None:
     assert answer_draft.datasets_used == ("Commerce Revenue",)
     assert answer_draft.dataset_tables_used == ("orders",)
     assert answer_draft.time_range == "2026-01-01 through 2026-01-31"
-    assert answer_draft.filters == (
-        "order date >= 2026-01-01 and <= 2026-01-31",
-    )
+    assert answer_draft.filters == ("order date >= 2026-01-01 and <= 2026-01-31",)
     assert answer_draft.freshness == (
         "Commerce order data refreshed through 2026-01-31."
     )

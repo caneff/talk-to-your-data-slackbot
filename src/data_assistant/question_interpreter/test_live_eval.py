@@ -5,9 +5,9 @@ import typing
 
 import pytest
 
-import data_assistant.live_question_interpreter_eval as live_eval
 import data_assistant.question_interpreter as question_interpreter
-import data_assistant.question_interpreter_test_support as test_support
+import data_assistant.question_interpreter.live_eval as live_eval
+import data_assistant.question_interpreter.test_support as test_support
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_layer.testing_support as semantic_layer_testing
 

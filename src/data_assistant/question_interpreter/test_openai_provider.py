@@ -4,7 +4,8 @@ import typing
 import pytest
 
 import data_assistant.question_interpreter as question_interpreter
-import data_assistant.question_interpreter_test_support as test_support
+import data_assistant.question_interpreter.openai_provider as openai_provider
+import data_assistant.question_interpreter.test_support as test_support
 
 
 def test_load_openai_provider_config_requires_api_key_only_when_selected() -> None:
@@ -53,6 +54,7 @@ def _openai_provider_returning(
     question_interpreter.OpenAIQuestionInterpreterProvider
         Provider wired to the fake OpenAI client.
     """
+
     class FakeResponsesClient:
         def parse(self, **kwargs: object) -> object:
             if parse_calls is not None:
@@ -68,7 +70,7 @@ def _openai_provider_returning(
             model="gpt-test-mini",
         ),
         client=typing.cast(
-            question_interpreter._OpenAIClient,  # pyright: ignore[reportPrivateUsage]
+            openai_provider._OpenAIClient,  # pyright: ignore[reportPrivateUsage]
             FakeOpenAIClient(),
         ),
     )
@@ -87,7 +89,7 @@ def test_build_openai_provider_accepts_injected_client() -> None:
         responses = FakeResponsesClient()
 
     client = typing.cast(
-        question_interpreter._OpenAIClient,  # pyright: ignore[reportPrivateUsage]
+        openai_provider._OpenAIClient,  # pyright: ignore[reportPrivateUsage]
         FakeOpenAIClient(),
     )
 

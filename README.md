@@ -135,14 +135,14 @@ the developer explicitly asks for that live run.
 Run the provider-only live eval suite with `OPENAI_API_KEY` in `.env`:
 
 ```bash
-uv run python -m data_assistant.live_question_interpreter_eval
+uv run python -m data_assistant.question_interpreter.live_eval
 ```
 
 Use verbose output to print expected and actual proposal details for passed
 cases too:
 
 ```bash
-uv run python -m data_assistant.live_question_interpreter_eval --verbose
+uv run python -m data_assistant.question_interpreter.live_eval --verbose
 ```
 
 Optional model override in `.env`:

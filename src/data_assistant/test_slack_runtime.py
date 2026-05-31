@@ -47,8 +47,9 @@ def bolt_message_event(
     return event
 
 
-def _connection_factory_should_not_run(
-) -> contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]:
+def _connection_factory_should_not_run() -> contextlib.AbstractContextManager[
+    duckdb.DuckDBPyConnection
+]:
     raise AssertionError("startup validation should fail before opening data")
 
 
@@ -75,8 +76,7 @@ def test_load_slack_runtime_config_names_all_missing_env_vars() -> None:
     # The exact missing names matter because this message is the developer's
     # first clue during local startup. Token values must never appear here.
     assert (
-        str(error_info.value)
-        == "Missing required Slack environment variables: "
+        str(error_info.value) == "Missing required Slack environment variables: "
         "SLACK_BOT_TOKEN, SLACK_APP_TOKEN"
     )
 
@@ -237,9 +237,7 @@ class RecordingBoltApp:
     """Capture registered Bolt event handlers without importing Slack Bolt."""
 
     def __init__(self) -> None:
-        self.registered_handlers: dict[
-            str, collections.abc.Callable[..., object]
-        ] = {}
+        self.registered_handlers: dict[str, collections.abc.Callable[..., object]] = {}
 
     def event(
         self, event_name: str
@@ -293,8 +291,9 @@ def test_handle_socket_mode_event_routes_human_dm_through_existing_boundary(
         ack_calls.append("ack")
         calls.append("ack")
 
-    def connection_factory(
-    ) -> contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]:
+    def connection_factory() -> contextlib.AbstractContextManager[
+        duckdb.DuckDBPyConnection
+    ]:
         calls.append("connection_factory")
         return connect_orders((("2026-01-03", "North", "1200.00"),))
 
@@ -370,8 +369,9 @@ def test_handle_socket_mode_event_acknowledges_and_ignores_unsupported_events(
     def acknowledge() -> None:
         ack_calls.append("ack")
 
-    def connection_factory(
-    ) -> contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]:
+    def connection_factory() -> contextlib.AbstractContextManager[
+        duckdb.DuckDBPyConnection
+    ]:
         connection_factory_calls.append("connection_factory")
         raise AssertionError("ignored events must not open a data connection")
 
@@ -402,8 +402,9 @@ def test_run_socket_mode_from_env_registers_message_handler_before_startup() -> 
     app = RecordingBoltApp()
     runtime_factories = RecordingRuntimeFactories(app=app)
 
-    def connection_factory(
-    ) -> contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]:
+    def connection_factory() -> contextlib.AbstractContextManager[
+        duckdb.DuckDBPyConnection
+    ]:
         raise AssertionError("startup should register handlers without opening data")
 
     handler = typing.cast(
