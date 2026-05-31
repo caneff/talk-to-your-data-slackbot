@@ -30,7 +30,6 @@ def test_semantic_layer_context_exposes_business_labels_not_storage_details() ->
                 table_id="orders_internal",
                 dataset_id="internal_commerce",
                 description="Internal orders table.",
-                date_column="order_date",
                 columns=(
                     schema.TableColumn(column_id="order_date", data_type="date"),
                     schema.TableColumn(column_id="net_revenue", data_type="decimal"),
@@ -49,7 +48,7 @@ def test_semantic_layer_context_exposes_business_labels_not_storage_details() ->
                         field_id="customer_region",
                         label="customer region",
                         source_column="region_code",
-                        data_type="string",
+                        data_type=schema.DataType.STRING,
                         operations=(schema.FieldOperation.GROUP_BY,),
                     ),
                 ),

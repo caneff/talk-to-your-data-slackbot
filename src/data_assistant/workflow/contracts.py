@@ -15,19 +15,6 @@ import data_assistant.semantic_layer.schema as schema
 T = typing.TypeVar("T")
 
 
-@dataclasses.dataclass(frozen=True)
-class TimeRange:
-    """Business time range used by a Question Frame and Data Request."""
-
-    label: str
-    start_date: datetime.date
-    end_date: datetime.date
-
-    def contains(self, value: datetime.date) -> bool:
-        """Return whether a date is inside the bounded time range."""
-        return self.start_date <= value <= self.end_date
-
-
 class FieldOperationKind(enum.StrEnum):
     """Approved operation over a business-facing Semantic Field."""
 

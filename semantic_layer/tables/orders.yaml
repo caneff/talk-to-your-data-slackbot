@@ -1,7 +1,6 @@
 table_id: orders
 dataset_id: commerce
 description: Clean commerce order facts.
-date_column: order_date
 columns:
   - column_id: order_date
     data_type: date

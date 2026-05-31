@@ -64,13 +64,23 @@ class FieldOperation(enum.StrEnum):
     EXCLUDE_FILTER = "exclude_filter"
 
 
+class DataType(enum.StrEnum):
+    """Value type used to validate and coerce Semantic Field filter values."""
+
+    DATE = "date"
+    DECIMAL = "decimal"
+    NUMBER = "number"
+    STRING = "string"
+    VARCHAR = "varchar"
+
+
 class SemanticField(_SemanticLayerModel):
     """Business field defined on a Dataset Table."""
 
     field_id: str
     label: str
     source_column: str
-    data_type: str
+    data_type: DataType
     operations: tuple[FieldOperation, ...]
 
 
@@ -80,7 +90,6 @@ class DatasetTable(_SemanticLayerModel):
     table_id: str
     dataset_id: str
     description: str
-    date_column: str
     columns: tuple[TableColumn, ...]
     metrics: tuple[Metric, ...]
     fields: tuple[SemanticField, ...]
@@ -88,9 +97,6 @@ class DatasetTable(_SemanticLayerModel):
     @pydantic.model_validator(mode="after")
     def _validate_references(self) -> typing.Self:
         column_ids = {column.column_id for column in self.columns}
-        if self.date_column not in column_ids:
-            msg = f"Date column is not listed in columns: {self.date_column}"
-            raise ValueError(msg)
         for field in self.fields:
             if field.source_column not in column_ids:
                 msg = (

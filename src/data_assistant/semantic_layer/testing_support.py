@@ -22,7 +22,7 @@ _DEFAULT_FIELDS = (
         field_id="order_date",
         label="order date",
         source_column="order_date",
-        data_type="date",
+        data_type=schema.DataType.DATE,
         operations=(
             schema.FieldOperation.INCLUDE_FILTER,
             schema.FieldOperation.EXCLUDE_FILTER,
@@ -33,7 +33,7 @@ _DEFAULT_FIELDS = (
         field_id="region",
         label="region",
         source_column="region",
-        data_type="string",
+        data_type=schema.DataType.STRING,
         operations=(
             schema.FieldOperation.GROUP_BY,
             schema.FieldOperation.INCLUDE_FILTER,
@@ -48,7 +48,6 @@ def semantic_layer_with_table(
     table_id: str = "orders",
     dataset_id: str = "commerce",
     description: str = "Orders table.",
-    date_column: str = "order_date",
     columns: collections.abc.Mapping[str, str] = _DEFAULT_COLUMNS,
     metrics: tuple[schema.Metric, ...] = _DEFAULT_METRICS,
     fields: tuple[schema.SemanticField, ...] = _DEFAULT_FIELDS,
@@ -60,7 +59,6 @@ def semantic_layer_with_table(
                 table_id=table_id,
                 dataset_id=dataset_id,
                 description=description,
-                date_column=date_column,
                 columns=tuple(
                     schema.TableColumn(column_id=column_id, data_type=data_type)
                     for column_id, data_type in columns.items()

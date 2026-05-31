@@ -23,7 +23,6 @@ def test_semantic_layer_loads_dataset_table_relationship() -> None:
     metrics_by_id = {metric.metric_id: metric for metric in customers.metrics}
     fields_by_id = {field.field_id: field for field in customers.fields}
     assert customers.dataset_id == "commerce"
-    assert customers.date_column == "created_date"
     assert column_ids == {"created_date", "customer_id", "customer_region"}
     assert metrics_by_id["customer_count"].label == "customer count"
     assert metrics_by_id["customer_count"].expression == "count(customer_id)"
@@ -43,7 +42,6 @@ def test_dataset_table_rejects_metric_source_column_outside_columns() -> None:
             table_id="orders",
             dataset_id="commerce",
             description="Clean commerce order facts.",
-            date_column="order_date",
             columns=(
                 schema.TableColumn(column_id="order_date", data_type="date"),
                 schema.TableColumn(column_id="region", data_type="string"),
@@ -62,7 +60,7 @@ def test_dataset_table_rejects_metric_source_column_outside_columns() -> None:
                     field_id="region",
                     label="region",
                     source_column="region",
-                    data_type="string",
+                    data_type=schema.DataType.STRING,
                     operations=(schema.FieldOperation.GROUP_BY,),
                 ),
             ),

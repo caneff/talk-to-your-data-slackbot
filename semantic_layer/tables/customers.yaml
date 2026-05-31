@@ -1,7 +1,6 @@
 table_id: customers
 dataset_id: commerce
 description: Clean commerce customer metadata.
-date_column: created_date
 columns:
   - column_id: created_date
     data_type: date

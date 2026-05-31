@@ -17,7 +17,6 @@ def test_data_request_asks_for_total_revenue_grouped_by_region(
     assert data_request.group_by_fields[0].field_id == "region"
     assert data_request.group_by_fields[0].label == "region"
     assert data_request.group_by_fields[0].source_column == "region"
-    assert data_request.table.date_column == "order_date"
     assert data_request.filter_labels == (
         "order date >= 2026-01-01 and <= 2026-01-31",
     )
@@ -56,7 +55,7 @@ def test_data_requester_returns_non_answer_for_ambiguous_tables() -> None:
         field_id="region",
         label="region",
         source_column="region",
-        data_type="string",
+        data_type=schema.DataType.STRING,
         operations=(schema.FieldOperation.GROUP_BY,),
     )
     semantic_layer = schema.SemanticLayer(
@@ -139,7 +138,6 @@ def _table(
         table_id=table_id,
         dataset_id="commerce",
         description="Test table.",
-        date_column="order_date",
         columns=(
             schema.TableColumn(column_id="order_date", data_type="date"),
             schema.TableColumn(column_id="region", data_type="string"),
