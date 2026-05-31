@@ -9,6 +9,7 @@ import datetime
 import os
 import pathlib
 import sys
+import textwrap
 import typing
 
 import dotenv
@@ -230,19 +231,31 @@ def write_live_eval_report(
     stdout.write(f"Failed: {report.failed}\n")
     if verbose:
         for passed_case in report.passes:
-            stdout.write("\n")
-            stdout.write(f"[PASS] {passed_case.case_name}\n")
-            stdout.write(f"Question: {passed_case.question}\n")
-            stdout.write(f"Expected: {_proposal_debug_string(passed_case.expected)}\n")
-            stdout.write(f"Actual: {_proposal_debug_string(passed_case.actual)}\n")
+            stdout.write(_passed_case_report(passed_case))
     for failure in report.failures:
-        stdout.write("\n")
-        stdout.write(f"[FAIL] {failure.case_name}\n")
-        stdout.write(f"Question: {failure.question}\n")
-        stdout.write(f"Expected: {_proposal_debug_string(failure.expected)}\n")
-        stdout.write(f"Actual: {_provider_result_debug_string(failure.actual)}\n")
-        for reason in failure.reasons:
-            stdout.write(f"Reason: {reason}\n")
+        stdout.write(_failure_report(failure))
+
+
+def _passed_case_report(passed_case: LiveEvalPass) -> str:
+    return textwrap.dedent(f"""
+        [PASS] {passed_case.case_name}
+        Question: {passed_case.question}
+        Expected: {_proposal_debug_string(passed_case.expected)}
+        Actual: {_proposal_debug_string(passed_case.actual)}
+        """)
+
+
+def _failure_report(failure: LiveEvalFailure) -> str:
+    reasons = "".join(f"Reason: {reason}\n" for reason in failure.reasons)
+    return (
+        textwrap.dedent(f"""
+            [FAIL] {failure.case_name}
+            Question: {failure.question}
+            Expected: {_proposal_debug_string(failure.expected)}
+            Actual: {_provider_result_debug_string(failure.actual)}
+            """)
+        + reasons
+    )
 
 
 def main(
