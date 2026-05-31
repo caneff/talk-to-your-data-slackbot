@@ -127,8 +127,10 @@ For local development, the runtime uses a tiny in-memory DuckDB `orders` table. 
 
 ## Manual live Question Interpreter eval
 
-Agent guard: do not run this command during normal validation or broad test
-requests. Run it only when the developer explicitly asks for the live eval.
+Agent guard: do not run this or any other command that uses a real
+`OPENAI_API_KEY` during normal development, validation, PR checks, or broad test
+requests. Live OpenAI-backed commands cost API money and should run only when
+the developer explicitly asks for that live run.
 
 Run the provider-only live eval suite with `OPENAI_API_KEY` in `.env`:
 
