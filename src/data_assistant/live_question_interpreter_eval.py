@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import collections.abc
 import dataclasses
 import datetime
@@ -45,12 +46,26 @@ class LiveEvalFailure:
 
 
 @dataclasses.dataclass(frozen=True)
+class LiveEvalPass:
+    """One passed live eval case."""
+
+    case_name: str
+    question: str
+    expected: question_interpreter.QuestionFrameProposal
+    actual: question_interpreter.QuestionFrameProposal
+
+
+@dataclasses.dataclass(frozen=True)
 class LiveEvalReport:
     """Aggregate live eval results."""
 
     total: int
-    passed: int
+    passes: tuple[LiveEvalPass, ...]
     failures: tuple[LiveEvalFailure, ...]
+
+    @property
+    def passed(self) -> int:
+        return len(self.passes)
 
     @property
     def failed(self) -> int:
@@ -144,14 +159,29 @@ def run_live_question_interpreter_eval(
         semantic_layer
     )
     enabled_cases = tuple(case for case in cases if case.enabled)
+    passes: list[LiveEvalPass] = []
     failures: list[LiveEvalFailure] = []
-    passed = 0
     for case in enabled_cases:
         actual = provider.propose_question_frame(
             question=case.question,
             semantic_layer_context=semantic_layer_context,
         )
-        reasons = _case_failure_reasons(expected=case.expected, actual=actual)
+        if isinstance(actual, question_interpreter.ProviderFailure):
+            failures.append(
+                LiveEvalFailure(
+                    case_name=case.name,
+                    question=case.question,
+                    expected=case.expected,
+                    actual=actual,
+                    reasons=_case_failure_reasons(
+                        expected=case.expected,
+                        actual=actual,
+                    ),
+                )
+            )
+            continue
+
+        reasons = compare_question_frame_meaning(expected=case.expected, actual=actual)
         if reasons:
             failures.append(
                 LiveEvalFailure(
@@ -163,10 +193,17 @@ def run_live_question_interpreter_eval(
                 )
             )
             continue
-        passed += 1
+        passes.append(
+            LiveEvalPass(
+                case_name=case.name,
+                question=case.question,
+                expected=case.expected,
+                actual=actual,
+            )
+        )
     return LiveEvalReport(
         total=len(enabled_cases),
-        passed=passed,
+        passes=tuple(passes),
         failures=tuple(failures),
     )
 
@@ -185,11 +222,19 @@ def write_live_eval_report(
     *,
     stdout: typing.TextIO,
     report: LiveEvalReport,
+    verbose: bool = False,
 ) -> None:
     """Print aggregate results and detailed failures."""
     stdout.write(f"Total cases: {report.total}\n")
     stdout.write(f"Passed: {report.passed}\n")
     stdout.write(f"Failed: {report.failed}\n")
+    if verbose:
+        for passed_case in report.passes:
+            stdout.write("\n")
+            stdout.write(f"[PASS] {passed_case.case_name}\n")
+            stdout.write(f"Question: {passed_case.question}\n")
+            stdout.write(f"Expected: {_proposal_debug_string(passed_case.expected)}\n")
+            stdout.write(f"Actual: {_proposal_debug_string(passed_case.actual)}\n")
     for failure in report.failures:
         stdout.write("\n")
         stdout.write(f"[FAIL] {failure.case_name}\n")
@@ -206,8 +251,10 @@ def main(
     stderr: typing.TextIO = sys.stderr,
     environ: collections.abc.Mapping[str, str] | None = None,
     env_file: str | pathlib.Path = ".env",
+    argv: collections.abc.Sequence[str] = (),
 ) -> int:
     """Run manual live eval suite against real OpenAI provider config."""
+    verbose = _parse_verbose(argv)
     active_environ = environ
     if active_environ is None:
         _load_env_file(env_file)
@@ -225,10 +272,24 @@ def main(
         provider=provider,
         semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
     )
-    write_live_eval_report(stdout=stdout, report=report)
+    write_live_eval_report(stdout=stdout, report=report, verbose=verbose)
     if report.failed:
         return 1
     return 0
+
+
+def _parse_verbose(argv: collections.abc.Sequence[str]) -> bool:
+    parser = argparse.ArgumentParser(
+        description="Run manual live evals for OpenAI Question Interpreter output.",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="print full expected and actual details for passed cases",
+    )
+    args = parser.parse_args(list(argv))
+    return typing.cast(bool, args.verbose)
 
 
 def _load_env_file(
@@ -272,4 +333,4 @@ def _provider_result_debug_string(
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(argv=sys.argv[1:]))

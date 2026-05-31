@@ -133,6 +133,13 @@ Run the provider-only live eval suite with `OPENAI_API_KEY` in `.env`:
 uv run python -m data_assistant.live_question_interpreter_eval
 ```
 
+Use verbose output to print expected and actual proposal details for passed
+cases too:
+
+```bash
+uv run python -m data_assistant.live_question_interpreter_eval --verbose
+```
+
 Optional model override in `.env`:
 
 ```dotenv
