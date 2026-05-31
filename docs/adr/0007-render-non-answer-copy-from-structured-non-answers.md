@@ -35,6 +35,10 @@ seam where wording is produced.
 - **Copy is rendered, owned by the catalog.** A single rendering entry point
   turns a structured Non-Answer into its `reason`/`next_step`; only it knows how
   to interpolate context such as the denied **Curated Dataset** name.
+- **Non-Answer context uses the right name.** `NonAnswer.context` and the
+  catalog definition context tuple carry rendering labels that are not limited
+  to ambiguities. `QuestionFrame.unresolved_ambiguities` stays unchanged because
+  it still means actual Question Frame ambiguity.
 - **Tests assert structure, not prose.** Routing and contract tests
   (Question Interpreter snapshots, Semantic Router, Access Controller, provider
   tests) assert `reason_code` + `stage` + context, never the sentences.
@@ -55,9 +59,6 @@ seam where wording is produced.
   kept as the offline fallback and the developer-facing reason codes (e.g.
   invalid provider output) staying static. Such wording would be graded by an
   eval (the `live_question_interpreter_eval` pattern), not asserted equal.
-- **Rename `unresolved_ambiguities` to `context`.** The tuple now also carries
-  non-ambiguity context (the unknown **Semantic Field** label), so the name no
-  longer fits. Deferred to keep this change behavior-preserving for the field.
 
 ## Consequences
 

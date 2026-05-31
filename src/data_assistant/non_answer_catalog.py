@@ -12,7 +12,7 @@ import data_assistant.workflow.contracts as contracts
 class _NonAnswerDefinition:
     response_kind: contracts.ResponseKind
     reason: str
-    unresolved_ambiguities: tuple[str, ...]
+    context: tuple[str, ...]
     next_step: str
 
 
@@ -35,7 +35,7 @@ _DEFINITIONS: dict[contracts.NonAnswerReasonCode, _NonAnswerDefinition] = {
     contracts.NonAnswerReasonCode.ACCESS_DENIED: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.ACCESS_DENIAL,
         reason="You do not have access to the {dataset} Curated Dataset.",
-        unresolved_ambiguities=(),
+        context=(),
         next_step=(
             "Ask a data owner to grant Dataset Access or ask about available data."
         ),
@@ -43,43 +43,43 @@ _DEFINITIONS: dict[contracts.NonAnswerReasonCode, _NonAnswerDefinition] = {
     contracts.NonAnswerReasonCode.AMBIGUOUS_DATASET: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.CLARIFICATION_NEEDED,
         reason="Multiple Curated Datasets match the Question Frame.",
-        unresolved_ambiguities=("curated dataset",),
+        context=("curated dataset",),
         next_step="Ask which Curated Dataset should be used.",
     ),
     contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.CLARIFICATION_NEEDED,
         reason="Multiple Dataset Tables can satisfy the Question Frame.",
-        unresolved_ambiguities=("dataset table",),
+        context=("dataset table",),
         next_step="Ask which Dataset Table should be used.",
     ),
     contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,
         reason="The Question Interpreter provider returned invalid output.",
-        unresolved_ambiguities=("provider output",),
+        context=("provider output",),
         next_step="Fix the provider contract before retrying.",
     ),
     contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.CLARIFICATION_NEEDED,
         reason="The Data Question is missing required interpretation details.",
-        unresolved_ambiguities=(),
+        context=(),
         next_step="Ask a clarification question before selecting data.",
     ),
     contracts.NonAnswerReasonCode.NO_MATCHING_DATASET: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,
         reason="No Curated Dataset safely matches the Question Frame.",
-        unresolved_ambiguities=("curated dataset",),
+        context=("curated dataset",),
         next_step="Ask which approved business data should be used.",
     ),
     contracts.NonAnswerReasonCode.NO_MATCHING_TABLE: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,
         reason="No Dataset Table can satisfy the Question Frame.",
-        unresolved_ambiguities=("dataset table",),
+        context=("dataset table",),
         next_step="Ask which table-level metric or dimension should be used.",
     ),
     contracts.NonAnswerReasonCode.PROVIDER_FAILURE: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,
         reason="The Question Interpreter provider could not produce a proposal.",
-        unresolved_ambiguities=("provider failure",),
+        context=("provider failure",),
         next_step="Retry after the provider is available again.",
     ),
     contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL: _NonAnswerDefinition(
@@ -88,13 +88,13 @@ _DEFINITIONS: dict[contracts.NonAnswerReasonCode, _NonAnswerDefinition] = {
             "The Data Assistant could not match the requested Semantic Layer "
             "labels."
         ),
-        unresolved_ambiguities=(),
+        context=(),
         next_step="Use exact Semantic Layer metric and dimension labels.",
     ),
     contracts.NonAnswerReasonCode.UNSUPPORTED_DATA: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,
         reason="User-provided CSV files are not supported data sources.",
-        unresolved_ambiguities=("unsupported data",),
+        context=("unsupported data",),
         next_step=(
             "Ask about an approved Curated Dataset in the Semantic Layer instead."
         ),
@@ -102,25 +102,25 @@ _DEFINITIONS: dict[contracts.NonAnswerReasonCode, _NonAnswerDefinition] = {
     contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,
         reason="The Semantic Layer does not allow that operation for the field.",
-        unresolved_ambiguities=("semantic field operation",),
+        context=("semantic field operation",),
         next_step="Use only operations listed for the Semantic Field.",
     ),
     contracts.NonAnswerReasonCode.UNSUPPORTED_FILTER: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,
         reason="The Data Assistant does not support that filter yet.",
-        unresolved_ambiguities=("supported filter",),
+        context=("supported filter",),
         next_step="Use only supported filters for approved Semantic Fields.",
     ),
     contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,
         reason="The Data Assistant does not support that Data Question intent yet.",
-        unresolved_ambiguities=("supported intent",),
+        context=("supported intent",),
         next_step="Ask: What was total revenue by region in January 2026?",
     ),
     contracts.NonAnswerReasonCode.UNSUPPORTED_SHAPE: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,
         reason="The Data Assistant cannot handle that Question Frame shape yet.",
-        unresolved_ambiguities=("question shape",),
+        context=("question shape",),
         next_step="Ask for one grouping field or a scalar aggregate.",
     ),
 }
@@ -163,7 +163,7 @@ def non_answer(
     return contracts.NonAnswer(
         stage=stage,
         reason_code=reason_code,
-        unresolved_ambiguities=definition.unresolved_ambiguities,
+        context=definition.context,
     )
 
 
@@ -187,7 +187,7 @@ def missing_required_field_non_answer(
     return contracts.NonAnswer(
         stage=stage,
         reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
-        unresolved_ambiguities=(field_name,),
+        context=(field_name,),
     )
 
 
@@ -199,5 +199,5 @@ def unknown_semantic_label_non_answer(
     return contracts.NonAnswer(
         stage=stage,
         reason_code=contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL,
-        unresolved_ambiguities=(field_name,),
+        context=(field_name,),
     )

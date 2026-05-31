@@ -78,7 +78,7 @@ def test_missing_required_field_builder_records_the_field() -> None:
 
     assert result.stage == _STAGE
     assert result.reason_code == contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD
-    assert result.unresolved_ambiguities == ("metric",)
+    assert result.context == ("metric",)
 
 
 def test_unknown_semantic_label_builder_records_the_label() -> None:
@@ -88,7 +88,7 @@ def test_unknown_semantic_label_builder_records_the_label() -> None:
 
     assert result.stage == _STAGE
     assert result.reason_code == contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL
-    assert result.unresolved_ambiguities == ("field",)
+    assert result.context == ("field",)
 
 
 # Golden copy. This is the ONE place exact user-facing Non-Answer wording is

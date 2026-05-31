@@ -178,7 +178,7 @@ class NonAnswer:
 
     stage: NonAnswerStage
     reason_code: NonAnswerReasonCode
-    unresolved_ambiguities: tuple[str, ...] = ()
+    context: tuple[str, ...] = ()
     datasets: tuple[str, ...] = ()
 
 

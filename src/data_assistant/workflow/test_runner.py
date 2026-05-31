@@ -109,7 +109,7 @@ def test_data_assistant_short_circuits_question_ambiguity(
     assert len(captured_non_answers) == 1
     non_answer = captured_non_answers[0]
     assert non_answer.stage == contracts.NonAnswerStage.QUESTION_INTERPRETER
-    assert non_answer.unresolved_ambiguities == ("metric",)
+    assert non_answer.context == ("metric",)
 
 
 def test_data_assistant_denies_dataset_access_before_request_or_preparation(
@@ -222,7 +222,7 @@ def test_data_assistant_short_circuits_unsupported_question_before_preparing_dat
     assert len(captured_non_answers) == 1
     non_answer = captured_non_answers[0]
     assert non_answer.stage == contracts.NonAnswerStage.QUESTION_INTERPRETER
-    assert non_answer.unresolved_ambiguities == ("unsupported data",)
+    assert non_answer.context == ("unsupported data",)
     assert non_answer.datasets == ()
 
 
