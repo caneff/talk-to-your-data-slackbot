@@ -101,35 +101,44 @@ def prepare_data(
 def _filter_sql(
     filter_operations: tuple[contracts.ResolvedSemanticFieldOperation, ...],
 ) -> tuple[str, dict[str, contracts.FieldValue]]:
-    if not filter_operations:
-        return "", {}
+    """Build a parameterized WHERE clause from validated filter operations.
+
+    Column identifiers come from Semantic Layer source columns; every filter
+    value is bound as a query parameter rather than interpolated into SQL.
+    """
     clauses: list[str] = []
     parameters: dict[str, contracts.FieldValue] = {}
+
+    def bind(index: int, suffix: str | int, value: contracts.FieldValue) -> str:
+        """Register a value as a query parameter and return its placeholder."""
+        name = f"filter_{index}_{suffix}"
+        parameters[name] = value
+        return f"${name}"
+
     for index, operation in enumerate(filter_operations):
         column = operation.field.source_column
         if operation.operation == contracts.FieldOperationKind.RANGE_FILTER:
             if operation.lower is not None:
-                name = f"filter_{index}_lower"
-                clauses.append(f"{column} >= ${name}")
-                parameters[name] = operation.lower
+                clauses.append(f"{column} >= {bind(index, 'lower', operation.lower)}")
             if operation.upper is not None:
-                name = f"filter_{index}_upper"
-                clauses.append(f"{column} <= ${name}")
-                parameters[name] = operation.upper
-        elif operation.operation == contracts.FieldOperationKind.INCLUDE_FILTER:
-            names: list[str] = []
-            for value_index, value in enumerate(operation.values):
-                name = f"filter_{index}_{value_index}"
-                names.append(f"${name}")
-                parameters[name] = value
-            clauses.append(f"{column} in ({', '.join(names)})")
-        elif operation.operation == contracts.FieldOperationKind.EXCLUDE_FILTER:
-            names: list[str] = []
-            for value_index, value in enumerate(operation.values):
-                name = f"filter_{index}_{value_index}"
-                names.append(f"${name}")
-                parameters[name] = value
-            clauses.append(f"{column} not in ({', '.join(names)})")
+                clauses.append(f"{column} <= {bind(index, 'upper', operation.upper)}")
+        elif operation.operation in (
+            contracts.FieldOperationKind.INCLUDE_FILTER,
+            contracts.FieldOperationKind.EXCLUDE_FILTER,
+        ):
+            placeholders = ", ".join(
+                bind(index, value_index, value)
+                for value_index, value in enumerate(operation.values)
+            )
+            sql_operator = (
+                "in"
+                if operation.operation == contracts.FieldOperationKind.INCLUDE_FILTER
+                else "not in"
+            )
+            clauses.append(f"{column} {sql_operator} ({placeholders})")
+
+    if not clauses:
+        return "", {}
     return f"where {' and '.join(clauses)}", parameters
 
 
