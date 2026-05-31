@@ -4,7 +4,7 @@ import pytest
 
 import data_assistant.data_preparation as data_preparation
 import data_assistant.data_requester as data_requester
-import data_assistant.local_orders_fixture as local_orders_fixture
+import data_assistant.local_duckdb_fixture as local_duckdb_fixture
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
@@ -42,7 +42,7 @@ def capture_non_answer_response(
 
 def test_data_assistant_runs_end_to_end(
     canonical_question: str,
-    connect_orders: local_orders_fixture.OrdersConnector,
+    connect_orders: local_duckdb_fixture.OrdersConnector,
     canonical_question_provider: question_interpreter.QuestionInterpreterProvider,
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
@@ -89,7 +89,7 @@ def test_data_assistant_runs_end_to_end(
 
 def test_data_assistant_short_circuits_question_ambiguity(
     monkeypatch: pytest.MonkeyPatch,
-    connect_orders: local_orders_fixture.OrdersConnector,
+    connect_orders: local_duckdb_fixture.OrdersConnector,
     missing_time_range_provider: question_interpreter.QuestionInterpreterProvider,
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
@@ -113,7 +113,7 @@ def test_data_assistant_short_circuits_question_ambiguity(
 def test_data_assistant_denies_dataset_access_before_request_or_preparation(
     monkeypatch: pytest.MonkeyPatch,
     canonical_question: str,
-    connect_orders: local_orders_fixture.OrdersConnector,
+    connect_orders: local_duckdb_fixture.OrdersConnector,
     canonical_question_provider: question_interpreter.QuestionInterpreterProvider,
 ) -> None:
     sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
@@ -154,7 +154,7 @@ def test_data_assistant_denies_dataset_access_before_request_or_preparation(
 
 def test_data_assistant_returns_ambiguous_table_before_access_denial(
     monkeypatch: pytest.MonkeyPatch,
-    connect_orders: local_orders_fixture.OrdersConnector,
+    connect_orders: local_duckdb_fixture.OrdersConnector,
 ) -> None:
     sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
     semantic_layer = _ambiguous_table_semantic_layer(
@@ -191,7 +191,7 @@ def test_data_assistant_returns_ambiguous_table_before_access_denial(
 
 def test_data_assistant_short_circuits_unsupported_question_before_preparing_data(
     monkeypatch: pytest.MonkeyPatch,
-    connect_orders: local_orders_fixture.OrdersConnector,
+    connect_orders: local_duckdb_fixture.OrdersConnector,
     canonical_question_provider: question_interpreter.QuestionInterpreterProvider,
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
@@ -224,7 +224,7 @@ def test_data_assistant_short_circuits_unsupported_question_before_preparing_dat
 
 def test_data_assistant_uses_required_question_interpreter_provider(
     canonical_question: str,
-    connect_orders: local_orders_fixture.OrdersConnector,
+    connect_orders: local_duckdb_fixture.OrdersConnector,
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
     class FakeProvider:

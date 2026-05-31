@@ -10,7 +10,7 @@ import typing
 import duckdb
 import pytest
 
-import data_assistant.local_orders_fixture as local_orders_fixture
+import data_assistant.local_duckdb_fixture as local_duckdb_fixture
 import data_assistant.slack_boundary as slack_boundary
 import data_assistant.slack_runtime as slack_runtime
 import data_assistant.workflow.contracts as contracts
@@ -269,7 +269,7 @@ def sentinel_answer_path(
 
 def test_handle_socket_mode_event_routes_human_dm_through_existing_boundary(
     canonical_question: str,
-    connect_orders: local_orders_fixture.OrdersConnector,
+    connect_orders: local_duckdb_fixture.OrdersConnector,
 ) -> None:
     ack_calls: list[str] = []
     calls: list[str] = []

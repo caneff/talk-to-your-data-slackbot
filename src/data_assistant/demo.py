@@ -3,25 +3,20 @@
 from __future__ import annotations
 
 import dataclasses
+import pathlib
 import sys
 import typing
 
 import duckdb
 
 import data_assistant.access_controller as access_controller
-import data_assistant.local_orders_fixture as local_orders_fixture
+import data_assistant.local_duckdb_fixture as local_duckdb_fixture
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.slack_boundary as slack_boundary
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
 
-DEMO_ORDER_ROWS: tuple[local_orders_fixture.OrderRow, ...] = (
-    ("2026-01-03", "North", "1200.00"),
-    ("2026-01-10", "North", "300.00"),
-    ("2026-01-12", "South", "800.00"),
-    ("2026-01-20", None, "500.00"),
-    ("2026-01-28", "West", None),
-)
+_DEMO_SEED_PATH = pathlib.Path(__file__).parent / "seeds" / "demo_seed.sql"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -84,7 +79,8 @@ class _DemoQuestionInterpreterProvider:
 
 
 def run_demo() -> tuple[DemoScenarioResult, ...]:
-    with local_orders_fixture.connect_orders(DEMO_ORDER_ROWS) as connection:
+    with local_duckdb_fixture.connect_orders(()) as connection:
+        connection.execute(_DEMO_SEED_PATH.read_text(encoding="utf-8"))
         return (
             _run_one_demo_scenario(
                 name="happy_path",

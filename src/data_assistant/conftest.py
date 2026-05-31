@@ -6,7 +6,7 @@ import pytest
 
 import data_assistant.access_controller as access_controller
 import data_assistant.data_requester as data_requester
-import data_assistant.local_orders_fixture as local_orders_fixture
+import data_assistant.local_duckdb_fixture as local_duckdb_fixture
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.semantic_layer.schema as schema
@@ -86,9 +86,9 @@ def active_semantic_layer() -> schema.SemanticLayer:
 
 
 @pytest.fixture
-def connect_orders() -> local_orders_fixture.OrdersConnector:
+def connect_orders() -> local_duckdb_fixture.OrdersConnector:
     """Expose the in-memory DuckDB orders connector as a fixture."""
-    return local_orders_fixture.connect_orders
+    return local_duckdb_fixture.connect_orders
 
 
 @pytest.fixture

@@ -6,11 +6,11 @@ Accepted
 
 ## Context
 
-`local_orders_fixture.py` builds an in-memory DuckDB connection, creates the
-`orders` schema in code, and inserts caller-provided rows. It is hardcoded to a
-single orders-shaped tuple (`OrderRow = (order_date, region, revenue)`), so the
-`customers` table and `customer_count` metric defined in the Semantic Layer have
-no data behind them.
+`local_duckdb_fixture.py` builds an in-memory DuckDB connection, creates table
+schemas in code, and inserts caller-provided rows. It began life as a single
+orders-shaped tuple (`OrderRow = (order_date, region, revenue)`) hardcoded to one
+`orders` table, so the `customers` table and `customer_count` metric defined in
+the Semantic Layer had no data behind them.
 
 Widening to more tables and metrics raises an obvious question: rather than
 generating data in code, why not commit an actual `.duckdb` file and open it?
@@ -19,10 +19,13 @@ DuckDB CLI.
 
 ## Decision
 
-Test data stays code-built: a general multi-table in-memory builder where each
-test declares the tables and rows it needs inline. Where hand-written row
-literals become unwieldy (notably the demo spine), data lives in a **text seed**
-— CSV or SQL loaded into DuckDB at startup — not a binary `.duckdb` file.
+Test data stays code-built: a general multi-table in-memory builder
+(`connect_tables`, taking `TableSpec`s of name + typed columns + rows) where each
+test declares the tables and rows it needs inline. The orders schema is one
+opt-in table-spec (`connect_orders`) layered over that builder, not baked into
+it. Where hand-written row literals become unwieldy (notably the demo spine),
+data lives in a **text seed** — SQL loaded into DuckDB at startup — not a binary
+`.duckdb` file.
 
 The fixture is not derived from the Semantic Layer it helps validate: tests
 author their own schemas and rows so a schema or type bug in the loader cannot
