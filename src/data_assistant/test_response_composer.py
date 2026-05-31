@@ -61,6 +61,34 @@ def test_response_composer_returns_plain_text_with_trust_summary() -> None:
     )
 
 
+def test_response_composer_renders_through_injected_wording_provider() -> None:
+    """Composer renders Non-Answer copy through the injected provider.
+
+    A fake provider returning sentinel wording proves the composer no longer
+    hardcodes the catalog call but threads the injected provider's output.
+    """
+
+    class _SentinelWordingProvider:
+        def render_wording(
+            self,
+            non_answer: contracts.NonAnswer,
+        ) -> non_answer_catalog.NonAnswerWording:
+            del non_answer
+            return non_answer_catalog.NonAnswerWording(
+                reason="Sentinel reason.",
+                next_step="Sentinel step.",
+            )
+
+    response = response_composer.compose_non_answer_response(
+        _non_answer(contracts.NonAnswerReasonCode.UNSUPPORTED_DATA),
+        wording_provider=_SentinelWordingProvider(),
+    )
+
+    assert "I cannot answer safely because sentinel reason." in response.text
+    assert "Next step: Sentinel step." in response.text
+    assert response.trust_summary.limitations == ("Sentinel reason.",)
+
+
 def test_response_composer_renders_non_answer_copy_into_text() -> None:
     """Composer weaves the catalog-rendered reason and next step into the text.
 
@@ -71,7 +99,10 @@ def test_response_composer_renders_non_answer_copy_into_text() -> None:
     wording = non_answer_catalog.render_wording(non_answer)
     lowercased_reason = wording.reason[0].lower() + wording.reason[1:]
 
-    response = response_composer.compose_non_answer_response(non_answer)
+    response = response_composer.compose_non_answer_response(
+        non_answer,
+        wording_provider=non_answer_catalog.StaticCatalogWording(),
+    )
 
     assert response.response_kind == contracts.ResponseKind.UNSUPPORTED
     assert f"I cannot answer safely because {lowercased_reason}" in response.text
@@ -87,7 +118,10 @@ def test_response_composer_marks_clarification_non_answers_with_yet_wording() ->
     )
     wording = non_answer_catalog.render_wording(non_answer)
 
-    response = response_composer.compose_non_answer_response(non_answer)
+    response = response_composer.compose_non_answer_response(
+        non_answer,
+        wording_provider=non_answer_catalog.StaticCatalogWording(),
+    )
 
     assert response.response_kind == contracts.ResponseKind.CLARIFICATION_NEEDED
     assert response.text.startswith("I cannot answer safely yet because")
@@ -109,7 +143,10 @@ def test_response_composer_marks_ambiguity_as_clarification(
     non_answer = _non_answer(reason_code)
     wording = non_answer_catalog.render_wording(non_answer)
 
-    response = response_composer.compose_non_answer_response(non_answer)
+    response = response_composer.compose_non_answer_response(
+        non_answer,
+        wording_provider=non_answer_catalog.StaticCatalogWording(),
+    )
 
     assert response.response_kind == contracts.ResponseKind.CLARIFICATION_NEEDED
     assert response.text.startswith("I cannot answer safely yet because")
@@ -131,7 +168,10 @@ def test_response_composer_marks_unsupported_non_answers_without_yet_wording(
     non_answer = _non_answer(reason_code)
     wording = non_answer_catalog.render_wording(non_answer)
 
-    response = response_composer.compose_non_answer_response(non_answer)
+    response = response_composer.compose_non_answer_response(
+        non_answer,
+        wording_provider=non_answer_catalog.StaticCatalogWording(),
+    )
 
     assert response.response_kind == contracts.ResponseKind.UNSUPPORTED
     assert response.text.startswith("I cannot answer safely because")
@@ -144,7 +184,8 @@ def test_response_composer_omits_sensitive_details_from_access_denial() -> None:
         non_answer_catalog.access_denied_non_answer(
             "commerce",
             stage=contracts.NonAnswerStage.ACCESS_CONTROLLER,
-        )
+        ),
+        wording_provider=non_answer_catalog.StaticCatalogWording(),
     )
 
     assert "Curated Dataset: commerce." in response.text

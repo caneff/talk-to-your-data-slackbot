@@ -153,6 +153,14 @@ def render_wording(non_answer: contracts.NonAnswer) -> NonAnswerWording:
     return NonAnswerWording(reason=reason, next_step=definition.next_step)
 
 
+class StaticCatalogWording:
+    """Default Non-Answer wording provider backed by the static catalog."""
+
+    def render_wording(self, non_answer: contracts.NonAnswer) -> NonAnswerWording:
+        """Render Non-Answer copy from the static catalog."""
+        return render_wording(non_answer)
+
+
 def non_answer(
     reason_code: _StaticReasonCode,
     *,
