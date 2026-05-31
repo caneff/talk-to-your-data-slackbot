@@ -14,6 +14,7 @@ import dataclasses
 import duckdb
 
 OrderRow = tuple[str, str | None, str | None]
+CustomerRow = tuple[str, str, str | None]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -37,11 +38,20 @@ OrdersConnector = collections.abc.Callable[
     [collections.abc.Iterable[OrderRow]],
     contextlib.AbstractContextManager[duckdb.DuckDBPyConnection],
 ]
+CustomersConnector = collections.abc.Callable[
+    [collections.abc.Iterable[CustomerRow]],
+    contextlib.AbstractContextManager[duckdb.DuckDBPyConnection],
+]
 
 ORDERS_COLUMNS: tuple[tuple[str, str], ...] = (
     ("order_date", "date"),
     ("region", "varchar"),
     ("revenue", "decimal(12, 2)"),
+)
+CUSTOMERS_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("created_date", "date"),
+    ("customer_id", "varchar"),
+    ("customer_region", "varchar"),
 )
 
 
@@ -88,3 +98,15 @@ def connect_orders(
     where `OrderRow` permits them so tests can model incomplete local data.
     """
     return connect_tables((orders_table_spec(rows),))
+
+
+def customers_table_spec(rows: collections.abc.Iterable[CustomerRow]) -> TableSpec:
+    """Return the customers table-spec: the demo customer schema plus `rows`."""
+    return TableSpec(name="customers", columns=CUSTOMERS_COLUMNS, rows=rows)
+
+
+def connect_customers(
+    rows: collections.abc.Iterable[CustomerRow],
+) -> contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]:
+    """Yield an in-memory DuckDB connection containing one `customers` table."""
+    return connect_tables((customers_table_spec(rows),))

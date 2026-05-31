@@ -316,6 +316,35 @@ def test_default_live_eval_cases_come_from_shared_question_frame_cases() -> None
     )
 
 
+def test_default_live_eval_includes_customer_count_by_region_case() -> None:
+    case = next(
+        case
+        for case in live_eval.DEFAULT_CASES
+        if case.name == "customer_count_by_region"
+    )
+
+    assert case.enabled is True
+    assert case.question == (
+        "What was customer count by customer region in January 2026?"
+    )
+    assert case.expected == question_interpreter.QuestionFrameProposal(
+        intent="summarize",
+        metric="customer count",
+        field_operations=(
+            question_interpreter.GroupByOperationProposal(
+                operation="group_by",
+                field="customer region",
+            ),
+            question_interpreter.RangeFilterOperationProposal(
+                operation="range_filter",
+                field="created date",
+                lower="2026-01-01",
+                upper="2026-01-31",
+            ),
+        ),
+    )
+
+
 def test_main_loads_real_semantic_layer_for_live_eval(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: pathlib.Path,

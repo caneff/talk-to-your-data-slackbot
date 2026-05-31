@@ -87,6 +87,78 @@ def test_data_assistant_runs_end_to_end(
     assert "Trust Summary:" in run.final_response.text
 
 
+def test_data_assistant_runs_customer_count_by_customer_region_end_to_end(
+    allowed_internal_identity: contracts.InternalIdentity,
+) -> None:
+    customer_rows = (
+        ("2026-01-03", "cust-001", "North"),
+        ("2026-01-08", "cust-002", "South"),
+        ("2026-01-15", "cust-003", "North"),
+        ("2026-01-22", "cust-004", "East"),
+        ("2026-01-28", "cust-005", None),
+        ("2026-02-01", "cust-006", "West"),
+    )
+    provider = _static_provider(
+        question_interpreter.QuestionFrameProposal(
+            intent="summarize",
+            metric="customer count",
+            field_operations=(
+                question_interpreter.GroupByOperationProposal(
+                    operation="group_by",
+                    field="customer region",
+                ),
+                question_interpreter.RangeFilterOperationProposal(
+                    operation="range_filter",
+                    field="created date",
+                    lower="2026-01-01",
+                    upper="2026-01-31",
+                ),
+            ),
+        )
+    )
+
+    with local_duckdb_fixture.connect_tables(
+        (
+            local_duckdb_fixture.orders_table_spec(()),
+            local_duckdb_fixture.TableSpec(
+                name="customers",
+                columns=(
+                    ("created_date", "date"),
+                    ("customer_id", "varchar"),
+                    ("customer_region", "varchar"),
+                ),
+                rows=customer_rows,
+            ),
+        )
+    ) as connection:
+        run = workflow_runner.run_data_assistant(
+            connection,
+            "What was customer count by customer region in January 2026?",
+            question_interpreter_provider=provider,
+            internal_identity=allowed_internal_identity,
+        )
+
+    assert isinstance(run, contracts.DataAssistantRun)
+    assert run.available_data_resolution.resolved_match.table.table_id == "customers"
+    assert run.data_request.metric.label == "customer count"
+    assert run.prepared_data.quality_notes == (
+        "1 row grouped under Unknown because customer region was missing.",
+    )
+    assert "Customer count in 2026-01-01 through 2026-01-31 was 5" in (
+        run.final_response.text
+    )
+    assert "- North: 2" in run.final_response.text
+    assert "- East: 1" in run.final_response.text
+    assert "- South: 1" in run.final_response.text
+    assert "- Unknown: 1" in run.final_response.text
+    assert "$" not in run.final_response.text
+    assert "Dataset Table: customers." in run.final_response.text
+    assert "Time range: 2026-01-01 through 2026-01-31." in run.final_response.text
+    assert "1 row grouped under Unknown because customer region was missing." in (
+        run.final_response.text
+    )
+
+
 def test_data_assistant_short_circuits_question_ambiguity(
     monkeypatch: pytest.MonkeyPatch,
     connect_orders: local_duckdb_fixture.OrdersConnector,
