@@ -198,6 +198,13 @@ def test_openai_provider_prompt_extracts_explicit_calendar_month_time_ranges() -
     assert "January 2026" in developer_prompt
     assert "2026-01-01" in developer_prompt
     assert "2026-01-31" in developer_prompt
+    assert "Use only business-facing Semantic Layer labels supplied in" in (
+        developer_prompt
+    )
+    assert "semantic_layer_context" in developer_prompt
+    assert "may come from semantic_layer_context even when" in developer_prompt
+    assert "When the selected metric_context has exactly one date" in (developer_prompt)
+    assert "use that field for a complete calendar month and year" in (developer_prompt)
     assert "Never omit a complete calendar month" in developer_prompt
     assert 'return intent\n"summarize"' in developer_prompt
     assert 'operation "range_filter", field "order date"' in developer_prompt
