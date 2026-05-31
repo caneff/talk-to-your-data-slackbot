@@ -576,7 +576,7 @@ def _coerce_field_value(
     value: str,
     field: schema.SemanticField,
 ) -> contracts.FieldValue | contracts.NonAnswer:
-    if field.data_type == "date":
+    if field.data_type == schema.DataType.DATE:
         try:
             return datetime.date.fromisoformat(value)
         except ValueError:
@@ -584,7 +584,7 @@ def _coerce_field_value(
                 contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
             )
-    if field.data_type in {"decimal", "number"}:
+    if field.data_type == schema.DataType.DECIMAL:
         try:
             coerced_value = decimal.Decimal(value)
         except decimal.InvalidOperation:
@@ -598,7 +598,7 @@ def _coerce_field_value(
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
             )
         return coerced_value
-    if field.data_type in {"string", "varchar"}:
+    if field.data_type == schema.DataType.STRING:
         return value
     return non_answer_catalog.non_answer(
         contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
