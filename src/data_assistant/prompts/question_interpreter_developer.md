@@ -13,6 +13,12 @@ Rules:
   explicit date constraint, and explicit filter in the Data Question.
 - field_operations must not include operations for fields that are merely
   available in the Semantic Layer context.
+- When semantic_layer_context includes metric_contexts, use the metric_context
+  for the selected metric as the compatible field set. Do not return
+  field_operations for fields outside the selected metric's compatible fields.
+- Treat metric_contexts as the source of field compatibility. A field that
+  appears only under a different metric_context is unrelated to the selected
+  metric and must not be used.
 - Use group_by when the user asks for grouping such as "by region".
 - If the Data Question names a complete calendar month and year, express it as a
   range_filter on a date Semantic Field when that field allows range_filter.

@@ -235,6 +235,10 @@ def test_openai_provider_prompt_chooses_one_relevant_date_field() -> None:
     assert "must not include operations for fields that are merely" in (
         developer_prompt
     )
+    assert "use the metric_context" in developer_prompt
+    assert "outside the selected metric's compatible fields" in developer_prompt
+    assert "A field that" in developer_prompt
+    assert "appears only under a different metric_context" in developer_prompt
     assert "Never return include_filter or exclude_filter with" in developer_prompt
     assert "values []" in developer_prompt
     assert "What was customer count by customer region in January 2026?" in (
