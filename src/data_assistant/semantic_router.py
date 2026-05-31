@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import data_assistant.non_answer_catalog as non_answer_catalog
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_matcher as semantic_matcher
 import data_assistant.workflow.contracts as contracts
@@ -38,20 +39,14 @@ def select_dataset(
     selected_datasets = tuple(datasets_by_id.values())
 
     if not selected_datasets:
-        return contracts.NonAnswer(
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.NO_MATCHING_DATASET,
             stage=contracts.NonAnswerStage.SEMANTIC_ROUTER,
-            reason_code=contracts.NonAnswerReasonCode.NO_MATCHING_DATASET,
-            reason="No Curated Dataset safely matches the Question Frame.",
-            unresolved_ambiguities=("curated dataset",),
-            next_step="Ask which approved business data should be used.",
         )
     if len(selected_datasets) > 1:
-        return contracts.NonAnswer(
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.AMBIGUOUS_DATASET,
             stage=contracts.NonAnswerStage.SEMANTIC_ROUTER,
-            reason_code=contracts.NonAnswerReasonCode.AMBIGUOUS_DATASET,
-            reason="Multiple Curated Datasets match the Question Frame.",
-            unresolved_ambiguities=("curated dataset",),
-            next_step="Ask which Curated Dataset should be used.",
         )
 
     return contracts.Success(

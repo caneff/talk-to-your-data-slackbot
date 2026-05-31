@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import data_assistant.non_answer_catalog as non_answer_catalog
 import data_assistant.workflow.contracts as contracts
 
 DEFAULT_LOCAL_ALLOWED_IDENTITY = contracts.InternalIdentity(
@@ -17,19 +18,9 @@ def authorize_dataset_access(
     for dataset in dataset_selection.selected_datasets:
         allowed_identity_ids = dataset.dataset_access.allowed_identity_ids
         if internal_identity.identity_id not in allowed_identity_ids:
-            return contracts.NonAnswer(
+            return non_answer_catalog.access_denied_non_answer(
+                dataset.dataset_id,
                 stage=contracts.NonAnswerStage.ACCESS_CONTROLLER,
-                reason_code=contracts.NonAnswerReasonCode.ACCESS_DENIED,
-                reason=(
-                    "You do not have access to the "
-                    f"{dataset.dataset_id} Curated Dataset."
-                ),
-                unresolved_ambiguities=(),
-                next_step=(
-                    "Ask a data owner to grant Dataset Access or ask about "
-                    "available data."
-                ),
-                datasets=(dataset.dataset_id,),
             )
 
     return contracts.Success(dataset_selection)

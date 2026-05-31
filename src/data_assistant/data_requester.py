@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import data_assistant.non_answer_catalog as non_answer_catalog
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
 
@@ -15,12 +16,9 @@ def create_data_request(
 ) -> contracts.StageResult[contracts.DataRequest]:
     """Create the Data Request from one selected Semantic Layer match."""
     if len(dataset_selection.selected_datasets) != 1:
-        return contracts.NonAnswer(
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.AMBIGUOUS_DATASET,
             stage=contracts.NonAnswerStage.DATA_REQUESTER,
-            reason_code=contracts.NonAnswerReasonCode.AMBIGUOUS_DATASET,
-            reason="A Data Request requires exactly one Curated Dataset.",
-            unresolved_ambiguities=("curated dataset",),
-            next_step="Resolve dataset selection before planning retrieval.",
         )
 
     dataset = dataset_selection.selected_datasets[0]
@@ -31,20 +29,14 @@ def create_data_request(
     ]
 
     if not table_options:
-        return contracts.NonAnswer(
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.NO_MATCHING_TABLE,
             stage=contracts.NonAnswerStage.DATA_REQUESTER,
-            reason_code=contracts.NonAnswerReasonCode.NO_MATCHING_TABLE,
-            reason="No Dataset Table can satisfy the Question Frame.",
-            unresolved_ambiguities=("dataset table",),
-            next_step="Ask which table-level metric or dimension should be used.",
         )
     if len(table_options) > 1:
-        return contracts.NonAnswer(
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE,
             stage=contracts.NonAnswerStage.DATA_REQUESTER,
-            reason_code=contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE,
-            reason="Multiple Dataset Tables can satisfy the Question Frame.",
-            unresolved_ambiguities=("dataset table",),
-            next_step="Ask which Dataset Table should be used.",
         )
 
     match = table_options[0]
@@ -78,15 +70,9 @@ def _resolve_filter_operations(
             continue
         field = fields_by_label.get(operation.field)
         if field is None:
-            return contracts.NonAnswer(
+            return non_answer_catalog.unknown_semantic_label_non_answer(
+                "field",
                 stage=contracts.NonAnswerStage.DATA_REQUESTER,
-                reason_code=contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL,
-                reason=(
-                    "The Data Assistant could not match the requested Semantic "
-                    "Layer labels."
-                ),
-                unresolved_ambiguities=("field",),
-                next_step="Use exact Semantic Layer field labels.",
             )
         resolved.append(
             contracts.ResolvedSemanticFieldOperation(

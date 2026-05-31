@@ -14,6 +14,7 @@ import typing
 import pydantic
 from openai import OpenAI
 
+import data_assistant.non_answer_catalog as non_answer_catalog
 import data_assistant.prompts as prompts
 import data_assistant.question_interpreter_guards as interpreter_guards
 import data_assistant.semantic_layer.loader as semantic_layer_loader
@@ -294,7 +295,10 @@ def interpret_question(
     normalized_question = interpreter_guards.normalize_question(question)
     # Some requests are policy-level rejects; do not spend provider work on them.
     if interpreter_guards.mentions_unsupported_data(normalized_question):
-        return interpreter_guards.unsupported_data_non_answer()
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.UNSUPPORTED_DATA,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
 
     # Semantic Layer context is intentionally business-facing: labels and
     # examples, not table names, SQL, column names, or access internals.
@@ -305,7 +309,10 @@ def interpret_question(
             semantic_layer_context=semantic_layer_context,
         )
     except Exception:
-        return _provider_failure_non_answer()
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
 
     # Provider output is only a proposal until workflow validation promotes it
     # into the trusted Question Frame contract.
@@ -381,9 +388,15 @@ def _promote_provider_result(
     semantic_layer: schema.SemanticLayer,
 ) -> contracts.StageResult[contracts.QuestionFrame]:
     if isinstance(raw_provider_result, ProviderFailure):
-        return _provider_failure_non_answer()
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
     if not isinstance(raw_provider_result, QuestionFrameProposal):
-        return _invalid_provider_output_non_answer()
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
 
     proposal = raw_provider_result
     intent_value = proposal.intent
@@ -391,23 +404,27 @@ def _promote_provider_result(
 
     # Apply current workflow limits before promoting to trusted contract.
     if not intent_value:
-        return _missing_required_field_non_answer("intent")
-    if intent_value not in _SUPPORTED_PROVIDER_INTENTS:
-        return contracts.NonAnswer(
+        return non_answer_catalog.missing_required_field_non_answer(
+            "intent",
             stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-            reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT,
-            reason=(
-                "The Data Assistant does not support that Data Question intent yet."
-            ),
-            unresolved_ambiguities=("supported intent",),
-            next_step="Ask: What was total revenue by region in January 2026?",
+        )
+    if intent_value not in _SUPPORTED_PROVIDER_INTENTS:
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         )
     if not metric_value:
-        return _missing_required_field_non_answer("metric")
+        return non_answer_catalog.missing_required_field_non_answer(
+            "metric",
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
 
     # Finally, prove provider labels are real Semantic Layer labels.
     if metric_value not in _metric_labels(semantic_layer):
-        return _unknown_semantic_label_non_answer("metric")
+        return non_answer_catalog.unknown_semantic_label_non_answer(
+            "metric",
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
     field_operations_result = _promote_field_operations(
         proposal.field_operations,
         semantic_layer,
@@ -437,14 +454,23 @@ def _promote_field_operations(
     for operation_proposal in operation_proposals:
         field = fields_by_label.get(operation_proposal.field)
         if field is None:
-            return _unknown_semantic_label_non_answer("field")
+            return non_answer_catalog.unknown_semantic_label_non_answer(
+                "field",
+                stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+            )
         operation = contracts.FieldOperationKind(operation_proposal.operation)
         if operation_proposal.operation not in {op.value for op in field.operations}:
-            return _unsupported_field_operation_non_answer()
+            return non_answer_catalog.non_answer(
+                contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION,
+                stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+            )
         if operation == contracts.FieldOperationKind.GROUP_BY:
             group_by_count += 1
             if group_by_count > 1:
-                return _unsupported_shape_non_answer("group_by")
+                return non_answer_catalog.non_answer(
+                    contracts.NonAnswerReasonCode.UNSUPPORTED_SHAPE,
+                    stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+                )
             promoted_operations.append(
                 contracts.SemanticFieldOperation(
                     operation=operation,
@@ -460,7 +486,10 @@ def _promote_field_operations(
         }:
             result = _promote_values_filter(operation_proposal, field, operation)
         else:
-            return _invalid_provider_output_non_answer()
+            return non_answer_catalog.non_answer(
+                contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+                stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+            )
         if isinstance(result, contracts.NonAnswer):
             return result
         promoted_operations.append(result)
@@ -474,7 +503,10 @@ def _promote_range_filter(
     operation: contracts.FieldOperationKind,
 ) -> contracts.NonAnswer | contracts.SemanticFieldOperation:
     if operation_proposal.lower is None and operation_proposal.upper is None:
-        return _invalid_field_operation_non_answer("range filter")
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
     lower = (
         None
         if operation_proposal.lower is None
@@ -490,7 +522,10 @@ def _promote_range_filter(
     if isinstance(upper, contracts.NonAnswer):
         return upper
     if _range_bounds_are_reversed(lower, upper):
-        return _invalid_field_operation_non_answer("range filter")
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
     return contracts.SemanticFieldOperation(
         operation=operation,
         field=field.label,
@@ -520,7 +555,10 @@ def _promote_values_filter(
     operation: contracts.FieldOperationKind,
 ) -> contracts.NonAnswer | contracts.SemanticFieldOperation:
     if not operation_proposal.values:
-        return _invalid_field_operation_non_answer("values filter")
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
     coerced_values: list[contracts.FieldValue] = []
     for value in operation_proposal.values:
         coerced_value = _coerce_field_value(value, field)
@@ -542,87 +580,27 @@ def _coerce_field_value(
         try:
             return datetime.date.fromisoformat(value)
         except ValueError:
-            return _invalid_field_operation_non_answer("date value")
+            return non_answer_catalog.non_answer(
+                contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+                stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+            )
     if field.data_type in {"decimal", "number"}:
         try:
             coerced_value = decimal.Decimal(value)
         except decimal.InvalidOperation:
-            return _invalid_field_operation_non_answer("decimal value")
+            return non_answer_catalog.non_answer(
+                contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+                stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+            )
         if not coerced_value.is_finite():
-            return _invalid_field_operation_non_answer("decimal value")
+            return non_answer_catalog.non_answer(
+                contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+                stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+            )
         return coerced_value
     if field.data_type in {"string", "varchar"}:
         return value
-    return _invalid_field_operation_non_answer("field value")
-
-
-def _missing_required_field_non_answer(field_name: str) -> contracts.NonAnswer:
-    return contracts.NonAnswer(
+    return non_answer_catalog.non_answer(
+        contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
         stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-        reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
-        reason="The Data Question is missing required interpretation details.",
-        unresolved_ambiguities=(field_name,),
-        next_step="Ask a clarification question before selecting data.",
-    )
-
-
-def _unknown_semantic_label_non_answer(field_name: str) -> contracts.NonAnswer:
-    return contracts.NonAnswer(
-        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-        reason_code=contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL,
-        reason=(
-            "The Data Assistant could not match the requested Semantic Layer labels."
-        ),
-        unresolved_ambiguities=(field_name,),
-        next_step="Use exact Semantic Layer metric and dimension labels.",
-    )
-
-
-def _unsupported_field_operation_non_answer() -> contracts.NonAnswer:
-    return contracts.NonAnswer(
-        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-        reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION,
-        reason="The Semantic Layer does not allow that operation for the field.",
-        unresolved_ambiguities=("semantic field operation",),
-        next_step="Use only operations listed for the Semantic Field.",
-    )
-
-
-def _unsupported_shape_non_answer(shape_name: str) -> contracts.NonAnswer:
-    return contracts.NonAnswer(
-        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-        reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_SHAPE,
-        reason="The Data Assistant cannot handle that Question Frame shape yet.",
-        unresolved_ambiguities=(shape_name,),
-        next_step="Ask for one grouping field or a scalar aggregate.",
-    )
-
-
-def _provider_failure_non_answer() -> contracts.NonAnswer:
-    return contracts.NonAnswer(
-        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-        reason_code=contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
-        reason="The Question Interpreter provider could not produce a proposal.",
-        unresolved_ambiguities=("provider failure",),
-        next_step="Retry after the provider is available again.",
-    )
-
-
-def _invalid_provider_output_non_answer() -> contracts.NonAnswer:
-    return contracts.NonAnswer(
-        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-        reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
-        reason="The Question Interpreter provider returned invalid output.",
-        unresolved_ambiguities=("provider output",),
-        next_step="Fix the provider contract before retrying.",
-    )
-
-
-def _invalid_field_operation_non_answer(field_name: str) -> contracts.NonAnswer:
-    return contracts.NonAnswer(
-        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-        reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
-        reason="The Question Interpreter provider returned invalid output.",
-        unresolved_ambiguities=(field_name,),
-        next_step="Fix the provider contract before retrying.",
     )
