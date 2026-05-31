@@ -16,11 +16,6 @@ def prepare_data(
     group_by_field = (
         data_request.group_by_fields[0] if data_request.group_by_fields else None
     )
-    dimension_value_expression = (
-        None
-        if group_by_field is None
-        else f"coalesce(nullif(trim({group_by_field.source_column}), ''), 'Unknown')"
-    )
     filter_sql, filter_parameters = _filter_sql(data_request.filter_operations)
     filtered_rows_cte = f"""
         filtered_rows as (
@@ -29,22 +24,18 @@ def prepare_data(
             {filter_sql}
         )
     """
-    if dimension_value_expression is None:
-        grouped_query = f"""
-            with {filtered_rows_cte},
-            metric_rows as (
-                select *
-                from filtered_rows
-                where {metric_source_column} is not null
-            )
-            select
-                'All' as dimension_value,
-                {data_request.metric.expression} as metric_value
-            from metric_rows
-            limit $result_limit
-        """
+    if group_by_field is None:
+        dimension_select = "'All'"
+        group_and_order = ""
     else:
-        grouped_query = f"""
+        dimension_select = (
+            f"coalesce(nullif(trim({group_by_field.source_column}), ''), 'Unknown')"
+        )
+        group_and_order = (
+            "group by dimension_value\n"
+            "        order by metric_value desc, dimension_value asc"
+        )
+    metric_query = f"""
         with {filtered_rows_cte},
         metric_rows as (
             select *
@@ -52,11 +43,10 @@ def prepare_data(
             where {metric_source_column} is not null
         )
         select
-            {dimension_value_expression} as dimension_value,
+            {dimension_select} as dimension_value,
             {data_request.metric.expression} as metric_value
         from metric_rows
-        group by dimension_value
-        order by metric_value desc, dimension_value asc
+        {group_and_order}
         limit $result_limit
     """
     missing_dimension_expression = (
@@ -85,7 +75,7 @@ def prepare_data(
     """
 
     prepared_dataframe = connection.execute(
-        grouped_query,
+        metric_query,
         {
             **filter_parameters,
             "result_limit": data_request.result_limit,
