@@ -186,6 +186,40 @@ def test_openai_provider_prompt_extracts_explicit_calendar_month_time_ranges() -
     assert "not inventing a time range" in developer_prompt
 
 
+def test_openai_provider_prompt_chooses_one_relevant_date_field() -> None:
+    parse_calls: list[dict[str, object]] = []
+
+    class FakeParsedResponse:
+        output_parsed = test_support.question_frame_proposal()
+
+    provider = _openai_provider_returning(
+        FakeParsedResponse(),
+        parse_calls=parse_calls,
+    )
+
+    provider.propose_question_frame(
+        question="What was customer count by customer region in January 2026?",
+        semantic_layer_context={"datasets": []},
+    )
+
+    input_messages = typing.cast(
+        list[dict[str, str]],
+        parse_calls[0]["input"],
+    )
+    developer_prompt = input_messages[0]["content"]
+    assert "One explicit date phrase should produce at most one date" in (
+        developer_prompt
+    )
+    assert "choose the one most" in developer_prompt
+    assert "directly related to the requested metric" in developer_prompt
+    assert "Do not add date" in developer_prompt
+    assert "filters for unrelated fields" in developer_prompt
+    assert "What was customer count by customer region in January 2026?" in (
+        developer_prompt
+    )
+    assert 'operation "range_filter", field "created date"' in developer_prompt
+
+
 def test_openai_provider_maps_refusal_to_provider_failure() -> None:
     class FakeRefusalContent:
         type = "refusal"

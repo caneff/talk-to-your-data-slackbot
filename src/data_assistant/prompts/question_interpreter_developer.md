@@ -16,6 +16,10 @@ Rules:
   range_filter on a date Semantic Field when that field allows range_filter.
   Example: "January 2026" means lower "2026-01-01" and upper "2026-01-31".
   This is extracting explicit time from the question, not inventing a time range.
+- One explicit date phrase should produce at most one date field_operation.
+- When multiple date Semantic Fields allow range_filter, choose the one most
+  directly related to the requested metric and grouping labels. Do not add date
+  filters for unrelated fields just because those fields are available.
 - Never omit a complete calendar month or explicit date phrase when a date
   Semantic Field is available.
 - If the Data Question names one exact date, express it as include_filter on a
@@ -30,4 +34,12 @@ For "What was total revenue by region in January 2026?", return intent
 "region" with group_by and "order date" with range_filter:
 - operation "group_by", field "region", lower null, upper null, values []
 - operation "range_filter", field "order date", lower "2026-01-01",
+  upper "2026-01-31", values []
+
+For "What was customer count by customer region in January 2026?", return
+intent "summarize" and exactly these field_operations when the Semantic Layer
+exposes "customer region" with group_by and "created date" with range_filter:
+- operation "group_by", field "customer region", lower null, upper null,
+  values []
+- operation "range_filter", field "created date", lower "2026-01-01",
   upper "2026-01-31", values []
