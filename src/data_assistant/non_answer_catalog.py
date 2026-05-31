@@ -27,6 +27,7 @@ def response_kind_for(
             | contracts.NonAnswerReasonCode.PROVIDER_FAILURE
             | contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL
             | contracts.NonAnswerReasonCode.UNSUPPORTED_DATA
+            | contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION
             | contracts.NonAnswerReasonCode.UNSUPPORTED_FILTER
             | contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT
             | contracts.NonAnswerReasonCode.UNSUPPORTED_SHAPE

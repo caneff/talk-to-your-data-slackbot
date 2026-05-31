@@ -14,12 +14,13 @@ def test_data_request_asks_for_total_revenue_grouped_by_region(
     assert data_request.metric.label == "total revenue"
     assert data_request.metric.expression == "sum(revenue)"
     assert data_request.metric.source_column == "revenue"
-    assert data_request.dimension.dimension_id == "region"
-    assert data_request.dimension.label == "region"
-    assert data_request.dimension.column == "region"
+    assert data_request.group_by_fields[0].field_id == "region"
+    assert data_request.group_by_fields[0].label == "region"
+    assert data_request.group_by_fields[0].source_column == "region"
     assert data_request.table.date_column == "order_date"
-    assert data_request.time_range.label == "January 2026"
-    assert data_request.filters == ()
+    assert data_request.filter_labels == (
+        "order date >= 2026-01-01 and <= 2026-01-31",
+    )
     assert data_request.output_shape == "total revenue grouped by region"
 
 
@@ -29,7 +30,7 @@ def test_data_request_selects_orders_when_commerce_has_customer_metadata(
     assert data_request.dataset.tables == ("orders", "customers")
     assert data_request.table.table_id == "orders"
     assert data_request.metric.metric_id == "total_revenue"
-    assert data_request.dimension.dimension_id == "region"
+    assert data_request.group_by_fields[0].field_id == "region"
 
 
 def test_data_requester_returns_non_answer_for_ambiguous_tables() -> None:
@@ -51,28 +52,29 @@ def test_data_requester_returns_non_answer_for_ambiguous_tables() -> None:
         expression="sum(revenue)",
         source_column="revenue",
     )
-    dimension = schema.Dimension(
-        dimension_id="region",
+    field = schema.SemanticField(
+        field_id="region",
         label="region",
-        column="region",
+        source_column="region",
+        data_type="string",
+        operations=(schema.FieldOperation.GROUP_BY,),
     )
     semantic_layer = schema.SemanticLayer(
         datasets=(dataset,),
         tables=(
-            _table("orders", metric, dimension),
-            _table("order_rollups", metric, dimension),
+            _table("orders", metric, field),
+            _table("order_rollups", metric, field),
         ),
     )
     question_frame = contracts.QuestionFrame(
         intent="summarize",
         metric="total revenue",
-        dimension="region",
-        time_range=contracts.TimeRange(
-            label="January 2026",
-            start_date=datetime.date(2026, 1, 1),
-            end_date=datetime.date(2026, 1, 31),
+        field_operations=(
+            contracts.SemanticFieldOperation(
+                operation=contracts.FieldOperationKind.GROUP_BY,
+                field="region",
+            ),
         ),
-        filters=(),
         unresolved_ambiguities=(),
     )
     dataset_selection = contracts.DatasetSelection(
@@ -84,13 +86,13 @@ def test_data_requester_returns_non_answer_for_ambiguous_tables() -> None:
             dataset=dataset,
             table=semantic_layer.tables[0],
             metric=metric,
-            dimension=dimension,
+            group_by_fields=(field,),
         ),
         contracts.SemanticMatch(
             dataset=dataset,
             table=semantic_layer.tables[1],
             metric=metric,
-            dimension=dimension,
+            group_by_fields=(field,),
         ),
     )
 
@@ -131,7 +133,7 @@ def test_data_requester_returns_non_answer_when_selection_has_no_table_match(
 def _table(
     table_id: str,
     metric: schema.Metric,
-    dimension: schema.Dimension,
+    field: schema.SemanticField,
 ) -> schema.DatasetTable:
     return schema.DatasetTable(
         table_id=table_id,
@@ -144,5 +146,5 @@ def _table(
             schema.TableColumn(column_id="revenue", data_type="decimal"),
         ),
         metrics=(metric,),
-        dimensions=(dimension,),
+        fields=(field,),
     )

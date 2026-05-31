@@ -51,24 +51,32 @@ def canonical_question_proposal() -> question_interpreter.QuestionFrameProposal:
     return question_interpreter.QuestionFrameProposal(
         intent="summarize",
         metric="total revenue",
-        dimension="region",
-        time_range=question_interpreter.TimeRangeProposal(
-            label="January 2026",
-            start_date=datetime.date(2026, 1, 1),
-            end_date=datetime.date(2026, 1, 31),
+        field_operations=(
+            question_interpreter.GroupByOperationProposal(
+                operation="group_by",
+                field="region",
+            ),
+            question_interpreter.RangeFilterOperationProposal(
+                operation="range_filter",
+                field="order date",
+                lower=datetime.date(2026, 1, 1),
+                upper=datetime.date(2026, 1, 31),
+            ),
         ),
-        filters=(),
     )
 
 
 def missing_time_range_proposal() -> question_interpreter.QuestionFrameProposal:
-    """Return provider proposal that omits the required time range."""
+    """Return provider proposal that omits a required metric."""
     return question_interpreter.QuestionFrameProposal(
         intent="summarize",
-        metric="total revenue",
-        dimension="region",
-        time_range=None,
-        filters=(),
+        metric=None,
+        field_operations=(
+            question_interpreter.GroupByOperationProposal(
+                operation="group_by",
+                field="region",
+            ),
+        ),
     )
 
 

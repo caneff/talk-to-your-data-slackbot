@@ -1,5 +1,4 @@
 import collections.abc
-import datetime
 import io
 import pathlib
 import typing
@@ -13,15 +12,9 @@ import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_layer.testing_support as semantic_layer_testing
 
 
-def test_compare_proposal_matches_exact_meaning_ignoring_time_range_label() -> None:
+def test_compare_proposal_matches_exact_meaning() -> None:
     expected = test_support.question_frame_proposal()
-    actual = test_support.question_frame_proposal(
-        time_range=question_interpreter.TimeRangeProposal(
-            label="Jan 2026",
-            start_date=datetime.date(2026, 1, 1),
-            end_date=datetime.date(2026, 1, 31),
-        )
-    )
+    actual = test_support.question_frame_proposal()
 
     mismatches = live_eval.compare_question_frame_meaning(
         expected=expected,
@@ -36,13 +29,17 @@ def test_compare_proposal_reports_field_level_mismatches() -> None:
     actual = test_support.question_frame_proposal(
         intent="trend",
         metric="gross margin",
-        dimension="country",
-        time_range=question_interpreter.TimeRangeProposal(
-            label="February 2026",
-            start_date=datetime.date(2026, 2, 1),
-            end_date=datetime.date(2026, 2, 28),
+        field_operations=(
+            question_interpreter.GroupByOperationProposal(
+                operation="group_by",
+                field="country",
+            ),
+            question_interpreter.IncludeFilterOperationProposal(
+                operation="include_filter",
+                field="region",
+                values=("North",),
+            ),
         ),
-        filters=("region = 'North'",),
     )
 
     mismatches = live_eval.compare_question_frame_meaning(
@@ -53,10 +50,13 @@ def test_compare_proposal_reports_field_level_mismatches() -> None:
     assert mismatches == (
         "intent: expected 'summarize', got 'trend'",
         "metric: expected 'total revenue', got 'gross margin'",
-        "dimension: expected 'region', got 'country'",
-        "filters: expected (), got (\"region = 'North'\",)",
-        "time_range.start_date: expected 2026-01-01, got 2026-02-01",
-        "time_range.end_date: expected 2026-01-31, got 2026-02-28",
+        "field_operations: expected "
+        "(GroupByOperationProposal(operation='group_by', field='region'), "
+        "RangeFilterOperationProposal(operation='range_filter', field='order date', "
+        "lower=datetime.date(2026, 1, 1), upper=datetime.date(2026, 1, 31))), "
+        "got (GroupByOperationProposal(operation='group_by', field='country'), "
+        "IncludeFilterOperationProposal(operation='include_filter', field='region', "
+        "values=('North',)))",
     )
 
 

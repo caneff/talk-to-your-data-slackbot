@@ -17,11 +17,28 @@ _DEFAULT_METRICS = (
         source_column="revenue",
     ),
 )
-_DEFAULT_DIMENSIONS = (
-    schema.Dimension(
-        dimension_id="region",
+_DEFAULT_FIELDS = (
+    schema.SemanticField(
+        field_id="order_date",
+        label="order date",
+        source_column="order_date",
+        data_type="date",
+        operations=(
+            schema.FieldOperation.INCLUDE_FILTER,
+            schema.FieldOperation.EXCLUDE_FILTER,
+            schema.FieldOperation.RANGE_FILTER,
+        ),
+    ),
+    schema.SemanticField(
+        field_id="region",
         label="region",
-        column="region",
+        source_column="region",
+        data_type="string",
+        operations=(
+            schema.FieldOperation.GROUP_BY,
+            schema.FieldOperation.INCLUDE_FILTER,
+            schema.FieldOperation.EXCLUDE_FILTER,
+        ),
     ),
 )
 
@@ -34,7 +51,7 @@ def semantic_layer_with_table(
     date_column: str = "order_date",
     columns: collections.abc.Mapping[str, str] = _DEFAULT_COLUMNS,
     metrics: tuple[schema.Metric, ...] = _DEFAULT_METRICS,
-    dimensions: tuple[schema.Dimension, ...] = _DEFAULT_DIMENSIONS,
+    fields: tuple[schema.SemanticField, ...] = _DEFAULT_FIELDS,
 ) -> schema.SemanticLayer:
     return schema.SemanticLayer(
         datasets=(),
@@ -49,7 +66,7 @@ def semantic_layer_with_table(
                     for column_id, data_type in columns.items()
                 ),
                 metrics=metrics,
-                dimensions=dimensions,
+                fields=fields,
             ),
         ),
     )

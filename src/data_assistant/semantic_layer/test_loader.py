@@ -21,17 +21,16 @@ def test_semantic_layer_loads_dataset_table_relationship() -> None:
     customers = semantic_layer_loader.find_table("customers", loaded_semantic_layer)
     column_ids = {column.column_id for column in customers.columns}
     metrics_by_id = {metric.metric_id: metric for metric in customers.metrics}
-    dimensions_by_id = {
-        dimension.dimension_id: dimension for dimension in customers.dimensions
-    }
+    fields_by_id = {field.field_id: field for field in customers.fields}
     assert customers.dataset_id == "commerce"
     assert customers.date_column == "created_date"
     assert column_ids == {"created_date", "customer_id", "customer_region"}
     assert metrics_by_id["customer_count"].label == "customer count"
     assert metrics_by_id["customer_count"].expression == "count(customer_id)"
     assert metrics_by_id["customer_count"].source_column == "customer_id"
-    assert dimensions_by_id["customer_region"].label == "customer region"
-    assert dimensions_by_id["customer_region"].column == "customer_region"
+    assert fields_by_id["customer_region"].label == "customer region"
+    assert fields_by_id["customer_region"].source_column == "customer_region"
+    assert schema.FieldOperation.GROUP_BY in fields_by_id["customer_region"].operations
 
     orders = semantic_layer_loader.find_table("orders", loaded_semantic_layer)
     orders_metrics_by_id = {metric.metric_id: metric for metric in orders.metrics}
@@ -58,11 +57,13 @@ def test_dataset_table_rejects_metric_source_column_outside_columns() -> None:
                     source_column="missing_revenue",
                 ),
             ),
-            dimensions=(
-                schema.Dimension(
-                    dimension_id="region",
+            fields=(
+                schema.SemanticField(
+                    field_id="region",
                     label="region",
-                    column="region",
+                    source_column="region",
+                    data_type="string",
+                    operations=(schema.FieldOperation.GROUP_BY,),
                 ),
             ),
         )

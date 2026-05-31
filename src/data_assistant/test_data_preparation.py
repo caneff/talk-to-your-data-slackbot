@@ -93,3 +93,89 @@ def test_prepared_data_uses_metric_source_column_for_missing_values(
     assert prepared_data.quality_notes == (
         "1 row excluded because revenue was missing.",
     )
+
+
+def test_prepared_data_applies_include_filter_with_parameters(
+    data_request: contracts.DataRequest,
+    connect_orders: local_orders_fixture.OrdersConnector,
+) -> None:
+    region_field = data_request.group_by_fields[0]
+    data_request = dataclasses.replace(
+        data_request,
+        filter_operations=(
+            contracts.ResolvedSemanticFieldOperation(
+                operation=contracts.FieldOperationKind.INCLUDE_FILTER,
+                field=region_field,
+                values=("North",),
+            ),
+        ),
+    )
+    order_rows = (
+        ("2026-01-03", "North", "1200.00"),
+        ("2026-01-08", "South", "850.00"),
+        ("2026-01-22", "North", "300.00"),
+    )
+    with connect_orders(order_rows) as connection:
+        prepared_data = data_preparation.prepare_data(data_request, connection)
+
+    expected_data = pd.DataFrame(
+        {
+            "dimension_value": ("North",),
+            "metric_value": (1500.0,),
+        },
+    )
+    pd_testing.assert_frame_equal(prepared_data.data, expected_data)
+
+
+def test_prepared_data_applies_exclude_filter_with_parameters(
+    data_request: contracts.DataRequest,
+    connect_orders: local_orders_fixture.OrdersConnector,
+) -> None:
+    region_field = data_request.group_by_fields[0]
+    data_request = dataclasses.replace(
+        data_request,
+        filter_operations=(
+            contracts.ResolvedSemanticFieldOperation(
+                operation=contracts.FieldOperationKind.EXCLUDE_FILTER,
+                field=region_field,
+                values=("South",),
+            ),
+        ),
+    )
+    order_rows = (
+        ("2026-01-03", "North", "1200.00"),
+        ("2026-01-08", "South", "850.00"),
+        ("2026-01-22", "North", "300.00"),
+    )
+    with connect_orders(order_rows) as connection:
+        prepared_data = data_preparation.prepare_data(data_request, connection)
+
+    expected_data = pd.DataFrame(
+        {
+            "dimension_value": ("North",),
+            "metric_value": (1500.0,),
+        },
+    )
+    pd_testing.assert_frame_equal(prepared_data.data, expected_data)
+
+
+def test_prepared_data_supports_scalar_aggregate_without_group_by(
+    data_request: contracts.DataRequest,
+    connect_orders: local_orders_fixture.OrdersConnector,
+) -> None:
+    data_request = dataclasses.replace(data_request, group_by_fields=())
+    order_rows = (
+        ("2026-01-03", "North", "1200.00"),
+        ("2026-01-08", "South", "850.00"),
+        ("2026-01-22", "North", "300.00"),
+    )
+    with connect_orders(order_rows) as connection:
+        prepared_data = data_preparation.prepare_data(data_request, connection)
+
+    expected_data = pd.DataFrame(
+        {
+            "dimension_value": ("All",),
+            "metric_value": (2350.0,),
+        },
+    )
+    pd_testing.assert_frame_equal(prepared_data.data, expected_data)

@@ -19,14 +19,18 @@ def find_semantic_matches(
             semantic_layer,
         ):
             metric = _find_metric(question_frame, table)
-            dimension = _find_dimension(question_frame, table)
-            if metric is not None and dimension is not None:
+            group_by_fields = _find_group_by_fields(question_frame, table)
+            if (
+                metric is not None
+                and group_by_fields is not None
+                and _table_supports_filter_operations(question_frame, table)
+            ):
                 matches.append(
                     contracts.SemanticMatch(
                         dataset=dataset,
                         table=table,
                         metric=metric,
-                        dimension=dimension,
+                        group_by_fields=group_by_fields,
                     ),
                 )
 
@@ -43,15 +47,44 @@ def _find_metric(
     )
 
 
-def _find_dimension(
+def _find_group_by_fields(
     question_frame: contracts.QuestionFrame,
     table: schema.DatasetTable,
-) -> schema.Dimension | None:
-    return next(
-        (
-            dimension
-            for dimension in table.dimensions
-            if dimension.label == question_frame.dimension
-        ),
-        None,
+) -> tuple[schema.SemanticField, ...] | None:
+    group_by_labels = tuple(
+        operation.field
+        for operation in question_frame.field_operations
+        if operation.operation == contracts.FieldOperationKind.GROUP_BY
     )
+    group_by_fields: list[schema.SemanticField] = []
+    for group_by_label in group_by_labels:
+        field = next(
+            (
+                table_field
+                for table_field in table.fields
+                if table_field.label == group_by_label
+                and schema.FieldOperation.GROUP_BY in table_field.operations
+            ),
+            None,
+        )
+        if field is None:
+            return None
+        group_by_fields.append(field)
+    return tuple(group_by_fields)
+
+
+def _table_supports_filter_operations(
+    question_frame: contracts.QuestionFrame,
+    table: schema.DatasetTable,
+) -> bool:
+    fields_by_label = {field.label: field for field in table.fields}
+    for operation in question_frame.field_operations:
+        if operation.operation == contracts.FieldOperationKind.GROUP_BY:
+            continue
+        field = fields_by_label.get(operation.field)
+        if field is None:
+            return False
+        allowed_operations = {allowed.value for allowed in field.operations}
+        if operation.operation.value not in allowed_operations:
+            return False
+    return True

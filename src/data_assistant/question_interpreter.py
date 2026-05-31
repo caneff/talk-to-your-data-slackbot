@@ -5,6 +5,7 @@ from __future__ import annotations
 import collections.abc
 import dataclasses
 import datetime
+import decimal
 import functools
 import importlib.resources
 import json
@@ -37,14 +38,58 @@ class OpenAIQuestionInterpreterConfigError(ValueError):
     """Raised when required OpenAI provider config is missing."""
 
 
-class TimeRangeProposal(pydantic.BaseModel):
-    """Untrusted provider proposal for a Question Frame time range."""
+ScalarProposalValue: typing.TypeAlias = (
+    str | int | float | decimal.Decimal | datetime.date
+)
+
+
+class GroupByOperationProposal(pydantic.BaseModel):
+    """Untrusted provider proposal for a group-by Semantic Field operation."""
 
     model_config = pydantic.ConfigDict(extra="forbid")
 
-    label: str
-    start_date: datetime.date
-    end_date: datetime.date
+    operation: typing.Literal["group_by"]
+    field: str
+
+
+class RangeFilterOperationProposal(pydantic.BaseModel):
+    """Untrusted provider proposal for a bounded Semantic Field filter."""
+
+    model_config = pydantic.ConfigDict(extra="forbid")
+
+    operation: typing.Literal["range_filter"]
+    field: str
+    lower: ScalarProposalValue | None = None
+    upper: ScalarProposalValue | None = None
+
+
+class IncludeFilterOperationProposal(pydantic.BaseModel):
+    """Untrusted provider proposal for included Semantic Field values."""
+
+    model_config = pydantic.ConfigDict(extra="forbid")
+
+    operation: typing.Literal["include_filter"]
+    field: str
+    values: tuple[ScalarProposalValue, ...]
+
+
+class ExcludeFilterOperationProposal(pydantic.BaseModel):
+    """Untrusted provider proposal for excluded Semantic Field values."""
+
+    model_config = pydantic.ConfigDict(extra="forbid")
+
+    operation: typing.Literal["exclude_filter"]
+    field: str
+    values: tuple[ScalarProposalValue, ...]
+
+
+FieldOperationProposal: typing.TypeAlias = typing.Annotated[
+    GroupByOperationProposal
+    | RangeFilterOperationProposal
+    | IncludeFilterOperationProposal
+    | ExcludeFilterOperationProposal,
+    pydantic.Field(discriminator="operation"),
+]
 
 
 class QuestionFrameProposal(pydantic.BaseModel):
@@ -54,9 +99,7 @@ class QuestionFrameProposal(pydantic.BaseModel):
 
     intent: str | None
     metric: str | None
-    dimension: str | None
-    time_range: TimeRangeProposal | None
-    filters: tuple[str, ...]
+    field_operations: tuple[FieldOperationProposal, ...]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -278,17 +321,31 @@ def build_semantic_layer_context(
             "available_metric_labels": sorted({
                 metric.label for table in dataset_tables for metric in table.metrics
             }),
-            "available_dimension_labels": sorted({
-                dimension.label
+            "available_fields": sorted(
+                [
+                    {
+                        "label": field.label,
+                        "data_type": field.data_type,
+                        "operations": sorted(
+                            operation.value for operation in field.operations
+                        ),
+                    }
+                    for table in dataset_tables
+                    for field in table.fields
+                ],
+                key=lambda field_context: typing.cast(str, field_context["label"]),
+            ),
+            "available_field_labels": sorted({
+                field.label
                 for table in dataset_tables
-                for dimension in table.dimensions
+                for field in table.fields
             }),
         })
 
     return {
         "datasets": datasets,
         "all_metric_labels": sorted(set(_metric_labels(semantic_layer))),
-        "all_dimension_labels": sorted(set(_dimension_labels(semantic_layer))),
+        "all_field_labels": sorted(set(_field_labels(semantic_layer))),
         "supported_intents": sorted(_SUPPORTED_PROVIDER_INTENTS),
     }
 
@@ -299,11 +356,11 @@ def _metric_labels(semantic_layer: schema.SemanticLayer) -> tuple[str, ...]:
     )
 
 
-def _dimension_labels(semantic_layer: schema.SemanticLayer) -> tuple[str, ...]:
+def _field_labels(semantic_layer: schema.SemanticLayer) -> tuple[str, ...]:
     return tuple(
-        dimension.label
+        field.label
         for table in semantic_layer.tables
-        for dimension in table.dimensions
+        for field in table.fields
     )
 
 
@@ -319,11 +376,6 @@ def _promote_provider_result(
     proposal = raw_provider_result
     intent_value = proposal.intent
     metric_value = proposal.metric
-    dimension_value = proposal.dimension
-
-    time_range_result = _normalize_time_range(proposal.time_range)
-    if isinstance(time_range_result, contracts.NonAnswer):
-        return time_range_result
 
     # Apply current workflow limits before promoting to trusted contract.
     if not intent_value:
@@ -340,39 +392,144 @@ def _promote_provider_result(
         )
     if not metric_value:
         return _missing_required_field_non_answer("metric")
-    if not dimension_value:
-        return _missing_required_field_non_answer("dimension")
-
-    if time_range_result is None:
-        return _missing_required_field_non_answer("time range")
-    time_range_value = time_range_result
-    if proposal.filters:
-        return contracts.NonAnswer(
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-            reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_FILTER,
-            reason=(
-                "The Data Assistant does not support provider-proposed filters yet."
-            ),
-            unresolved_ambiguities=("filters",),
-            next_step="Ask the Data Question without filters for now.",
-        )
 
     # Finally, prove provider labels are real Semantic Layer labels.
     if metric_value not in _metric_labels(semantic_layer):
         return _unknown_semantic_label_non_answer("metric")
-    if dimension_value not in _dimension_labels(semantic_layer):
-        return _unknown_semantic_label_non_answer("dimension")
+    field_operations_result = _promote_field_operations(
+        proposal.field_operations,
+        semantic_layer,
+    )
+    if isinstance(field_operations_result, contracts.NonAnswer):
+        return field_operations_result
 
     return contracts.Success(
         contracts.QuestionFrame(
             intent=intent_value,
             metric=metric_value,
-            dimension=dimension_value,
-            time_range=time_range_value,
-            filters=proposal.filters,
+            field_operations=field_operations_result,
             unresolved_ambiguities=(),
         )
     )
+
+
+def _promote_field_operations(
+    operation_proposals: tuple[FieldOperationProposal, ...],
+    semantic_layer: schema.SemanticLayer,
+) -> contracts.NonAnswer | tuple[contracts.SemanticFieldOperation, ...]:
+    fields_by_label = {
+        field.label: field for table in semantic_layer.tables for field in table.fields
+    }
+    promoted_operations: list[contracts.SemanticFieldOperation] = []
+    group_by_count = 0
+    for operation_proposal in operation_proposals:
+        field = fields_by_label.get(operation_proposal.field)
+        if field is None:
+            return _unknown_semantic_label_non_answer("field")
+        operation = contracts.FieldOperationKind(operation_proposal.operation)
+        if operation_proposal.operation not in {op.value for op in field.operations}:
+            return _unsupported_field_operation_non_answer()
+        if operation == contracts.FieldOperationKind.GROUP_BY:
+            group_by_count += 1
+            if group_by_count > 1:
+                return _unsupported_shape_non_answer("group_by")
+            promoted_operations.append(
+                contracts.SemanticFieldOperation(
+                    operation=operation,
+                    field=field.label,
+                )
+            )
+            continue
+        if isinstance(operation_proposal, RangeFilterOperationProposal):
+            result = _promote_range_filter(operation_proposal, field, operation)
+        elif isinstance(
+            operation_proposal,
+            IncludeFilterOperationProposal | ExcludeFilterOperationProposal,
+        ):
+            result = _promote_values_filter(operation_proposal, field, operation)
+        else:
+            return _invalid_provider_output_non_answer()
+        if isinstance(result, contracts.NonAnswer):
+            return result
+        promoted_operations.append(result)
+
+    return tuple(promoted_operations)
+
+
+def _promote_range_filter(
+    operation_proposal: RangeFilterOperationProposal,
+    field: schema.SemanticField,
+    operation: contracts.FieldOperationKind,
+) -> contracts.NonAnswer | contracts.SemanticFieldOperation:
+    if operation_proposal.lower is None and operation_proposal.upper is None:
+        return _invalid_field_operation_non_answer("range filter")
+    lower = (
+        None
+        if operation_proposal.lower is None
+        else _coerce_field_value(operation_proposal.lower, field)
+    )
+    if isinstance(lower, contracts.NonAnswer):
+        return lower
+    upper = (
+        None
+        if operation_proposal.upper is None
+        else _coerce_field_value(operation_proposal.upper, field)
+    )
+    if isinstance(upper, contracts.NonAnswer):
+        return upper
+    return contracts.SemanticFieldOperation(
+        operation=operation,
+        field=field.label,
+        lower=lower,
+        upper=upper,
+    )
+
+
+def _promote_values_filter(
+    operation_proposal: IncludeFilterOperationProposal | ExcludeFilterOperationProposal,
+    field: schema.SemanticField,
+    operation: contracts.FieldOperationKind,
+) -> contracts.NonAnswer | contracts.SemanticFieldOperation:
+    if not operation_proposal.values:
+        return _invalid_field_operation_non_answer("values filter")
+    coerced_values: list[contracts.FieldValue] = []
+    for value in operation_proposal.values:
+        coerced_value = _coerce_field_value(value, field)
+        if isinstance(coerced_value, contracts.NonAnswer):
+            return coerced_value
+        coerced_values.append(coerced_value)
+    return contracts.SemanticFieldOperation(
+        operation=operation,
+        field=field.label,
+        values=tuple(coerced_values),
+    )
+
+
+def _coerce_field_value(
+    value: ScalarProposalValue,
+    field: schema.SemanticField,
+) -> contracts.FieldValue | contracts.NonAnswer:
+    if field.data_type == "date":
+        if isinstance(value, datetime.date):
+            return value
+        if isinstance(value, str):
+            try:
+                return datetime.date.fromisoformat(value)
+            except ValueError:
+                return _invalid_field_operation_non_answer("date value")
+        return _invalid_field_operation_non_answer("date value")
+    if field.data_type in {"decimal", "number"}:
+        if isinstance(value, datetime.date):
+            return _invalid_field_operation_non_answer("decimal value")
+        try:
+            return decimal.Decimal(str(value))
+        except decimal.InvalidOperation:
+            return _invalid_field_operation_non_answer("decimal value")
+    if field.data_type in {"string", "varchar"}:
+        if isinstance(value, datetime.date):
+            return value.isoformat()
+        return str(value)
+    return _invalid_field_operation_non_answer("field value")
 
 
 def _missing_required_field_non_answer(field_name: str) -> contracts.NonAnswer:
@@ -397,6 +554,26 @@ def _unknown_semantic_label_non_answer(field_name: str) -> contracts.NonAnswer:
     )
 
 
+def _unsupported_field_operation_non_answer() -> contracts.NonAnswer:
+    return contracts.NonAnswer(
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION,
+        reason="The Semantic Layer does not allow that operation for the field.",
+        unresolved_ambiguities=("semantic field operation",),
+        next_step="Use only operations listed for the Semantic Field.",
+    )
+
+
+def _unsupported_shape_non_answer(shape_name: str) -> contracts.NonAnswer:
+    return contracts.NonAnswer(
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_SHAPE,
+        reason="The Data Assistant cannot handle that Question Frame shape yet.",
+        unresolved_ambiguities=(shape_name,),
+        next_step="Ask for one grouping field or a scalar aggregate.",
+    )
+
+
 def _provider_failure_non_answer() -> contracts.NonAnswer:
     return contracts.NonAnswer(
         stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
@@ -417,35 +594,11 @@ def _invalid_provider_output_non_answer() -> contracts.NonAnswer:
     )
 
 
-def _normalize_time_range(
-    raw_time_range: object,
-) -> contracts.NonAnswer | contracts.TimeRange | None:
-    if raw_time_range is None:
-        return None
-    if not isinstance(raw_time_range, TimeRangeProposal):
-        return _invalid_time_range_non_answer()
-
-    time_range = contracts.TimeRange(
-        label=raw_time_range.label,
-        start_date=raw_time_range.start_date,
-        end_date=raw_time_range.end_date,
-    )
-    return _validate_time_range(time_range)
-
-
-def _validate_time_range(
-    time_range: contracts.TimeRange,
-) -> contracts.NonAnswer | contracts.TimeRange:
-    if time_range.start_date > time_range.end_date:
-        return _invalid_time_range_non_answer()
-    return time_range
-
-
-def _invalid_time_range_non_answer() -> contracts.NonAnswer:
+def _invalid_field_operation_non_answer(field_name: str) -> contracts.NonAnswer:
     return contracts.NonAnswer(
         stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
         reason="The Question Interpreter provider returned invalid output.",
-        unresolved_ambiguities=("time range",),
+        unresolved_ambiguities=(field_name,),
         next_step="Fix the provider contract before retrying.",
     )

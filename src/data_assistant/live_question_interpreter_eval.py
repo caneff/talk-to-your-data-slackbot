@@ -113,38 +113,9 @@ def compare_question_frame_meaning(
     )
     _append_scalar_mismatch(
         mismatches=mismatches,
-        field="dimension",
-        expected=expected.dimension,
-        actual=actual.dimension,
-    )
-    _append_scalar_mismatch(
-        mismatches=mismatches,
-        field="filters",
-        expected=expected.filters,
-        actual=actual.filters,
-    )
-    expected_time_range = expected.time_range
-    actual_time_range = actual.time_range
-    if expected_time_range is None or actual_time_range is None:
-        _append_scalar_mismatch(
-            mismatches=mismatches,
-            field="time_range",
-            expected=expected_time_range,
-            actual=actual_time_range,
-        )
-        return tuple(mismatches)
-
-    _append_scalar_mismatch(
-        mismatches=mismatches,
-        field="time_range.start_date",
-        expected=expected_time_range.start_date,
-        actual=actual_time_range.start_date,
-    )
-    _append_scalar_mismatch(
-        mismatches=mismatches,
-        field="time_range.end_date",
-        expected=expected_time_range.end_date,
-        actual=actual_time_range.end_date,
+        field="field_operations",
+        expected=expected.field_operations,
+        actual=actual.field_operations,
     )
     return tuple(mismatches)
 

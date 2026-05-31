@@ -16,7 +16,20 @@ metrics:
     label: customer count
     expression: count(customer_id)
     source_column: customer_id
-dimensions:
-  - dimension_id: customer_region
+fields:
+  - field_id: created_date
+    label: created date
+    source_column: created_date
+    data_type: date
+    operations:
+      - include_filter
+      - exclude_filter
+      - range_filter
+  - field_id: customer_region
     label: customer region
-    column: customer_region
+    source_column: customer_region
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter

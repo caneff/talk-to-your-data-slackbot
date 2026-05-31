@@ -44,11 +44,13 @@ def test_semantic_layer_context_exposes_business_labels_not_storage_details() ->
                         source_column="net_revenue",
                     ),
                 ),
-                dimensions=(
-                    schema.Dimension(
-                        dimension_id="customer_region",
+                fields=(
+                    schema.SemanticField(
+                        field_id="customer_region",
                         label="customer region",
-                        column="region_code",
+                        source_column="region_code",
+                        data_type="string",
+                        operations=(schema.FieldOperation.GROUP_BY,),
                     ),
                 ),
             ),
@@ -60,15 +62,15 @@ def test_semantic_layer_context_exposes_business_labels_not_storage_details() ->
     )
     dataset_context = _single_dataset_context(semantic_layer_context)
     metric_labels = typing.cast(list[str], semantic_layer_context["all_metric_labels"])
-    dimension_labels = typing.cast(
+    field_labels = typing.cast(
         list[str],
-        semantic_layer_context["all_dimension_labels"],
+        semantic_layer_context["all_field_labels"],
     )
     example_questions = typing.cast(list[str], dataset_context["example_questions"])
 
     assert dataset_context["name"] == "Commerce Revenue"
     assert "total revenue" in metric_labels
-    assert "customer region" in dimension_labels
+    assert "customer region" in field_labels
     assert "What was total revenue by customer region in January 2026?" in (
         example_questions
     )

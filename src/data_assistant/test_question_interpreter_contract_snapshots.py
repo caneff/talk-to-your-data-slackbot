@@ -66,26 +66,82 @@ CONTRACT_SNAPSHOT_CASES = (
             contracts.QuestionFrame(
                 intent="summarize",
                 metric="total revenue",
-                dimension="region",
-                time_range=contracts.TimeRange(
-                    label="January 2026",
-                    start_date=datetime.date(2026, 1, 1),
-                    end_date=datetime.date(2026, 1, 31),
+                field_operations=(
+                    contracts.SemanticFieldOperation(
+                        operation=contracts.FieldOperationKind.GROUP_BY,
+                        field="region",
+                    ),
+                    contracts.SemanticFieldOperation(
+                        operation=contracts.FieldOperationKind.RANGE_FILTER,
+                        field="order date",
+                        lower=datetime.date(2026, 1, 1),
+                        upper=datetime.date(2026, 1, 31),
+                    ),
                 ),
-                filters=(),
                 unresolved_ambiguities=(),
             )
         ),
     ),
     snapshot_case(
-        name="missing_time_range",
-        proposal=interpreter_support.question_frame_proposal(time_range=None),
-        expected=contracts.NonAnswer(
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-            reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
-            reason="The Data Question is missing required interpretation details.",
-            unresolved_ambiguities=("time range",),
-            next_step="Ask a clarification question before selecting data.",
+        name="scalar_aggregate_without_group_by",
+        proposal=interpreter_support.question_frame_proposal(
+            field_operations=(
+                question_interpreter.RangeFilterOperationProposal(
+                    operation="range_filter",
+                    field="order date",
+                    lower=datetime.date(2026, 1, 1),
+                    upper=datetime.date(2026, 1, 31),
+                ),
+            ),
+        ),
+        expected=contracts.Success(
+            contracts.QuestionFrame(
+                intent="summarize",
+                metric="total revenue",
+                field_operations=(
+                    contracts.SemanticFieldOperation(
+                        operation=contracts.FieldOperationKind.RANGE_FILTER,
+                        field="order date",
+                        lower=datetime.date(2026, 1, 1),
+                        upper=datetime.date(2026, 1, 31),
+                    ),
+                ),
+                unresolved_ambiguities=(),
+            )
+        ),
+    ),
+    snapshot_case(
+        name="exact_date_include_filter",
+        proposal=interpreter_support.question_frame_proposal(
+            field_operations=(
+                question_interpreter.GroupByOperationProposal(
+                    operation="group_by",
+                    field="region",
+                ),
+                question_interpreter.IncludeFilterOperationProposal(
+                    operation="include_filter",
+                    field="order date",
+                    values=("2026-01-15",),
+                ),
+            ),
+        ),
+        expected=contracts.Success(
+            contracts.QuestionFrame(
+                intent="summarize",
+                metric="total revenue",
+                field_operations=(
+                    contracts.SemanticFieldOperation(
+                        operation=contracts.FieldOperationKind.GROUP_BY,
+                        field="region",
+                    ),
+                    contracts.SemanticFieldOperation(
+                        operation=contracts.FieldOperationKind.INCLUDE_FILTER,
+                        field="order date",
+                        values=(datetime.date(2026, 1, 15),),
+                    ),
+                ),
+                unresolved_ambiguities=(),
+            )
         ),
     ),
     snapshot_case(
@@ -154,8 +210,15 @@ CONTRACT_SNAPSHOT_CASES = (
         ),
     ),
     snapshot_case(
-        name="unknown_dimension",
-        proposal=interpreter_support.question_frame_proposal(dimension="product"),
+        name="unknown_field",
+        proposal=interpreter_support.question_frame_proposal(
+            field_operations=(
+                question_interpreter.GroupByOperationProposal(
+                    operation="group_by",
+                    field="product",
+                ),
+            ),
+        ),
         expected=contracts.NonAnswer(
             stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
             reason_code=contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL,
@@ -163,34 +226,89 @@ CONTRACT_SNAPSHOT_CASES = (
                 "The Data Assistant could not match the requested Semantic Layer "
                 "labels."
             ),
-            unresolved_ambiguities=("dimension",),
+            unresolved_ambiguities=("field",),
             next_step="Use exact Semantic Layer metric and dimension labels.",
         ),
     ),
     snapshot_case(
-        name="missing_dimension",
-        proposal=interpreter_support.question_frame_proposal(dimension=""),
+        name="unsupported_operation",
+        proposal=interpreter_support.question_frame_proposal(
+            field_operations=(
+                question_interpreter.RangeFilterOperationProposal(
+                    operation="range_filter",
+                    field="region",
+                    lower="A",
+                    upper="Z",
+                ),
+            ),
+        ),
         expected=contracts.NonAnswer(
             stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-            reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
-            reason="The Data Question is missing required interpretation details.",
-            unresolved_ambiguities=("dimension",),
-            next_step="Ask a clarification question before selecting data.",
+            reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION,
+            reason="The Semantic Layer does not allow that operation for the field.",
+            unresolved_ambiguities=("semantic field operation",),
+            next_step="Use only operations listed for the Semantic Field.",
         ),
     ),
     snapshot_case(
-        name="unsupported_filters",
+        name="invalid_value_coercion",
         proposal=interpreter_support.question_frame_proposal(
-            filters=("region = 'North'",)
+            field_operations=(
+                question_interpreter.RangeFilterOperationProposal(
+                    operation="range_filter",
+                    field="order date",
+                    lower="not-a-date",
+                    upper=datetime.date(2026, 1, 31),
+                ),
+            ),
         ),
         expected=contracts.NonAnswer(
             stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-            reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_FILTER,
-            reason=(
-                "The Data Assistant does not support provider-proposed filters yet."
+            reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+            reason="The Question Interpreter provider returned invalid output.",
+            unresolved_ambiguities=("date value",),
+            next_step="Fix the provider contract before retrying.",
+        ),
+    ),
+    snapshot_case(
+        name="invalid_empty_filter_values",
+        proposal=interpreter_support.question_frame_proposal(
+            field_operations=(
+                question_interpreter.IncludeFilterOperationProposal(
+                    operation="include_filter",
+                    field="region",
+                    values=(),
+                ),
             ),
-            unresolved_ambiguities=("filters",),
-            next_step="Ask the Data Question without filters for now.",
+        ),
+        expected=contracts.NonAnswer(
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+            reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+            reason="The Question Interpreter provider returned invalid output.",
+            unresolved_ambiguities=("values filter",),
+            next_step="Fix the provider contract before retrying.",
+        ),
+    ),
+    snapshot_case(
+        name="multiple_group_by",
+        proposal=interpreter_support.question_frame_proposal(
+            field_operations=(
+                question_interpreter.GroupByOperationProposal(
+                    operation="group_by",
+                    field="region",
+                ),
+                question_interpreter.GroupByOperationProposal(
+                    operation="group_by",
+                    field="region",
+                ),
+            ),
+        ),
+        expected=contracts.NonAnswer(
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+            reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_SHAPE,
+            reason="The Data Assistant cannot handle that Question Frame shape yet.",
+            unresolved_ambiguities=("group_by",),
+            next_step="Ask for one grouping field or a scalar aggregate.",
         ),
     ),
     provider_snapshot_case(
@@ -212,23 +330,6 @@ CONTRACT_SNAPSHOT_CASES = (
             reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
             reason="The Question Interpreter provider returned invalid output.",
             unresolved_ambiguities=("provider output",),
-            next_step="Fix the provider contract before retrying.",
-        ),
-    ),
-    snapshot_case(
-        name="invalid_time_range_ordering",
-        proposal=interpreter_support.question_frame_proposal(
-            time_range=question_interpreter.TimeRangeProposal(
-                label="January 2026",
-                start_date=datetime.date(2026, 1, 31),
-                end_date=datetime.date(2026, 1, 1),
-            )
-        ),
-        expected=contracts.NonAnswer(
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-            reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
-            reason="The Question Interpreter provider returned invalid output.",
-            unresolved_ambiguities=("time range",),
             next_step="Fix the provider contract before retrying.",
         ),
     ),

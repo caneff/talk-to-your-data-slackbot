@@ -40,11 +40,20 @@ def _orders_table() -> schema.DatasetTable:
                 source_column="revenue",
             ),
         ),
-        dimensions=(
-            schema.Dimension(
-                dimension_id="region",
+        fields=(
+            schema.SemanticField(
+                field_id="region",
                 label="region",
-                column="region",
+                source_column="region",
+                data_type="string",
+                operations=(schema.FieldOperation.GROUP_BY,),
+            ),
+            schema.SemanticField(
+                field_id="order_date",
+                label="order date",
+                source_column="order_date",
+                data_type="date",
+                operations=(schema.FieldOperation.RANGE_FILTER,),
             ),
         ),
     )
@@ -58,13 +67,15 @@ def _prepared_revenue_by_region() -> contracts.PreparedData:
             dataset=dataset,
             table=table,
             metric=table.metrics[0],
-            dimension=table.dimensions[0],
-            time_range=contracts.TimeRange(
-                label="January 2026",
-                start_date=datetime.date(2026, 1, 1),
-                end_date=datetime.date(2026, 1, 31),
+            group_by_fields=(table.fields[0],),
+            filter_operations=(
+                contracts.ResolvedSemanticFieldOperation(
+                    operation=contracts.FieldOperationKind.RANGE_FILTER,
+                    field=table.fields[1],
+                    lower=datetime.date(2026, 1, 1),
+                    upper=datetime.date(2026, 1, 31),
+                ),
             ),
-            filters=(),
             output_shape="grouped_metric",
             result_limit=10,
         ),
@@ -87,13 +98,16 @@ def test_reasoning_layer_produces_answer_draft_from_prepared_data() -> None:
     answer_draft = reasoning_layer.draft_answer(prepared_data)
 
     assert answer_draft.summary == (
-        "Total revenue in January 2026 was $5,150.00, grouped across 5 regions."
+        "Total revenue in 2026-01-01 through 2026-01-31 was $5,150.00, "
+        "grouped across 5 regions."
     )
     assert answer_draft.key_data is prepared_data.data
     assert answer_draft.datasets_used == ("Commerce Revenue",)
     assert answer_draft.dataset_tables_used == ("orders",)
-    assert answer_draft.time_range == "January 2026"
-    assert answer_draft.filters == ()
+    assert answer_draft.time_range == "2026-01-01 through 2026-01-31"
+    assert answer_draft.filters == (
+        "order date >= 2026-01-01 and <= 2026-01-31",
+    )
     assert answer_draft.freshness == (
         "Commerce order data refreshed through 2026-01-31."
     )

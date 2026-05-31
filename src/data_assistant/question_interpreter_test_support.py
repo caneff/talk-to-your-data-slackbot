@@ -12,7 +12,7 @@ import data_assistant.semantic_layer.testing_support as semantic_layer_testing
 import data_assistant.workflow.contracts as contracts
 
 CANONICAL_DATA_QUESTION = "What was total revenue by region in January 2026?"
-_DEFAULT_TIME_RANGE = object()
+_DEFAULT_FIELD_OPERATIONS = object()
 
 
 def interpret_with_provider_proposal(
@@ -83,31 +83,32 @@ def question_frame_proposal(
     *,
     intent: str | None = "summarize",
     metric: str | None = "total revenue",
-    dimension: str | None = "region",
-    time_range: question_interpreter.TimeRangeProposal | None | object = (
-        _DEFAULT_TIME_RANGE
-    ),
-    filters: tuple[str, ...] = (),
+    field_operations: (
+        tuple[question_interpreter.FieldOperationProposal, ...] | object
+    ) = _DEFAULT_FIELD_OPERATIONS,
 ) -> question_interpreter.QuestionFrameProposal:
     """Build a valid proposal while allowing each promoted field to be varied."""
-    if time_range is _DEFAULT_TIME_RANGE:
-        active_time_range: question_interpreter.TimeRangeProposal | None = (
-            question_interpreter.TimeRangeProposal(
-                label="January 2026",
-                start_date=datetime.date(2026, 1, 1),
-                end_date=datetime.date(2026, 1, 31),
-            )
+    if field_operations is _DEFAULT_FIELD_OPERATIONS:
+        active_field_operations = (
+            question_interpreter.GroupByOperationProposal(
+                operation="group_by",
+                field="region",
+            ),
+            question_interpreter.RangeFilterOperationProposal(
+                operation="range_filter",
+                field="order date",
+                lower=datetime.date(2026, 1, 1),
+                upper=datetime.date(2026, 1, 31),
+            ),
         )
     else:
-        active_time_range = typing.cast(
-            question_interpreter.TimeRangeProposal | None,
-            time_range,
+        active_field_operations = typing.cast(
+            tuple[question_interpreter.FieldOperationProposal, ...],
+            field_operations,
         )
 
     return question_interpreter.QuestionFrameProposal(
         intent=intent,
         metric=metric,
-        dimension=dimension,
-        time_range=active_time_range,
-        filters=filters,
+        field_operations=active_field_operations,
     )

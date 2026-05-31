@@ -112,7 +112,7 @@ def test_data_assistant_short_circuits_question_ambiguity(
     assert len(captured_non_answers) == 1
     non_answer = captured_non_answers[0]
     assert non_answer.stage == contracts.NonAnswerStage.QUESTION_INTERPRETER
-    assert non_answer.unresolved_ambiguities == ("time range",)
+    assert non_answer.unresolved_ambiguities == ("metric",)
 
 
 def test_data_assistant_denies_dataset_access_before_request_or_preparation(
@@ -210,13 +210,18 @@ def test_data_assistant_uses_required_question_interpreter_provider(
             return question_interpreter.QuestionFrameProposal(
                 intent="summarize",
                 metric="total revenue",
-                dimension="region",
-                time_range=question_interpreter.TimeRangeProposal(
-                    label="January 2026",
-                    start_date=datetime.date(2026, 1, 1),
-                    end_date=datetime.date(2026, 1, 31),
+                field_operations=(
+                    question_interpreter.GroupByOperationProposal(
+                        operation="group_by",
+                        field="region",
+                    ),
+                    question_interpreter.RangeFilterOperationProposal(
+                        operation="range_filter",
+                        field="order date",
+                        lower=datetime.date(2026, 1, 1),
+                        upper=datetime.date(2026, 1, 31),
+                    ),
                 ),
-                filters=(),
             )
 
     with connect_orders((("2026-01-03", "North", "1200.00"),)) as connection:
@@ -231,12 +236,17 @@ def test_data_assistant_uses_required_question_interpreter_provider(
     assert run.question_frame == contracts.QuestionFrame(
         intent="summarize",
         metric="total revenue",
-        dimension="region",
-        time_range=contracts.TimeRange(
-            label="January 2026",
-            start_date=datetime.date(2026, 1, 1),
-            end_date=datetime.date(2026, 1, 31),
+        field_operations=(
+            contracts.SemanticFieldOperation(
+                operation=contracts.FieldOperationKind.GROUP_BY,
+                field="region",
+            ),
+            contracts.SemanticFieldOperation(
+                operation=contracts.FieldOperationKind.RANGE_FILTER,
+                field="order date",
+                lower=datetime.date(2026, 1, 1),
+                upper=datetime.date(2026, 1, 31),
+            ),
         ),
-        filters=(),
         unresolved_ambiguities=(),
     )

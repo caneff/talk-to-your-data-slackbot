@@ -1,5 +1,3 @@
-import datetime
-
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_matcher as semantic_matcher
 import data_assistant.semantic_router as semantic_router
@@ -31,7 +29,7 @@ def test_dataset_selection_chooses_one_curated_dataset_with_rationale(
 ) -> None:
     assert len(dataset_selection.selected_datasets) == 1
     assert dataset_selection.selected_datasets[0].dataset_id == "commerce"
-    assert "total revenue metric and region dimension" in (
+    assert "total revenue metric and region fields" in (
         dataset_selection.match_rationale
     )
 
@@ -42,13 +40,12 @@ def test_semantic_router_returns_non_answer_when_no_dataset_matches(
     question_frame = contracts.QuestionFrame(
         intent="summarize",
         metric="gross bookings",
-        dimension="region",
-        time_range=contracts.TimeRange(
-            label="January 2026",
-            start_date=datetime.date(2026, 1, 1),
-            end_date=datetime.date(2026, 1, 31),
+        field_operations=(
+            contracts.SemanticFieldOperation(
+                operation=contracts.FieldOperationKind.GROUP_BY,
+                field="region",
+            ),
         ),
-        filters=(),
         unresolved_ambiguities=(),
     )
     semantic_matches = semantic_matcher.find_semantic_matches(
