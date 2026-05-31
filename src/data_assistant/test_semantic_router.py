@@ -80,6 +80,7 @@ def test_semantic_router_returns_ambiguous_table_for_two_tables_in_one_dataset()
         label="total revenue",
         expression="sum(revenue)",
         source_column="revenue",
+        kind=schema.MetricKind.MONEY,
     )
     field = schema.SemanticField(
         field_id="region",
@@ -144,6 +145,7 @@ def test_resolve_semantic_match_returns_no_matching_table_from_router() -> None:
         label="ticket count",
         expression="count(*)",
         source_column="ticket_id",
+        kind=schema.MetricKind.COUNT,
     )
     field = schema.SemanticField(
         field_id="region",

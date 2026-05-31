@@ -74,6 +74,7 @@ def test_prepared_data_uses_metric_source_column_for_missing_values(
             label="total revenue",
             expression="sum(revenue * 1)",
             source_column="revenue",
+            kind=schema.MetricKind.MONEY,
         ),
     )
     order_rows = (

@@ -15,6 +15,7 @@ _DEFAULT_METRICS = (
         label="total revenue",
         expression="sum(revenue)",
         source_column="revenue",
+        kind=schema.MetricKind.MONEY,
     ),
 )
 _DEFAULT_FIELDS = (

@@ -3,6 +3,7 @@ import pytest
 
 import data_assistant.non_answer_catalog as non_answer_catalog
 import data_assistant.response_composer as response_composer
+import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
 
 
@@ -35,6 +36,7 @@ def test_response_composer_returns_plain_text_with_trust_summary() -> None:
             ),
             datasets_used=("Commerce Revenue",),
             dataset_tables_used=("orders",),
+            metric_kind=schema.MetricKind.MONEY,
             time_range="January 2026",
             filters=(),
             freshness="Commerce order data refreshed through 2026-01-31.",
@@ -59,6 +61,33 @@ def test_response_composer_returns_plain_text_with_trust_summary() -> None:
         caveats=("1 row excluded because revenue was missing.",),
         limitations=(),
     )
+
+
+def test_response_composer_formats_count_rows_from_metric_kind() -> None:
+    response = response_composer.compose_final_response(
+        contracts.AnswerDraft(
+            summary=(
+                "Customer count in January 2026 was 2,050, grouped across 2 regions."
+            ),
+            key_data=pd.DataFrame(
+                {
+                    "dimension_value": ("North", "South"),
+                    "metric_value": (1200, 850),
+                }
+            ),
+            datasets_used=("Commerce Customers",),
+            dataset_tables_used=("customers",),
+            metric_kind=schema.MetricKind.COUNT,
+            time_range="January 2026",
+            filters=(),
+            freshness="Commerce customer data refreshed through 2026-01-31.",
+            caveats=(),
+        )
+    )
+
+    assert "- North: 1,200" in response.text
+    assert "- South: 850" in response.text
+    assert "$1,200.00" not in response.text
 
 
 def test_response_composer_renders_through_injected_wording_provider() -> None:

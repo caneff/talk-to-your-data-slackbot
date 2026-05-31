@@ -46,6 +46,13 @@ class TableColumn(_SemanticLayerModel):
     semantic_role: str | None = None
 
 
+class MetricKind(enum.StrEnum):
+    """Presentation kind for metric values."""
+
+    MONEY = "money"
+    COUNT = "count"
+
+
 class Metric(_SemanticLayerModel):
     """Business metric defined on a Dataset Table."""
 
@@ -53,6 +60,7 @@ class Metric(_SemanticLayerModel):
     label: str
     expression: str
     source_column: str
+    kind: MetricKind
 
 
 class FieldOperation(enum.StrEnum):

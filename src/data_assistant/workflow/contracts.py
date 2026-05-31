@@ -246,6 +246,7 @@ class AnswerDraft:
     key_data: pd.DataFrame
     datasets_used: tuple[str, ...]
     dataset_tables_used: tuple[str, ...]
+    metric_kind: schema.MetricKind
     time_range: str
     filters: tuple[str, ...]
     freshness: str

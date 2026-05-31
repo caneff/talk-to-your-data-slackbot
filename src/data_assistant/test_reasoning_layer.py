@@ -37,6 +37,7 @@ def _orders_table() -> schema.DatasetTable:
                 label="total revenue",
                 expression="sum(revenue)",
                 source_column="revenue",
+                kind=schema.MetricKind.MONEY,
             ),
         ),
         fields=(
@@ -103,6 +104,7 @@ def test_reasoning_layer_produces_answer_draft_from_prepared_data() -> None:
     assert answer_draft.key_data is prepared_data.data
     assert answer_draft.datasets_used == ("Commerce Revenue",)
     assert answer_draft.dataset_tables_used == ("orders",)
+    assert answer_draft.metric_kind == schema.MetricKind.MONEY
     assert answer_draft.time_range == "2026-01-01 through 2026-01-31"
     assert answer_draft.filters == ("order date >= 2026-01-01 and <= 2026-01-31",)
     assert answer_draft.freshness == (
@@ -112,3 +114,72 @@ def test_reasoning_layer_produces_answer_draft_from_prepared_data() -> None:
         "1 row excluded because revenue was missing.",
         "1 row grouped under Unknown because region was missing.",
     )
+
+
+def test_reasoning_layer_formats_count_summary_and_carries_metric_kind() -> None:
+    dataset = schema.CuratedDataset(
+        dataset_id="commerce",
+        name="Commerce Customers",
+        tables=("customers",),
+        information_types=("customers",),
+        freshness=schema.Freshness(
+            as_of=datetime.date(2026, 1, 31),
+            description="Commerce customer data refreshed through 2026-01-31.",
+        ),
+        example_questions=(),
+    )
+    table = schema.DatasetTable(
+        table_id="customers",
+        dataset_id="commerce",
+        description="Customers by region.",
+        columns=(
+            schema.TableColumn(column_id="created_date", data_type="date"),
+            schema.TableColumn(column_id="customer_region", data_type="varchar"),
+            schema.TableColumn(column_id="customer_id", data_type="string"),
+        ),
+        metrics=(
+            schema.Metric(
+                metric_id="customer_count",
+                label="customer count",
+                expression="count(customer_id)",
+                source_column="customer_id",
+                kind=schema.MetricKind.COUNT,
+            ),
+        ),
+        fields=(
+            schema.SemanticField(
+                field_id="created_date",
+                label="created date",
+                source_column="created_date",
+                data_type=schema.DataType.DATE,
+                operations=(schema.FieldOperation.RANGE_FILTER,),
+            ),
+        ),
+    )
+    prepared_data = contracts.PreparedData(
+        request=contracts.DataRequest(
+            dataset=dataset,
+            table=table,
+            metric=table.metrics[0],
+            group_by_fields=(),
+            filter_operations=(
+                contracts.ResolvedSemanticFieldOperation(
+                    operation=schema.FieldOperation.RANGE_FILTER,
+                    field=table.fields[0],
+                    lower=datetime.date(2026, 1, 1),
+                    upper=datetime.date(2026, 1, 31),
+                ),
+            ),
+            output_shape="scalar_metric",
+            result_limit=1,
+        ),
+        data=pd.DataFrame({"metric_value": (1234,)}),
+        quality_notes=(),
+    )
+
+    answer_draft = reasoning_layer.draft_answer(prepared_data)
+
+    assert answer_draft.summary == (
+        "Customer count in 2026-01-01 through 2026-01-31 was 1,234."
+    )
+    assert answer_draft.metric_kind == schema.MetricKind.COUNT
