@@ -154,16 +154,28 @@ def dataset_selection(
 
 
 @pytest.fixture
+def available_data_resolution(
+    question_frame: contracts.QuestionFrame,
+    active_semantic_layer: schema.SemanticLayer,
+) -> contracts.AvailableDataResolution:
+    """Build canonical Available Data through the semantic router."""
+    return unwrap_stage_result(
+        semantic_router.resolve_available_data(
+            question_frame,
+            active_semantic_layer,
+        )
+    )
+
+
+@pytest.fixture
 def data_request(
     question_frame: contracts.QuestionFrame,
-    dataset_selection: contracts.DatasetSelection,
-    semantic_matches: tuple[contracts.SemanticMatch, ...],
+    available_data_resolution: contracts.AvailableDataResolution,
 ) -> contracts.DataRequest:
     """Build the canonical Data Request through the requester boundary."""
     return unwrap_stage_result(
         data_requester.create_data_request(
             question_frame,
-            dataset_selection,
-            semantic_matches,
+            available_data_resolution.resolved_match,
         ),
     )

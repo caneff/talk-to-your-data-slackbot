@@ -6,6 +6,7 @@ import data_assistant.data_preparation as data_preparation
 import data_assistant.data_requester as data_requester
 import data_assistant.local_orders_fixture as local_orders_fixture
 import data_assistant.question_interpreter as question_interpreter
+import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
 
@@ -62,11 +63,7 @@ def test_data_assistant_runs_end_to_end(
 
     assert isinstance(run, contracts.DataAssistantRun)
     assert run.question_frame.unresolved_ambiguities == ()
-    assert len(run.available_data_resolution.semantic_matches) == 1
-    assert (
-        run.available_data_resolution.semantic_matches[0].table.table_id
-        == "orders"
-    )
+    assert run.available_data_resolution.resolved_match.table.table_id == "orders"
     assert (
         len(run.available_data_resolution.dataset_selection.selected_datasets)
         == 1
@@ -125,10 +122,9 @@ def test_data_assistant_denies_dataset_access_before_request_or_preparation(
 
     def fail_create_data_request(
         question_frame: contracts.QuestionFrame,
-        dataset_selection: contracts.DatasetSelection,
-        semantic_matches: tuple[contracts.SemanticMatch, ...],
+        resolved_match: contracts.SemanticMatch,
     ) -> contracts.StageResult[contracts.DataRequest]:
-        del question_frame, dataset_selection, semantic_matches
+        del question_frame, resolved_match
         raise AssertionError("create_data_request should not be called")
 
     def fail_prepare_data(
@@ -156,6 +152,43 @@ def test_data_assistant_denies_dataset_access_before_request_or_preparation(
     assert non_answer.stage == contracts.NonAnswerStage.ACCESS_CONTROLLER
     assert non_answer.reason_code == contracts.NonAnswerReasonCode.ACCESS_DENIED
     assert non_answer.datasets == ("commerce",)
+
+
+def test_data_assistant_returns_ambiguous_table_before_access_denial(
+    monkeypatch: pytest.MonkeyPatch,
+    connect_orders: local_orders_fixture.OrdersConnector,
+) -> None:
+    sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
+    semantic_layer = _ambiguous_table_semantic_layer(
+        allowed_identity_ids=("finance-team",),
+    )
+    provider = _static_provider(
+        question_interpreter.QuestionFrameProposal(
+            intent="summarize",
+            metric="total revenue",
+            field_operations=(
+                question_interpreter.GroupByOperationProposal(
+                    operation="group_by",
+                    field="region",
+                ),
+            ),
+        )
+    )
+
+    with connect_orders((("2026-01-03", "North", "1200.00"),)) as connection:
+        result = workflow_runner.run_data_assistant(
+            connection,
+            "What was total revenue by region?",
+            question_interpreter_provider=provider,
+            internal_identity=contracts.InternalIdentity(identity_id="employee_999"),
+            semantic_layer=semantic_layer,
+        )
+
+    assert result is sentinel_response
+    assert len(captured_non_answers) == 1
+    non_answer = captured_non_answers[0]
+    assert non_answer.stage == contracts.NonAnswerStage.SEMANTIC_ROUTER
+    assert non_answer.reason_code == contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE
 
 
 def test_data_assistant_short_circuits_unsupported_question_before_preparing_data(
@@ -249,4 +282,80 @@ def test_data_assistant_uses_required_question_interpreter_provider(
             ),
         ),
         unresolved_ambiguities=(),
+    )
+
+
+def _ambiguous_table_semantic_layer(
+    *,
+    allowed_identity_ids: tuple[str, ...],
+) -> schema.SemanticLayer:
+    freshness = schema.Freshness(
+        as_of=datetime.date(2026, 1, 31),
+        description="Clean fixture rows for January 2026.",
+    )
+    dataset = schema.CuratedDataset(
+        dataset_id="commerce",
+        name="Commerce Revenue",
+        tables=("orders", "order_rollups"),
+        information_types=("revenue",),
+        freshness=freshness,
+        example_questions=(),
+        dataset_access=schema.DatasetAccess(
+            allowed_identity_ids=allowed_identity_ids,
+        ),
+    )
+    metric = schema.Metric(
+        metric_id="total_revenue",
+        label="total revenue",
+        expression="sum(revenue)",
+        source_column="revenue",
+    )
+    field = schema.SemanticField(
+        field_id="region",
+        label="region",
+        source_column="region",
+        data_type=schema.DataType.STRING,
+        operations=(schema.FieldOperation.GROUP_BY,),
+    )
+    return schema.SemanticLayer(
+        datasets=(dataset,),
+        tables=(
+            _table("orders", metric, field),
+            _table("order_rollups", metric, field),
+        ),
+    )
+
+
+def _static_provider(
+    proposal: question_interpreter.QuestionFrameProposal,
+) -> question_interpreter.QuestionInterpreterProvider:
+    class StaticProvider:
+        def propose_question_frame(
+            self,
+            *,
+            question: str,
+            semantic_layer_context: dict[str, object],
+        ) -> question_interpreter.QuestionFrameProposal:
+            del question, semantic_layer_context
+            return proposal
+
+    return StaticProvider()
+
+
+def _table(
+    table_id: str,
+    metric: schema.Metric,
+    field: schema.SemanticField,
+) -> schema.DatasetTable:
+    return schema.DatasetTable(
+        table_id=table_id,
+        dataset_id="commerce",
+        description="Test table.",
+        columns=(
+            schema.TableColumn(column_id="order_date", data_type="date"),
+            schema.TableColumn(column_id="region", data_type="string"),
+            schema.TableColumn(column_id="revenue", data_type="decimal"),
+        ),
+        metrics=(metric,),
+        fields=(field,),
     )

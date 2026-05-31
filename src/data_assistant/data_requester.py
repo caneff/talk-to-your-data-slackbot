@@ -11,49 +11,23 @@ DEFAULT_RESULT_LIMIT = 10
 
 def create_data_request(
     question_frame: contracts.QuestionFrame,
-    dataset_selection: contracts.DatasetSelection,
-    semantic_matches: tuple[contracts.SemanticMatch, ...],
+    resolved_match: contracts.SemanticMatch,
 ) -> contracts.StageResult[contracts.DataRequest]:
-    """Create the Data Request from one selected Semantic Layer match."""
-    if len(dataset_selection.selected_datasets) != 1:
-        return non_answer_catalog.non_answer(
-            contracts.NonAnswerReasonCode.AMBIGUOUS_DATASET,
-            stage=contracts.NonAnswerStage.DATA_REQUESTER,
-        )
-
-    dataset = dataset_selection.selected_datasets[0]
-    table_options = [
-        match
-        for match in semantic_matches
-        if match.dataset.dataset_id == dataset.dataset_id
-    ]
-
-    if not table_options:
-        return non_answer_catalog.non_answer(
-            contracts.NonAnswerReasonCode.NO_MATCHING_TABLE,
-            stage=contracts.NonAnswerStage.DATA_REQUESTER,
-        )
-    if len(table_options) > 1:
-        return non_answer_catalog.non_answer(
-            contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE,
-            stage=contracts.NonAnswerStage.DATA_REQUESTER,
-        )
-
-    match = table_options[0]
+    """Create the Data Request from one canonical Semantic Layer match."""
     resolved_filters = _resolve_filter_operations(
         question_frame.field_operations,
-        match.table,
+        resolved_match.table,
     )
     if isinstance(resolved_filters, contracts.NonAnswer):
         return resolved_filters
     return contracts.Success(
         contracts.DataRequest(
-            dataset=match.dataset,
-            table=match.table,
-            metric=match.metric,
-            group_by_fields=match.group_by_fields,
+            dataset=resolved_match.dataset,
+            table=resolved_match.table,
+            metric=resolved_match.metric,
+            group_by_fields=resolved_match.group_by_fields,
             filter_operations=resolved_filters,
-            output_shape=_output_shape(match),
+            output_shape=_output_shape(resolved_match),
             result_limit=DEFAULT_RESULT_LIMIT,
         ),
     )
@@ -72,7 +46,7 @@ def _resolve_filter_operations(
         if field is None:
             return non_answer_catalog.unknown_semantic_label_non_answer(
                 "field",
-                stage=contracts.NonAnswerStage.DATA_REQUESTER,
+                stage=contracts.NonAnswerStage.SEMANTIC_ROUTER,
             )
         resolved.append(
             contracts.ResolvedSemanticFieldOperation(

@@ -1,3 +1,5 @@
+import datetime
+
 import data_assistant.non_answer_catalog as non_answer_catalog
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_matcher as semantic_matcher
@@ -16,8 +18,7 @@ def test_semantic_router_resolves_available_data(
 
     assert not isinstance(result, contracts.NonAnswer)
     resolution = result.value
-    assert len(resolution.semantic_matches) == 1
-    assert resolution.semantic_matches[0].table.table_id == "orders"
+    assert resolution.resolved_match.table.table_id == "orders"
     assert len(resolution.dataset_selection.selected_datasets) == 1
     assert (
         resolution.dataset_selection.selected_datasets[0].dataset_id
@@ -59,4 +60,80 @@ def test_semantic_router_returns_non_answer_when_no_dataset_matches(
     assert result == non_answer_catalog.non_answer(
         contracts.NonAnswerReasonCode.NO_MATCHING_DATASET,
         stage=contracts.NonAnswerStage.SEMANTIC_ROUTER,
+    )
+
+
+def test_semantic_router_returns_ambiguous_table_for_two_tables_in_one_dataset(
+) -> None:
+    freshness = schema.Freshness(
+        as_of=datetime.date(2026, 1, 31),
+        description="Clean fixture rows for January 2026.",
+    )
+    dataset = schema.CuratedDataset(
+        dataset_id="commerce",
+        name="Commerce Revenue",
+        tables=("orders", "order_rollups"),
+        information_types=("revenue",),
+        freshness=freshness,
+        example_questions=(),
+    )
+    metric = schema.Metric(
+        metric_id="total_revenue",
+        label="total revenue",
+        expression="sum(revenue)",
+        source_column="revenue",
+    )
+    field = schema.SemanticField(
+        field_id="region",
+        label="region",
+        source_column="region",
+        data_type=schema.DataType.STRING,
+        operations=(schema.FieldOperation.GROUP_BY,),
+    )
+    semantic_layer = schema.SemanticLayer(
+        datasets=(dataset,),
+        tables=(
+            _table("orders", metric, field),
+            _table("order_rollups", metric, field),
+        ),
+    )
+    question_frame = contracts.QuestionFrame(
+        intent="summarize",
+        metric="total revenue",
+        field_operations=(
+            contracts.SemanticFieldOperation(
+                operation=contracts.FieldOperationKind.GROUP_BY,
+                field="region",
+            ),
+        ),
+        unresolved_ambiguities=(),
+    )
+
+    result = semantic_router.resolve_available_data(
+        question_frame,
+        semantic_layer,
+    )
+
+    assert result == non_answer_catalog.non_answer(
+        contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE,
+        stage=contracts.NonAnswerStage.SEMANTIC_ROUTER,
+    )
+
+
+def _table(
+    table_id: str,
+    metric: schema.Metric,
+    field: schema.SemanticField,
+) -> schema.DatasetTable:
+    return schema.DatasetTable(
+        table_id=table_id,
+        dataset_id="commerce",
+        description="Test table.",
+        columns=(
+            schema.TableColumn(column_id="order_date", data_type="date"),
+            schema.TableColumn(column_id="region", data_type="string"),
+            schema.TableColumn(column_id="revenue", data_type="decimal"),
+        ),
+        metrics=(metric,),
+        fields=(field,),
     )

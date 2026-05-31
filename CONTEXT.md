@@ -115,9 +115,10 @@ a **Non-Answer Response**.
 _Avoid_: Chat, back-and-forth, retry
 
 **Semantic Router**:
-The part of the **Data Assistant** that uses the **Semantic Layer** to select
-candidate **Curated Datasets** for a **Data Question**.
-_Avoid_: Dataset picker, table router, source selector
+The part of the **Data Assistant** that uses the **Semantic Layer** to resolve a
+**Data Question** to one canonical **Semantic Match**, deciding dataset
+cardinality first and table cardinality within the chosen **Curated Dataset**.
+_Avoid_: Dataset picker, source selector
 
 **Dataset Selection**:
 The **Semantic Router**'s chosen **Curated Datasets** for a **Data Question**,

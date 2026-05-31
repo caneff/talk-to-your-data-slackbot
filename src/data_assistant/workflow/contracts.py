@@ -121,7 +121,6 @@ class NonAnswerStage(enum.StrEnum):
     """Pipeline stage that returned a Non-Answer."""
 
     ACCESS_CONTROLLER = "access_controller"
-    DATA_REQUESTER = "data_requester"
     QUESTION_INTERPRETER = "question_interpreter"
     SEMANTIC_ROUTER = "semantic_router"
 
@@ -206,9 +205,9 @@ class SemanticMatch:
 
 @dataclasses.dataclass(frozen=True)
 class AvailableDataResolution:
-    """Trace of resolving Available Data for a Question Frame."""
+    """Trace of resolving Available Data to one canonical Semantic Match."""
 
-    semantic_matches: tuple[SemanticMatch, ...]
+    resolved_match: SemanticMatch
     dataset_selection: DatasetSelection
 
 
