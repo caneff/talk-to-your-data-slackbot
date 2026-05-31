@@ -24,6 +24,9 @@ class FieldOperationKind(enum.StrEnum):
     RANGE_FILTER = "range_filter"
 
 
+# Filter values are validated and typed at the Question Interpreter trust
+# boundary (see docs/adr/0008); downstream stages consume typed values and
+# never re-parse strings.
 FieldValue: typing.TypeAlias = datetime.date | decimal.Decimal | str
 
 
