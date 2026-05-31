@@ -15,9 +15,9 @@ import typing
 import dotenv
 
 import data_assistant.question_interpreter as question_interpreter
-import data_assistant.question_interpreter.test_support as test_support
+import data_assistant.question_interpreter.question_frame_cases as question_frame_cases
+import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.semantic_layer.schema as schema
-import data_assistant.semantic_layer.testing_support as semantic_layer_testing
 
 ProviderResult: typing.TypeAlias = (
     question_interpreter.QuestionFrameProposal | question_interpreter.ProviderFailure
@@ -72,22 +72,14 @@ class LiveEvalReport:
         return len(self.failures)
 
 
-DEFAULT_CASES: tuple[LiveEvalCase, ...] = (
+DEFAULT_CASES: tuple[LiveEvalCase, ...] = tuple(
     LiveEvalCase(
-        name="canonical_question",
-        question="What was total revenue by region in January 2026?",
-        expected=test_support.question_frame_proposal(),
-    ),
-    LiveEvalCase(
-        name="show_total_revenue_by_region",
-        question="Show total revenue by region in January 2026.",
-        expected=test_support.question_frame_proposal(),
-    ),
-    LiveEvalCase(
-        name="summarize_total_revenue_by_region",
-        question="Summarize total revenue by region for January 2026.",
-        expected=test_support.question_frame_proposal(),
-    ),
+        name=case.name,
+        question=case.question,
+        expected=case.expected,
+        enabled=case.enabled,
+    )
+    for case in question_frame_cases.SHARED_QUESTION_FRAME_CASES
 )
 
 
@@ -253,7 +245,7 @@ def main(
 
     report = run_live_question_interpreter_eval(
         provider=provider,
-        semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
+        semantic_layer=semantic_layer_loader.load_semantic_layer(),
     )
     write_live_eval_report(stdout=stdout, report=report, verbose=verbose)
     if report.failed:

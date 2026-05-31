@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 
 import data_assistant.demo as demo
+import data_assistant.question_interpreter.question_frame_cases as question_frame_cases
 
 
 def test_run_demo_returns_two_acknowledged_threaded_scenarios() -> None:
@@ -52,3 +53,20 @@ def test_main_prints_both_slack_like_demo_scenarios() -> None:
     assert "threaded Final Response:" in rendered
     assert "Slack-like Non-Answer request:" in rendered
     assert "threaded Non-Answer Response:" in rendered
+
+
+def test_demo_provider_replays_shared_question_frame_cases() -> None:
+    provider = demo.build_demo_question_interpreter_provider()
+
+    proposals_by_question = {
+        case.question: provider.propose_question_frame(
+            question=case.question,
+            semantic_layer_context={},
+        )
+        for case in question_frame_cases.SHARED_QUESTION_FRAME_CASES
+    }
+
+    assert proposals_by_question == {
+        case.question: case.expected
+        for case in question_frame_cases.SHARED_QUESTION_FRAME_CASES
+    }

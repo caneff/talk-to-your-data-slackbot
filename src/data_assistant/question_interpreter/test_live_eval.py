@@ -7,7 +7,9 @@ import pytest
 
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.question_interpreter.live_eval as live_eval
+import data_assistant.question_interpreter.question_frame_cases as question_frame_cases
 import data_assistant.question_interpreter.test_support as test_support
+import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_layer.testing_support as semantic_layer_testing
 
@@ -297,3 +299,85 @@ def test_main_passes_verbose_flag_to_report_writer(
 
     assert exit_code == 0
     assert captured_verbose == [True]
+
+
+def test_default_live_eval_cases_come_from_shared_question_frame_cases() -> None:
+    assert (
+        tuple(
+            live_eval.LiveEvalCase(
+                name=case.name,
+                question=case.question,
+                expected=case.expected,
+                enabled=case.enabled,
+            )
+            for case in question_frame_cases.SHARED_QUESTION_FRAME_CASES
+        )
+        == live_eval.DEFAULT_CASES
+    )
+
+
+def test_main_loads_real_semantic_layer_for_live_eval(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    loaded_semantic_layer = semantic_layer_testing.semantic_layer_with_table()
+    captured_semantic_layers: list[schema.SemanticLayer] = []
+
+    class FakeProvider:
+        def propose_question_frame(
+            self,
+            *,
+            question: str,
+            semantic_layer_context: dict[str, object],
+        ) -> live_eval.ProviderResult:
+            del question, semantic_layer_context
+            raise AssertionError("live eval runner is stubbed")
+
+    def fake_build_openai_provider(
+        environ: collections.abc.Mapping[str, str],
+    ) -> question_interpreter.QuestionInterpreterProvider:
+        assert environ["OPENAI_API_KEY"] == "dotenv-key"
+        return FakeProvider()
+
+    def fake_load_semantic_layer() -> schema.SemanticLayer:
+        return loaded_semantic_layer
+
+    def fake_run_live_eval(
+        *,
+        provider: question_interpreter.QuestionInterpreterProvider,
+        semantic_layer: schema.SemanticLayer,
+        cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
+            live_eval.DEFAULT_CASES
+        ),
+    ) -> live_eval.LiveEvalReport:
+        del provider, cases
+        captured_semantic_layers.append(semantic_layer)
+        return live_eval.LiveEvalReport(total=0, passes=(), failures=())
+
+    monkeypatch.setattr(
+        live_eval.question_interpreter,
+        "build_openai_question_interpreter_provider",
+        fake_build_openai_provider,
+    )
+    monkeypatch.setattr(
+        semantic_layer_loader,
+        "load_semantic_layer",
+        fake_load_semantic_layer,
+    )
+    monkeypatch.setattr(
+        live_eval,
+        "run_live_question_interpreter_eval",
+        fake_run_live_eval,
+    )
+
+    exit_code = live_eval.main(
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+        env_file=env_file,
+    )
+
+    assert exit_code == 0
+    assert captured_semantic_layers == [loaded_semantic_layer]
