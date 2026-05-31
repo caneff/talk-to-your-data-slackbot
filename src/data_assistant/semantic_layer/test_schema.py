@@ -1,3 +1,5 @@
+import pytest
+
 import data_assistant.semantic_layer.schema as schema
 
 
@@ -13,3 +15,15 @@ def test_data_type_drops_collapsed_synonyms() -> None:
     member_names = {member.name for member in schema.DataType}
     assert "NUMBER" not in member_names
     assert "VARCHAR" not in member_names
+
+
+def test_metric_requires_kind() -> None:
+    with pytest.raises(Exception, match="kind"):
+        schema.Metric.model_validate(
+            {
+                "metric_id": "total_revenue",
+                "label": "total revenue",
+                "expression": "sum(revenue)",
+                "source_column": "revenue",
+            }
+        )

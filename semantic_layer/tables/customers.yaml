@@ -15,6 +15,7 @@ metrics:
     label: customer count
     expression: count(customer_id)
     source_column: customer_id
+    kind: count
 fields:
   - field_id: created_date
     label: created date

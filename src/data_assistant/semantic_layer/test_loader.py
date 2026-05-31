@@ -27,6 +27,7 @@ def test_semantic_layer_loads_dataset_table_relationship() -> None:
     assert metrics_by_id["customer_count"].label == "customer count"
     assert metrics_by_id["customer_count"].expression == "count(customer_id)"
     assert metrics_by_id["customer_count"].source_column == "customer_id"
+    assert metrics_by_id["customer_count"].kind == schema.MetricKind.COUNT
     assert fields_by_id["customer_region"].label == "customer region"
     assert fields_by_id["customer_region"].source_column == "customer_region"
     assert schema.FieldOperation.GROUP_BY in fields_by_id["customer_region"].operations
@@ -34,6 +35,7 @@ def test_semantic_layer_loads_dataset_table_relationship() -> None:
     orders = semantic_layer_loader.find_table("orders", loaded_semantic_layer)
     orders_metrics_by_id = {metric.metric_id: metric for metric in orders.metrics}
     assert orders_metrics_by_id["total_revenue"].source_column == "revenue"
+    assert orders_metrics_by_id["total_revenue"].kind == schema.MetricKind.MONEY
 
 
 def test_dataset_table_rejects_metric_source_column_outside_columns() -> None:
@@ -53,6 +55,7 @@ def test_dataset_table_rejects_metric_source_column_outside_columns() -> None:
                     label="total revenue",
                     expression="sum(revenue)",
                     source_column="missing_revenue",
+                    kind=schema.MetricKind.MONEY,
                 ),
             ),
             fields=(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 
+import data_assistant.metric_formatter as metric_formatter
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
 
@@ -18,7 +19,10 @@ def draft_answer(
     summary_values = {
         "metric": prepared_data.request.metric.label.capitalize(),
         "time_range": time_range,
-        "metric_value": _format_money(float(prepared_data.data["metric_value"].sum())),
+        "metric_value": metric_formatter.format_metric_value(
+            float(prepared_data.data["metric_value"].sum()),
+            prepared_data.request.metric.kind,
+        ),
         "dimension_count": len(prepared_data.data),
         "dimension": _pluralize(group_by_fields[0].label) if group_by_fields else "",
     }
@@ -42,15 +46,12 @@ def draft_answer(
         key_data=prepared_data.data,
         datasets_used=(dataset.name,),
         dataset_tables_used=(prepared_data.request.table.table_id,),
+        metric_kind=prepared_data.request.metric.kind,
         time_range=time_range,
         filters=prepared_data.request.filter_labels,
         freshness=dataset.freshness.description,
         caveats=prepared_data.quality_notes,
     )
-
-
-def _format_money(value: float) -> str:
-    return f"${value:,.2f}"
 
 
 def _pluralize(label: str) -> str:

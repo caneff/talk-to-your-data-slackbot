@@ -41,6 +41,7 @@ def test_semantic_layer_context_exposes_business_labels_not_storage_details() ->
                         label="total revenue",
                         expression="sum(net_revenue)",
                         source_column="net_revenue",
+                        kind=schema.MetricKind.MONEY,
                     ),
                 ),
                 fields=(

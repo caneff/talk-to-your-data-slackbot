@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import typing
 
+import data_assistant.metric_formatter as metric_formatter
 import data_assistant.non_answer_catalog as non_answer_catalog
 import data_assistant.workflow.contracts as contracts
 
@@ -27,10 +28,13 @@ def compose_final_response(
         answer_draft.key_data["metric_value"]
         .astype(float)
         .map(
-            _format_money,
+            lambda value: metric_formatter.format_metric_value(
+                value,
+                answer_draft.metric_kind,
+            ),
         )
     )
-    revenue_lines = "\n".join(
+    metric_lines = "\n".join(
         "- "
         + answer_draft.key_data["dimension_value"].astype(str)
         + ": "
@@ -46,7 +50,7 @@ def compose_final_response(
         limitations=answer_draft.limitations,
     )
     text = (
-        f"{answer_draft.summary}\n\n{revenue_lines}\n\n"
+        f"{answer_draft.summary}\n\n{metric_lines}\n\n"
         f"{render_trust_summary(trust_summary)}"
     )
 
@@ -103,7 +107,3 @@ def render_trust_summary(trust_summary: contracts.TrustSummary) -> str:
     if trust_summary.limitations:
         segments.append(f"Limitations: {' '.join(trust_summary.limitations)}")
     return "Trust Summary: " + " ".join(segments)
-
-
-def _format_money(value: float) -> str:
-    return f"${value:,.2f}"

@@ -305,6 +305,7 @@ def _ambiguous_table_semantic_layer(
         label="total revenue",
         expression="sum(revenue)",
         source_column="revenue",
+        kind=schema.MetricKind.MONEY,
     )
     field = schema.SemanticField(
         field_id="region",
