@@ -283,7 +283,7 @@ def test_handle_socket_mode_event_routes_human_dm_through_existing_boundary(
     )
     final_response = contracts.FinalResponse(
         text="Final answer text.",
-        trust_summary=contracts.TrustSummary(datasets=("Commerce Revenue",)),
+        trust_summary=contracts.TrustSummary(datasets=("Commerce",)),
         response_kind=contracts.ResponseKind.ANSWER,
     )
 

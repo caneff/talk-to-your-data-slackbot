@@ -34,7 +34,7 @@ def test_response_composer_returns_plain_text_with_trust_summary() -> None:
                     "metric_value": (1200.0, 850.0),
                 }
             ),
-            datasets_used=("Commerce Revenue",),
+            datasets_used=("Commerce",),
             dataset_tables_used=("orders",),
             metric_kind=schema.MetricKind.MONEY,
             time_range="January 2026",
@@ -53,7 +53,7 @@ def test_response_composer_returns_plain_text_with_trust_summary() -> None:
     assert "- South: $850.00" in response.text
     assert "Trust Summary:" in response.text
     assert response.trust_summary == contracts.TrustSummary(
-        datasets=("Commerce Revenue",),
+        datasets=("Commerce",),
         dataset_tables=("orders",),
         time_range="January 2026",
         filters=(),

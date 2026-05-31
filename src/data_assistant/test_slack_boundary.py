@@ -43,7 +43,7 @@ def _payload(
 def _final_response(text: str = "Final answer text.") -> contracts.FinalResponse:
     return contracts.FinalResponse(
         text=text,
-        trust_summary=contracts.TrustSummary(datasets=("Commerce Revenue",)),
+        trust_summary=contracts.TrustSummary(datasets=("Commerce",)),
         response_kind=contracts.ResponseKind.ANSWER,
     )
 

@@ -213,7 +213,10 @@ _GOLDEN_WORDING: tuple[
             reason=(
                 "The Data Assistant does not support that Data Question intent yet."
             ),
-            next_step="Ask: What was total revenue by region in January 2026?",
+            next_step=(
+                "Ask: What was total revenue by region in January 2026? "
+                "Or: What was customer count by customer region in January 2026?"
+            ),
         ),
     ),
     (

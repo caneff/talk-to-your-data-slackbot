@@ -114,7 +114,8 @@ For local development, the runtime uses a tiny in-memory DuckDB `orders` table. 
 
 1. Start the adapter with `uv run python -m data_assistant.slack_runtime`.
 2. Open a DM with the app in Slack.
-3. Send the canonical question:
+3. Send a supported question. The local smoke-test data answers revenue
+   by region, so use:
    `What was total revenue by region in January 2026?`
 4. Verify the bot replies in the same thread as the original message timestamp.
 5. Verify the reply is a Final Response with a Trust Summary.

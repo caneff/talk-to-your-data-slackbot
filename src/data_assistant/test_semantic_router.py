@@ -69,7 +69,7 @@ def test_semantic_router_returns_ambiguous_table_for_two_tables_in_one_dataset()
     )
     dataset = schema.CuratedDataset(
         dataset_id="commerce",
-        name="Commerce Revenue",
+        name="Commerce",
         tables=("orders", "order_rollups"),
         information_types=("revenue",),
         freshness=freshness,
@@ -126,7 +126,7 @@ def test_resolve_semantic_match_returns_no_matching_table_from_router() -> None:
     )
     selected_dataset = schema.CuratedDataset(
         dataset_id="commerce",
-        name="Commerce Revenue",
+        name="Commerce",
         tables=("orders",),
         information_types=("revenue",),
         freshness=freshness,

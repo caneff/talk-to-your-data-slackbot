@@ -10,7 +10,7 @@ import data_assistant.workflow.contracts as contracts
 def _commerce_revenue_dataset() -> schema.CuratedDataset:
     return schema.CuratedDataset(
         dataset_id="commerce",
-        name="Commerce Revenue",
+        name="Commerce",
         tables=("orders",),
         information_types=("revenue",),
         freshness=schema.Freshness(
@@ -102,7 +102,7 @@ def test_reasoning_layer_produces_answer_draft_from_prepared_data() -> None:
         "grouped across 5 regions."
     )
     assert answer_draft.key_data is prepared_data.data
-    assert answer_draft.datasets_used == ("Commerce Revenue",)
+    assert answer_draft.datasets_used == ("Commerce",)
     assert answer_draft.dataset_tables_used == ("orders",)
     assert answer_draft.metric_kind == schema.MetricKind.MONEY
     assert answer_draft.time_range == "2026-01-01 through 2026-01-31"

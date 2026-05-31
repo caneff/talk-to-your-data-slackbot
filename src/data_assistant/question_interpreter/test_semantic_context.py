@@ -10,7 +10,7 @@ def test_semantic_layer_context_exposes_business_labels_not_storage_details() ->
         datasets=(
             schema.CuratedDataset(
                 dataset_id="internal_commerce",
-                name="Commerce Revenue",
+                name="Commerce",
                 tables=("orders_internal", "customers_internal"),
                 information_types=("revenue", "regional performance"),
                 freshness=schema.Freshness(
@@ -103,7 +103,7 @@ def test_semantic_layer_context_exposes_business_labels_not_storage_details() ->
         dataset_context["metric_contexts"],
     )
 
-    assert dataset_context["name"] == "Commerce Revenue"
+    assert dataset_context["name"] == "Commerce"
     assert "total revenue" in metric_labels
     assert "customer count" in metric_labels
     assert "What was total revenue by customer region in January 2026?" in (
