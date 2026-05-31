@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && printf 'git orientation (trust this over any carried-over summary):\\n'; git status -sb 2>/dev/null | head -20; printf -- '--- recent commits ---\\n'; git log --oneline -3 2>/dev/null"
+          }
+        ]
+      }
+    ]
+  }
+}
