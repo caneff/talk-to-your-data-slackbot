@@ -102,9 +102,8 @@ def compare_question_frame_meaning(
         expected=expected.metric,
         actual=actual.metric,
     )
-    _append_scalar_mismatch(
+    _append_field_operations_mismatches(
         mismatches=mismatches,
-        field="field_operations",
         expected=expected.field_operations,
         actual=actual.field_operations,
     )
@@ -274,6 +273,59 @@ def _load_env_file(
     dotenv.load_dotenv(dotenv_path=path, override=False)
 
 
+_FIELD_OPERATION_ATTRIBUTES: tuple[str, ...] = (
+    "operation",
+    "field",
+    "lower",
+    "upper",
+    "values",
+)
+
+
+def _append_field_operations_mismatches(
+    *,
+    mismatches: list[str],
+    expected: tuple[question_interpreter.FieldOperationProposal, ...],
+    actual: tuple[question_interpreter.FieldOperationProposal, ...],
+) -> None:
+    """Report only the field operations (and attributes) that actually differ."""
+    common = min(len(expected), len(actual))
+    for index in range(common):
+        _append_field_operation_mismatch(
+            mismatches=mismatches,
+            index=index,
+            expected=expected[index],
+            actual=actual[index],
+        )
+    for index in range(common, len(expected)):
+        mismatches.append(
+            f"field_operations[{index}]: "
+            f"expected {_field_operation_debug_string(expected[index])}, "
+            "got (missing)"
+        )
+    for index in range(common, len(actual)):
+        mismatches.append(
+            f"field_operations[{index}]: expected (missing), "
+            f"got {_field_operation_debug_string(actual[index])}"
+        )
+
+
+def _append_field_operation_mismatch(
+    *,
+    mismatches: list[str],
+    index: int,
+    expected: question_interpreter.FieldOperationProposal,
+    actual: question_interpreter.FieldOperationProposal,
+) -> None:
+    for attribute in _FIELD_OPERATION_ATTRIBUTES:
+        _append_scalar_mismatch(
+            mismatches=mismatches,
+            field=f"field_operations[{index}].{attribute}",
+            expected=getattr(expected, attribute),
+            actual=getattr(actual, attribute),
+        )
+
+
 def _append_scalar_mismatch(
     *,
     mismatches: list[str],
@@ -291,6 +343,12 @@ def _debug_value(value: object) -> str:
     if isinstance(value, datetime.date):
         return value.isoformat()
     return repr(value)
+
+
+def _field_operation_debug_string(
+    operation: question_interpreter.FieldOperationProposal,
+) -> str:
+    return operation.model_dump_json()
 
 
 def _proposal_debug_string(
