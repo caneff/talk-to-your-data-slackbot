@@ -84,7 +84,6 @@ def _table_supports_filter_operations(
         field = fields_by_label.get(operation.field)
         if field is None:
             return False
-        allowed_operations = {allowed.value for allowed in field.operations}
-        if operation.operation.value not in allowed_operations:
+        if operation.operation not in field.operations:
             return False
     return True

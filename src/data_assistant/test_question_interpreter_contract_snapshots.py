@@ -345,3 +345,19 @@ def test_question_interpreter_rejects_non_finite_decimal_filter_values() -> None
     assert result == non_answer_catalog.non_answer(
         contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT, stage=_STAGE
     )
+
+
+def test_field_operation_kind_uses_semantic_layer_enum() -> None:
+    assert contracts.FieldOperationKind is schema.FieldOperation
+
+
+def test_question_interpreter_promotes_semantic_layer_operation_enum() -> None:
+    result = interpreter_support.interpret_with_provider_proposal(
+        interpreter_support.question_frame_proposal()
+    )
+
+    assert isinstance(result, contracts.Success)
+    assert all(
+        type(operation.operation) is schema.FieldOperation
+        for operation in result.value.field_operations
+    )

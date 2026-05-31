@@ -459,7 +459,7 @@ def _promote_field_operations(
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
             )
         operation = contracts.FieldOperationKind(operation_proposal.operation)
-        if operation_proposal.operation not in {op.value for op in field.operations}:
+        if operation not in field.operations:
             return non_answer_catalog.non_answer(
                 contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION,
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,

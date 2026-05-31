@@ -15,13 +15,7 @@ import data_assistant.semantic_layer.schema as schema
 T = typing.TypeVar("T")
 
 
-class FieldOperationKind(enum.StrEnum):
-    """Approved operation over a business-facing Semantic Field."""
-
-    EXCLUDE_FILTER = "exclude_filter"
-    GROUP_BY = "group_by"
-    INCLUDE_FILTER = "include_filter"
-    RANGE_FILTER = "range_filter"
+FieldOperationKind: typing.TypeAlias = schema.FieldOperation
 
 
 # Filter values are validated and typed at the Question Interpreter trust
