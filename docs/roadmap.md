@@ -24,6 +24,12 @@ Question to a Final Response grounded in one approved Curated Dataset.
 
 ### Not Yet
 
+- Questions whose shape exceeds a single metric grouped by a single dimension:
+  multiple group-by dimensions and multiple metrics per question are not yet
+  supported (`data_preparation` uses `group_by_fields[0]`).
+- Intents beyond `summarize` — trends, comparisons, top-N, and period-over-period
+  are deliberately out of scope (`_SUPPORTED_PROVIDER_INTENTS` is `summarize`
+  only).
 - Multi-dataset joins.
 - Result Access beyond simple dataset-level denial.
 - Trust Detail follow-ups.
@@ -40,12 +46,12 @@ Question to a Final Response grounded in one approved Curated Dataset.
 
 ### High Priority Follow-Ups
 
-- Current LLM-backed Question Interpreter sequence:
-  #31 contract and eval harness; #34 OpenAI provider; #33 manual live LLM eval
-  suite. ADR-0004 records the decision to use
-  direct OpenAI SDK integration for the first live provider and defer
-  LangChain/LangGraph until a second LLM-backed component or stateful
-  conversation flow makes that trade-off concrete.
+- The LLM-backed Question Interpreter slice is complete: #31 contract and eval
+  harness, #34 OpenAI provider, and #33 manual live LLM eval suite are all
+  delivered. ADR-0004 records the decision to use direct OpenAI SDK integration
+  for the first live provider and defer LangChain/LangGraph until a second
+  LLM-backed component or stateful conversation flow makes that trade-off
+  concrete.
 - Introduce an LLM-backed Question Interpreter in contract-first slices: first
   add the Question Frame proposal, validation, fake provider, and eval harness;
   then add the live LLM provider; then add a manual live LLM eval suite that can

@@ -75,6 +75,18 @@ A business-facing attribute in the **Semantic Layer** whose approved uses are
 explicit, such as grouping or filtering a **Data Question**.
 _Avoid_: Raw column, database field, dimension
 
+**Metric**:
+A business measure defined on a **Dataset Table**, such as total revenue or
+customer count, that the **Data Assistant** can aggregate to answer a **Data
+Question**.
+_Avoid_: Aggregate, KPI, calculation
+
+**Metric Kind**:
+The kind of quantity a **Metric** represents — for example money, count, or
+ratio — which determines how its value is presented. Distinct from the
+**Semantic Field** data type used to validate filter values.
+_Avoid_: Format, unit, type
+
 **Dataset Catalog**:
 The discoverable registry inside the **Semantic Layer** that the **Data
 Assistant** uses to choose which **Curated Datasets** can answer a **Data
