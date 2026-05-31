@@ -120,6 +120,74 @@ def test_semantic_router_returns_ambiguous_table_for_two_tables_in_one_dataset(
     )
 
 
+def test_resolve_semantic_match_returns_no_matching_table_from_router() -> None:
+    freshness = schema.Freshness(
+        as_of=datetime.date(2026, 1, 31),
+        description="Clean fixture rows for January 2026.",
+    )
+    selected_dataset = schema.CuratedDataset(
+        dataset_id="commerce",
+        name="Commerce Revenue",
+        tables=("orders",),
+        information_types=("revenue",),
+        freshness=freshness,
+        example_questions=(),
+    )
+    other_dataset = schema.CuratedDataset(
+        dataset_id="support",
+        name="Support Tickets",
+        tables=("tickets",),
+        information_types=("support",),
+        freshness=freshness,
+        example_questions=(),
+    )
+    metric = schema.Metric(
+        metric_id="ticket_count",
+        label="ticket count",
+        expression="count(*)",
+        source_column="ticket_id",
+    )
+    field = schema.SemanticField(
+        field_id="region",
+        label="region",
+        source_column="region",
+        data_type=schema.DataType.STRING,
+        operations=(schema.FieldOperation.GROUP_BY,),
+    )
+    semantic_matches = (
+        contracts.SemanticMatch(
+            dataset=other_dataset,
+            table=schema.DatasetTable(
+                table_id="tickets",
+                dataset_id="support",
+                description="Support table.",
+                columns=(
+                    schema.TableColumn(column_id="ticket_id", data_type="string"),
+                    schema.TableColumn(column_id="region", data_type="string"),
+                ),
+                metrics=(metric,),
+                fields=(field,),
+            ),
+            metric=metric,
+            group_by_fields=(field,),
+        ),
+    )
+    dataset_selection = contracts.DatasetSelection(
+        selected_datasets=(selected_dataset,),
+        match_rationale="test",
+    )
+
+    result = semantic_router.resolve_semantic_match(
+        semantic_matches,
+        dataset_selection,
+    )
+
+    assert result == non_answer_catalog.non_answer(
+        contracts.NonAnswerReasonCode.NO_MATCHING_TABLE,
+        stage=contracts.NonAnswerStage.SEMANTIC_ROUTER,
+    )
+
+
 def _table(
     table_id: str,
     metric: schema.Metric,
