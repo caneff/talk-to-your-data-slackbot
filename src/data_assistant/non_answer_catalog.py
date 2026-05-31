@@ -34,7 +34,7 @@ _StaticReasonCode: typing.TypeAlias = typing.Literal[
 _DEFINITIONS: dict[contracts.NonAnswerReasonCode, _NonAnswerDefinition] = {
     contracts.NonAnswerReasonCode.ACCESS_DENIED: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.ACCESS_DENIAL,
-        reason="",
+        reason="You do not have access to the {dataset} Curated Dataset.",
         unresolved_ambiguities=(),
         next_step=(
             "Ask a data owner to grant Dataset Access or ask about available data."
@@ -126,11 +126,32 @@ _DEFINITIONS: dict[contracts.NonAnswerReasonCode, _NonAnswerDefinition] = {
 }
 
 
+@dataclasses.dataclass(frozen=True)
+class NonAnswerWording:
+    """Rendered team-member-facing copy for a Non-Answer."""
+
+    reason: str
+    next_step: str
+
+
 def response_kind_for(
     reason_code: contracts.NonAnswerReasonCode,
 ) -> contracts.ResponseKind:
     """Return canonical response kind for a non-answer reason code."""
     return _DEFINITIONS[reason_code].response_kind
+
+
+def render_wording(non_answer: contracts.NonAnswer) -> NonAnswerWording:
+    """Render team-member-facing copy from a structured Non-Answer.
+
+    The catalog owns Non-Answer copy; this is the single place that turns a
+    reason code (plus any context such as the denied dataset) into prose.
+    """
+    definition = _DEFINITIONS[non_answer.reason_code]
+    reason = definition.reason
+    if non_answer.reason_code == contracts.NonAnswerReasonCode.ACCESS_DENIED:
+        reason = reason.format(dataset=non_answer.datasets[0])
+    return NonAnswerWording(reason=reason, next_step=definition.next_step)
 
 
 def non_answer(
@@ -142,9 +163,7 @@ def non_answer(
     return contracts.NonAnswer(
         stage=stage,
         reason_code=reason_code,
-        reason=definition.reason,
         unresolved_ambiguities=definition.unresolved_ambiguities,
-        next_step=definition.next_step,
     )
 
 
@@ -153,13 +172,9 @@ def access_denied_non_answer(
     *,
     stage: contracts.NonAnswerStage,
 ) -> contracts.NonAnswer:
-    definition = _DEFINITIONS[contracts.NonAnswerReasonCode.ACCESS_DENIED]
     return contracts.NonAnswer(
         stage=stage,
         reason_code=contracts.NonAnswerReasonCode.ACCESS_DENIED,
-        reason=f"You do not have access to the {dataset_id} Curated Dataset.",
-        unresolved_ambiguities=definition.unresolved_ambiguities,
-        next_step=definition.next_step,
         datasets=(dataset_id,),
     )
 
@@ -169,13 +184,10 @@ def missing_required_field_non_answer(
     *,
     stage: contracts.NonAnswerStage,
 ) -> contracts.NonAnswer:
-    definition = _DEFINITIONS[contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD]
     return contracts.NonAnswer(
         stage=stage,
         reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
-        reason=definition.reason,
         unresolved_ambiguities=(field_name,),
-        next_step=definition.next_step,
     )
 
 
@@ -184,11 +196,8 @@ def unknown_semantic_label_non_answer(
     *,
     stage: contracts.NonAnswerStage,
 ) -> contracts.NonAnswer:
-    definition = _DEFINITIONS[contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL]
     return contracts.NonAnswer(
         stage=stage,
         reason_code=contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL,
-        reason=definition.reason,
         unresolved_ambiguities=(field_name,),
-        next_step=definition.next_step,
     )

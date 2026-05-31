@@ -154,7 +154,7 @@ def test_data_assistant_denies_dataset_access_before_request_or_preparation(
     assert len(captured_non_answers) == 1
     non_answer = captured_non_answers[0]
     assert non_answer.stage == contracts.NonAnswerStage.ACCESS_CONTROLLER
-    assert "commerce Curated Dataset" in non_answer.reason
+    assert non_answer.reason_code == contracts.NonAnswerReasonCode.ACCESS_DENIED
     assert non_answer.datasets == ("commerce",)
 
 

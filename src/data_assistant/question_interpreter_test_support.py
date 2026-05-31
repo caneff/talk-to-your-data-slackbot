@@ -58,6 +58,23 @@ def provider_that_must_not_be_called(
     return MustNotBeCalledProvider()
 
 
+def provider_failure_provider(
+    reason: str = "provider unavailable",
+) -> question_interpreter.QuestionInterpreterProvider:
+    """Build a fake provider that returns a ProviderFailure."""
+    class ProviderFailureProvider:
+        def propose_question_frame(
+            self,
+            *,
+            question: str,
+            semantic_layer_context: dict[str, object],
+        ) -> question_interpreter.ProviderFailure:
+            del question, semantic_layer_context
+            return question_interpreter.ProviderFailure(reason=reason)
+
+    return ProviderFailureProvider()
+
+
 def invalid_result_provider(
     provider_result: object,
 ) -> question_interpreter.QuestionInterpreterProvider:

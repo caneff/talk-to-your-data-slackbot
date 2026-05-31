@@ -45,19 +45,20 @@ def compose_non_answer_response(
 ) -> contracts.FinalResponse:
     """Compose a plain-text Final Response for a workflow Non-Answer."""
     response_kind = non_answer_catalog.response_kind_for(non_answer.reason_code)
+    wording = non_answer_catalog.render_wording(non_answer)
     adverb = (
         " yet"
         if response_kind == contracts.ResponseKind.CLARIFICATION_NEEDED
         else ""
     )
-    reason = non_answer.reason[0].lower() + non_answer.reason[1:]
+    reason = wording.reason[0].lower() + wording.reason[1:]
     trust_summary = contracts.TrustSummary(
         datasets=non_answer.datasets,
-        limitations=(non_answer.reason,),
+        limitations=(wording.reason,),
     )
     text = (
         f"I cannot answer safely{adverb} because {reason}\n\n"
-        f"Next step: {non_answer.next_step}\n\n"
+        f"Next step: {wording.next_step}\n\n"
         f"{render_trust_summary(trust_summary)}"
     )
     return contracts.FinalResponse(

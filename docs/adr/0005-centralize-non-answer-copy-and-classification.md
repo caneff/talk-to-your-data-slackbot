@@ -1,5 +1,11 @@
 # Centralize Non-Answer Copy and Classification in a Non-Answer Catalog
 
+> **Amended by [ADR-0007](0007-render-non-answer-copy-from-structured-non-answers.md).**
+> The `NonAnswer` no longer stores `reason`/`next_step` prose; the catalog still
+> owns the copy but renders it on demand from the structured Non-Answer, and the
+> Response Composer asks the catalog to render rather than reading prose fields
+> off the instance. The single-owner-of-copy decision itself is unchanged.
+
 Every Non-Answer Response is defined in one Non-Answer Catalog keyed on reason
 code — its team-member-facing reason, next step, and response kind — and the
 Question Interpreter, Semantic Router, Data Requester, and Access Controller

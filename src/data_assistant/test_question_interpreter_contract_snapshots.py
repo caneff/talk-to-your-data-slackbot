@@ -3,11 +3,14 @@ import datetime
 
 import pytest
 
+import data_assistant.non_answer_catalog as non_answer_catalog
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.question_interpreter_test_support as interpreter_support
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_layer.testing_support as semantic_layer_testing
 import data_assistant.workflow.contracts as contracts
+
+_STAGE = contracts.NonAnswerStage.QUESTION_INTERPRETER
 
 
 @dataclasses.dataclass(frozen=True)
@@ -16,17 +19,6 @@ class ContractSnapshotCase:
     provider: question_interpreter.QuestionInterpreterProvider
     expected: contracts.StageResult[contracts.QuestionFrame]
     question: str = interpreter_support.CANONICAL_DATA_QUESTION
-
-
-class ProviderFailureProvider:
-    def propose_question_frame(
-        self,
-        *,
-        question: str,
-        semantic_layer_context: dict[str, object],
-    ) -> question_interpreter.ProviderFailure:
-        del question, semantic_layer_context
-        return question_interpreter.ProviderFailure(reason="provider unavailable")
 
 
 def snapshot_case(
@@ -59,6 +51,10 @@ def provider_snapshot_case(
     )
 
 
+# Non-Answer expectations are built through the catalog builders — the same
+# dispatch production uses — so these cases assert routing (reason code, stage)
+# and context (the field/label threaded in), not user-facing copy. Copy is
+# pinned once in test_non_answer_catalog.py (ADR-0007).
 CONTRACT_SNAPSHOT_CASES = (
     snapshot_case(
         name="happy_path",
@@ -148,23 +144,15 @@ CONTRACT_SNAPSHOT_CASES = (
     snapshot_case(
         name="missing_intent",
         proposal=interpreter_support.question_frame_proposal(intent=None),
-        expected=contracts.NonAnswer(
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-            reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
-            reason="The Data Question is missing required interpretation details.",
-            unresolved_ambiguities=("intent",),
-            next_step="Ask a clarification question before selecting data.",
+        expected=non_answer_catalog.missing_required_field_non_answer(
+            "intent", stage=_STAGE
         ),
     ),
     snapshot_case(
         name="missing_metric",
         proposal=interpreter_support.question_frame_proposal(metric=None),
-        expected=contracts.NonAnswer(
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-            reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
-            reason="The Data Question is missing required interpretation details.",
-            unresolved_ambiguities=("metric",),
-            next_step="Ask a clarification question before selecting data.",
+        expected=non_answer_catalog.missing_required_field_non_answer(
+            "metric", stage=_STAGE
         ),
     ),
     provider_snapshot_case(
@@ -173,41 +161,22 @@ CONTRACT_SNAPSHOT_CASES = (
             "Can you use my CSV file to show total revenue by region in January 2026?"
         ),
         provider=interpreter_support.provider_that_must_not_be_called(),
-        expected=contracts.NonAnswer(
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-            reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_DATA,
-            reason="User-provided CSV files are not supported data sources.",
-            unresolved_ambiguities=("unsupported data",),
-            next_step=(
-                "Ask about an approved Curated Dataset in the Semantic Layer instead."
-            ),
+        expected=non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.UNSUPPORTED_DATA, stage=_STAGE
         ),
     ),
     snapshot_case(
         name="unsupported_intent",
         proposal=interpreter_support.question_frame_proposal(intent="forecast"),
-        expected=contracts.NonAnswer(
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-            reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT,
-            reason=(
-                "The Data Assistant does not support that Data Question intent yet."
-            ),
-            unresolved_ambiguities=("supported intent",),
-            next_step="Ask: What was total revenue by region in January 2026?",
+        expected=non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT, stage=_STAGE
         ),
     ),
     snapshot_case(
         name="hallucinated_metric",
         proposal=interpreter_support.question_frame_proposal(metric="gross bookings"),
-        expected=contracts.NonAnswer(
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-            reason_code=contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL,
-            reason=(
-                "The Data Assistant could not match the requested Semantic Layer "
-                "labels."
-            ),
-            unresolved_ambiguities=("metric",),
-            next_step="Use exact Semantic Layer metric and dimension labels.",
+        expected=non_answer_catalog.unknown_semantic_label_non_answer(
+            "metric", stage=_STAGE
         ),
     ),
     snapshot_case(
@@ -220,15 +189,8 @@ CONTRACT_SNAPSHOT_CASES = (
                 ),
             ),
         ),
-        expected=contracts.NonAnswer(
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-            reason_code=contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL,
-            reason=(
-                "The Data Assistant could not match the requested Semantic Layer "
-                "labels."
-            ),
-            unresolved_ambiguities=("field",),
-            next_step="Use exact Semantic Layer metric and dimension labels.",
+        expected=non_answer_catalog.unknown_semantic_label_non_answer(
+            "field", stage=_STAGE
         ),
     ),
     snapshot_case(
@@ -243,12 +205,8 @@ CONTRACT_SNAPSHOT_CASES = (
                 ),
             ),
         ),
-        expected=contracts.NonAnswer(
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-            reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION,
-            reason="The Semantic Layer does not allow that operation for the field.",
-            unresolved_ambiguities=("semantic field operation",),
-            next_step="Use only operations listed for the Semantic Field.",
+        expected=non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION, stage=_STAGE
         ),
     ),
     snapshot_case(
@@ -263,12 +221,8 @@ CONTRACT_SNAPSHOT_CASES = (
                 ),
             ),
         ),
-        expected=contracts.NonAnswer(
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-            reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
-            reason="The Question Interpreter provider returned invalid output.",
-            unresolved_ambiguities=("provider output",),
-            next_step="Fix the provider contract before retrying.",
+        expected=non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT, stage=_STAGE
         ),
     ),
     snapshot_case(
@@ -283,12 +237,8 @@ CONTRACT_SNAPSHOT_CASES = (
                 ),
             ),
         ),
-        expected=contracts.NonAnswer(
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-            reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
-            reason="The Question Interpreter provider returned invalid output.",
-            unresolved_ambiguities=("provider output",),
-            next_step="Fix the provider contract before retrying.",
+        expected=non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT, stage=_STAGE
         ),
     ),
     snapshot_case(
@@ -302,12 +252,8 @@ CONTRACT_SNAPSHOT_CASES = (
                 ),
             ),
         ),
-        expected=contracts.NonAnswer(
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-            reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
-            reason="The Question Interpreter provider returned invalid output.",
-            unresolved_ambiguities=("provider output",),
-            next_step="Fix the provider contract before retrying.",
+        expected=non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT, stage=_STAGE
         ),
     ),
     snapshot_case(
@@ -324,34 +270,22 @@ CONTRACT_SNAPSHOT_CASES = (
                 ),
             ),
         ),
-        expected=contracts.NonAnswer(
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-            reason_code=contracts.NonAnswerReasonCode.UNSUPPORTED_SHAPE,
-            reason="The Data Assistant cannot handle that Question Frame shape yet.",
-            unresolved_ambiguities=("question shape",),
-            next_step="Ask for one grouping field or a scalar aggregate.",
+        expected=non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.UNSUPPORTED_SHAPE, stage=_STAGE
         ),
     ),
     provider_snapshot_case(
         name="provider_failure",
-        provider=ProviderFailureProvider(),
-        expected=contracts.NonAnswer(
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-            reason_code=contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
-            reason="The Question Interpreter provider could not produce a proposal.",
-            unresolved_ambiguities=("provider failure",),
-            next_step="Retry after the provider is available again.",
+        provider=interpreter_support.provider_failure_provider(),
+        expected=non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.PROVIDER_FAILURE, stage=_STAGE
         ),
     ),
     provider_snapshot_case(
         name="invalid_provider_output",
         provider=interpreter_support.invalid_result_provider({"hello": "world"}),
-        expected=contracts.NonAnswer(
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-            reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
-            reason="The Question Interpreter provider returned invalid output.",
-            unresolved_ambiguities=("provider output",),
-            next_step="Fix the provider contract before retrying.",
+        expected=non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT, stage=_STAGE
         ),
     ),
 )
@@ -408,10 +342,6 @@ def test_question_interpreter_rejects_non_finite_decimal_filter_values() -> None
         provider=interpreter_support.fixed_proposal_provider(proposal),
     )
 
-    assert result == contracts.NonAnswer(
-        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-        reason_code=contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
-        reason="The Question Interpreter provider returned invalid output.",
-        unresolved_ambiguities=("provider output",),
-        next_step="Fix the provider contract before retrying.",
+    assert result == non_answer_catalog.non_answer(
+        contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT, stage=_STAGE
     )

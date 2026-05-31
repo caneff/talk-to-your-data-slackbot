@@ -1,6 +1,7 @@
 import datetime
 
 import data_assistant.data_requester as data_requester
+import data_assistant.non_answer_catalog as non_answer_catalog
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
 
@@ -101,12 +102,9 @@ def test_data_requester_returns_non_answer_for_ambiguous_tables() -> None:
         semantic_matches,
     )
 
-    assert result == contracts.NonAnswer(
+    assert result == non_answer_catalog.non_answer(
+        contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE,
         stage=contracts.NonAnswerStage.DATA_REQUESTER,
-        reason_code=contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE,
-        reason="Multiple Dataset Tables can satisfy the Question Frame.",
-        unresolved_ambiguities=("dataset table",),
-        next_step="Ask which Dataset Table should be used.",
     )
 
 
@@ -120,12 +118,9 @@ def test_data_requester_returns_non_answer_when_selection_has_no_table_match(
         semantic_matches=(),
     )
 
-    assert result == contracts.NonAnswer(
+    assert result == non_answer_catalog.non_answer(
+        contracts.NonAnswerReasonCode.NO_MATCHING_TABLE,
         stage=contracts.NonAnswerStage.DATA_REQUESTER,
-        reason_code=contracts.NonAnswerReasonCode.NO_MATCHING_TABLE,
-        reason="No Dataset Table can satisfy the Question Frame.",
-        unresolved_ambiguities=("dataset table",),
-        next_step="Ask which table-level metric or dimension should be used.",
     )
 
 

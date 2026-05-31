@@ -170,13 +170,16 @@ class ResponseKind(enum.StrEnum):
 
 @dataclasses.dataclass(frozen=True)
 class NonAnswer:
-    """Workflow short-circuit when a stage cannot safely proceed."""
+    """Workflow short-circuit when a stage cannot safely proceed.
+
+    Carries only structured classification; team-member-facing ``reason`` and
+    ``next_step`` copy is rendered on demand from the Non-Answer Catalog (see
+    ADR-0007).
+    """
 
     stage: NonAnswerStage
     reason_code: NonAnswerReasonCode
-    reason: str
-    unresolved_ambiguities: tuple[str, ...]
-    next_step: str
+    unresolved_ambiguities: tuple[str, ...] = ()
     datasets: tuple[str, ...] = ()
 
 

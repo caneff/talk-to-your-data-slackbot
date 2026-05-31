@@ -1,10 +1,13 @@
 """Tests for the canonical non-answer catalog.
 
-These tests verify the catalog's *behavior* and *structural invariants* rather
-than restating its copy. The reason/next_step strings live in the catalog's
-definitions; duplicating them here would only catch accidental edits (by forcing
-a second edit), not real regressions. Instead we assert completeness across
-every reason code and the runtime logic of the context-aware builders.
+These split into two concerns:
+
+* **Structure** — every reason code classifies, and each builder produces the
+  right structured ``NonAnswer`` (reason code, stage, context). These never
+  mention user-facing copy.
+* **Copy** — one golden test pins the exact rendered ``reason``/``next_step``
+  strings. This is the single source of truth for Non-Answer wording; it is the
+  intended failure when copy changes (see ADR-0007).
 """
 
 import pytest
@@ -49,16 +52,14 @@ def test_every_reason_code_has_a_response_kind(
 
 
 @pytest.mark.parametrize("reason_code", _STATIC_REASON_CODES, ids=_by_name)
-def test_static_builder_emits_a_complete_non_answer(
+def test_static_builder_produces_structured_non_answer(
     reason_code: contracts.NonAnswerReasonCode,
 ) -> None:
-    """The generic builder wires a fully-populated non-answer onto the stage."""
+    """The generic builder wires the reason code onto the requested stage."""
     result = non_answer_catalog.non_answer(reason_code, stage=_STAGE)  # type: ignore[arg-type]
 
     assert result.stage == _STAGE
     assert result.reason_code == reason_code
-    assert result.reason, "static reason codes carry a fixed explanation"
-    assert result.next_step, "every reason code needs an actionable next step"
     assert result.datasets == ()
 
 
@@ -67,12 +68,7 @@ def test_access_denied_builder_names_the_dataset() -> None:
 
     assert result.stage == _STAGE
     assert result.reason_code == contracts.NonAnswerReasonCode.ACCESS_DENIED
-    assert result.reason == "You do not have access to the commerce Curated Dataset."
     assert result.datasets == ("commerce",)
-    assert (
-        non_answer_catalog.response_kind_for(result.reason_code)
-        == contracts.ResponseKind.ACCESS_DENIAL
-    )
 
 
 def test_missing_required_field_builder_records_the_field() -> None:
@@ -83,11 +79,6 @@ def test_missing_required_field_builder_records_the_field() -> None:
     assert result.stage == _STAGE
     assert result.reason_code == contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD
     assert result.unresolved_ambiguities == ("metric",)
-    assert result.next_step
-    assert (
-        non_answer_catalog.response_kind_for(result.reason_code)
-        == contracts.ResponseKind.CLARIFICATION_NEEDED
-    )
 
 
 def test_unknown_semantic_label_builder_records_the_label() -> None:
@@ -98,8 +89,162 @@ def test_unknown_semantic_label_builder_records_the_label() -> None:
     assert result.stage == _STAGE
     assert result.reason_code == contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL
     assert result.unresolved_ambiguities == ("field",)
-    assert result.next_step
-    assert (
-        non_answer_catalog.response_kind_for(result.reason_code)
-        == contracts.ResponseKind.UNSUPPORTED
-    )
+
+
+# Golden copy. This is the ONE place exact user-facing Non-Answer wording is
+# pinned; literals are intentional here. Each case renders through the same path
+# the Response Composer uses. ``access_denied`` is built with a dataset so its
+# template interpolates.
+_GOLDEN_WORDING: tuple[
+    tuple[contracts.NonAnswer, non_answer_catalog.NonAnswerWording], ...
+] = (
+    (
+        non_answer_catalog.access_denied_non_answer("commerce", stage=_STAGE),
+        non_answer_catalog.NonAnswerWording(
+            reason="You do not have access to the commerce Curated Dataset.",
+            next_step=(
+                "Ask a data owner to grant Dataset Access or ask about "
+                "available data."
+            ),
+        ),
+    ),
+    (
+        non_answer_catalog.missing_required_field_non_answer("metric", stage=_STAGE),
+        non_answer_catalog.NonAnswerWording(
+            reason="The Data Question is missing required interpretation details.",
+            next_step="Ask a clarification question before selecting data.",
+        ),
+    ),
+    (
+        non_answer_catalog.unknown_semantic_label_non_answer("field", stage=_STAGE),
+        non_answer_catalog.NonAnswerWording(
+            reason=(
+                "The Data Assistant could not match the requested Semantic Layer "
+                "labels."
+            ),
+            next_step="Use exact Semantic Layer metric and dimension labels.",
+        ),
+    ),
+    (
+        non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.AMBIGUOUS_DATASET, stage=_STAGE
+        ),
+        non_answer_catalog.NonAnswerWording(
+            reason="Multiple Curated Datasets match the Question Frame.",
+            next_step="Ask which Curated Dataset should be used.",
+        ),
+    ),
+    (
+        non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE, stage=_STAGE
+        ),
+        non_answer_catalog.NonAnswerWording(
+            reason="Multiple Dataset Tables can satisfy the Question Frame.",
+            next_step="Ask which Dataset Table should be used.",
+        ),
+    ),
+    (
+        non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT, stage=_STAGE
+        ),
+        non_answer_catalog.NonAnswerWording(
+            reason="The Question Interpreter provider returned invalid output.",
+            next_step="Fix the provider contract before retrying.",
+        ),
+    ),
+    (
+        non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.NO_MATCHING_DATASET, stage=_STAGE
+        ),
+        non_answer_catalog.NonAnswerWording(
+            reason="No Curated Dataset safely matches the Question Frame.",
+            next_step="Ask which approved business data should be used.",
+        ),
+    ),
+    (
+        non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.NO_MATCHING_TABLE, stage=_STAGE
+        ),
+        non_answer_catalog.NonAnswerWording(
+            reason="No Dataset Table can satisfy the Question Frame.",
+            next_step="Ask which table-level metric or dimension should be used.",
+        ),
+    ),
+    (
+        non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.PROVIDER_FAILURE, stage=_STAGE
+        ),
+        non_answer_catalog.NonAnswerWording(
+            reason="The Question Interpreter provider could not produce a proposal.",
+            next_step="Retry after the provider is available again.",
+        ),
+    ),
+    (
+        non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.UNSUPPORTED_DATA, stage=_STAGE
+        ),
+        non_answer_catalog.NonAnswerWording(
+            reason="User-provided CSV files are not supported data sources.",
+            next_step=(
+                "Ask about an approved Curated Dataset in the Semantic Layer "
+                "instead."
+            ),
+        ),
+    ),
+    (
+        non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.UNSUPPORTED_FILTER, stage=_STAGE
+        ),
+        non_answer_catalog.NonAnswerWording(
+            reason="The Data Assistant does not support that filter yet.",
+            next_step="Use only supported filters for approved Semantic Fields.",
+        ),
+    ),
+    (
+        non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION, stage=_STAGE
+        ),
+        non_answer_catalog.NonAnswerWording(
+            reason="The Semantic Layer does not allow that operation for the field.",
+            next_step="Use only operations listed for the Semantic Field.",
+        ),
+    ),
+    (
+        non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT, stage=_STAGE
+        ),
+        non_answer_catalog.NonAnswerWording(
+            reason=(
+                "The Data Assistant does not support that Data Question intent yet."
+            ),
+            next_step="Ask: What was total revenue by region in January 2026?",
+        ),
+    ),
+    (
+        non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.UNSUPPORTED_SHAPE, stage=_STAGE
+        ),
+        non_answer_catalog.NonAnswerWording(
+            reason="The Data Assistant cannot handle that Question Frame shape yet.",
+            next_step="Ask for one grouping field or a scalar aggregate.",
+        ),
+    ),
+)
+
+
+def test_golden_wording_covers_every_reason_code() -> None:
+    """Guard against a reason code slipping past the golden copy test."""
+    covered = {non_answer.reason_code for non_answer, _ in _GOLDEN_WORDING}
+    assert covered == set(contracts.NonAnswerReasonCode)
+
+
+@pytest.mark.parametrize(
+    ("non_answer", "expected"),
+    _GOLDEN_WORDING,
+    ids=[non_answer.reason_code.name for non_answer, _ in _GOLDEN_WORDING],
+)
+def test_render_wording_matches_golden_copy(
+    non_answer: contracts.NonAnswer,
+    expected: non_answer_catalog.NonAnswerWording,
+) -> None:
+    assert non_answer_catalog.render_wording(non_answer) == expected

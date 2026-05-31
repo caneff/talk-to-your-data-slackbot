@@ -1,29 +1,22 @@
 import pandas as pd
 import pytest
 
+import data_assistant.non_answer_catalog as non_answer_catalog
 import data_assistant.response_composer as response_composer
 import data_assistant.workflow.contracts as contracts
 
 
 def _non_answer(
-    *,
-    stage: contracts.NonAnswerStage = contracts.NonAnswerStage.QUESTION_INTERPRETER,
     reason_code: contracts.NonAnswerReasonCode = (
         contracts.NonAnswerReasonCode.UNSUPPORTED_DATA
     ),
-    reason: str = "User-provided CSV files are not supported data sources.",
-    unresolved_ambiguities: tuple[str, ...] = ("unsupported data",),
-    next_step: str = (
-        "Ask about an approved Curated Dataset in the Semantic Layer instead."
-    ),
+    *,
+    stage: contracts.NonAnswerStage = contracts.NonAnswerStage.QUESTION_INTERPRETER,
     datasets: tuple[str, ...] = (),
 ) -> contracts.NonAnswer:
     return contracts.NonAnswer(
         stage=stage,
         reason_code=reason_code,
-        reason=reason,
-        unresolved_ambiguities=unresolved_ambiguities,
-        next_step=next_step,
         datasets=datasets,
     )
 
@@ -69,141 +62,89 @@ def test_response_composer_returns_plain_text_with_trust_summary() -> None:
     )
 
 
-def test_response_composer_returns_final_response_for_non_answer() -> None:
-    response = response_composer.compose_non_answer_response(_non_answer())
+def test_response_composer_renders_non_answer_copy_into_text() -> None:
+    """Composer weaves the catalog-rendered reason and next step into the text.
 
-    assert response == contracts.FinalResponse(
-        text=(
-            "I cannot answer safely because user-provided CSV files are not "
-            "supported data sources.\n\n"
-            "Next step: Ask about an approved Curated Dataset in the "
-            "Semantic Layer instead.\n\n"
-            "Trust Summary: Limitations: User-provided CSV files are not "
-            "supported data sources."
-        ),
-        trust_summary=contracts.TrustSummary(
-            limitations=("User-provided CSV files are not supported data sources.",),
-        ),
-        response_kind=contracts.ResponseKind.UNSUPPORTED,
+    Exact wording is the catalog golden test's job; here we assert the composer
+    threads whatever the catalog renders through its template and trust summary.
+    """
+    non_answer = _non_answer(contracts.NonAnswerReasonCode.UNSUPPORTED_DATA)
+    wording = non_answer_catalog.render_wording(non_answer)
+    lowercased_reason = wording.reason[0].lower() + wording.reason[1:]
+
+    response = response_composer.compose_non_answer_response(non_answer)
+
+    assert response.response_kind == contracts.ResponseKind.UNSUPPORTED
+    assert f"I cannot answer safely because {lowercased_reason}" in response.text
+    assert f"Next step: {wording.next_step}" in response.text
+    assert response.trust_summary == contracts.TrustSummary(
+        limitations=(wording.reason,),
     )
 
 
-def test_response_composer_marks_missing_required_field_as_clarification() -> None:
-    response = response_composer.compose_non_answer_response(
-        _non_answer(
-            reason_code=contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
-            reason="The Data Question needs a metric before data selection.",
-            unresolved_ambiguities=("metric",),
-            next_step="Ask which business metric the team member wants.",
-        )
+def test_response_composer_marks_clarification_non_answers_with_yet_wording() -> None:
+    non_answer = _non_answer(
+        contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD,
     )
+    wording = non_answer_catalog.render_wording(non_answer)
+
+    response = response_composer.compose_non_answer_response(non_answer)
 
     assert response.response_kind == contracts.ResponseKind.CLARIFICATION_NEEDED
     assert response.text.startswith("I cannot answer safely yet because")
-    assert "The Data Question needs a metric before data selection." in (
-        response.trust_summary.limitations
-    )
-    assert "Ask which business metric the team member wants." in response.text
+    assert wording.reason in response.trust_summary.limitations
+    assert wording.next_step in response.text
 
 
 @pytest.mark.parametrize(
-    ("stage", "reason_code", "reason", "unresolved_ambiguities", "next_step"),
+    "reason_code",
     [
-        pytest.param(
-            contracts.NonAnswerStage.SEMANTIC_ROUTER,
-            contracts.NonAnswerReasonCode.AMBIGUOUS_DATASET,
-            "Multiple Curated Datasets could answer this Data Question.",
-            ("dataset choice",),
-            "Ask which Curated Dataset the team member wants.",
-            id="ambiguous dataset",
-        ),
-        pytest.param(
-            contracts.NonAnswerStage.DATA_REQUESTER,
-            contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE,
-            "Multiple Dataset Tables can satisfy this Data Question.",
-            ("table choice",),
-            "Ask which Dataset Table should be used.",
-            id="ambiguous table",
-        ),
+        contracts.NonAnswerReasonCode.AMBIGUOUS_DATASET,
+        contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE,
     ],
+    ids=lambda code: code.name,
 )
 def test_response_composer_marks_ambiguity_as_clarification(
-    stage: contracts.NonAnswerStage,
     reason_code: contracts.NonAnswerReasonCode,
-    reason: str,
-    unresolved_ambiguities: tuple[str, ...],
-    next_step: str,
 ) -> None:
-    response = response_composer.compose_non_answer_response(
-        _non_answer(
-            stage=stage,
-            reason_code=reason_code,
-            reason=reason,
-            unresolved_ambiguities=unresolved_ambiguities,
-            next_step=next_step,
-        )
-    )
+    non_answer = _non_answer(reason_code)
+    wording = non_answer_catalog.render_wording(non_answer)
+
+    response = response_composer.compose_non_answer_response(non_answer)
 
     assert response.response_kind == contracts.ResponseKind.CLARIFICATION_NEEDED
     assert response.text.startswith("I cannot answer safely yet because")
-    assert next_step in response.text
+    assert wording.next_step in response.text
 
 
 @pytest.mark.parametrize(
-    ("reason_code", "reason", "next_step"),
+    "reason_code",
     [
-        pytest.param(
-            contracts.NonAnswerReasonCode.UNSUPPORTED_DATA,
-            "User-provided CSV files are not supported data sources.",
-            "Ask about an approved Curated Dataset in the Semantic Layer instead.",
-            id="unsupported data",
-        ),
-        pytest.param(
-            contracts.NonAnswerReasonCode.NO_MATCHING_DATASET,
-            "No Curated Dataset can answer this Data Question.",
-            "Ask about available Curated Datasets instead.",
-            id="no matching dataset",
-        ),
-        pytest.param(
-            contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
-            "The Question Interpreter provider failed before returning output.",
-            "Try again or use the deterministic demo path.",
-            id="provider failure",
-        ),
+        contracts.NonAnswerReasonCode.UNSUPPORTED_DATA,
+        contracts.NonAnswerReasonCode.NO_MATCHING_DATASET,
+        contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
     ],
+    ids=lambda code: code.name,
 )
 def test_response_composer_marks_unsupported_non_answers_without_yet_wording(
     reason_code: contracts.NonAnswerReasonCode,
-    reason: str,
-    next_step: str,
 ) -> None:
-    response = response_composer.compose_non_answer_response(
-        _non_answer(
-            reason_code=reason_code,
-            reason=reason,
-            unresolved_ambiguities=(),
-            next_step=next_step,
-        )
-    )
+    non_answer = _non_answer(reason_code)
+    wording = non_answer_catalog.render_wording(non_answer)
+
+    response = response_composer.compose_non_answer_response(non_answer)
 
     assert response.response_kind == contracts.ResponseKind.UNSUPPORTED
     assert response.text.startswith("I cannot answer safely because")
     assert "safely yet" not in response.text
-    assert next_step in response.text
+    assert wording.next_step in response.text
 
 
 def test_response_composer_omits_sensitive_details_from_access_denial() -> None:
     response = response_composer.compose_non_answer_response(
-        _non_answer(
+        non_answer_catalog.access_denied_non_answer(
+            "commerce",
             stage=contracts.NonAnswerStage.ACCESS_CONTROLLER,
-            reason_code=contracts.NonAnswerReasonCode.ACCESS_DENIED,
-            reason="You do not have access to the commerce Curated Dataset.",
-            unresolved_ambiguities=(),
-            next_step=(
-                "Ask a data owner to grant Dataset Access or ask about "
-                "available data."
-            ),
-            datasets=("commerce",),
         )
     )
 

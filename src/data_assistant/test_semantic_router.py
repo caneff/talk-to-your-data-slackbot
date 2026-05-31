@@ -1,3 +1,4 @@
+import data_assistant.non_answer_catalog as non_answer_catalog
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_matcher as semantic_matcher
 import data_assistant.semantic_router as semantic_router
@@ -55,10 +56,7 @@ def test_semantic_router_returns_non_answer_when_no_dataset_matches(
 
     result = semantic_router.select_dataset(semantic_matches)
 
-    assert result == contracts.NonAnswer(
+    assert result == non_answer_catalog.non_answer(
+        contracts.NonAnswerReasonCode.NO_MATCHING_DATASET,
         stage=contracts.NonAnswerStage.SEMANTIC_ROUTER,
-        reason_code=contracts.NonAnswerReasonCode.NO_MATCHING_DATASET,
-        reason="No Curated Dataset safely matches the Question Frame.",
-        unresolved_ambiguities=("curated dataset",),
-        next_step="Ask which approved business data should be used.",
     )
