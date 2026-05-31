@@ -20,8 +20,7 @@ import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_layer.testing_support as semantic_layer_testing
 
 ProviderResult: typing.TypeAlias = (
-    question_interpreter.QuestionFrameProposal
-    | question_interpreter.ProviderFailure
+    question_interpreter.QuestionFrameProposal | question_interpreter.ProviderFailure
 )
 
 

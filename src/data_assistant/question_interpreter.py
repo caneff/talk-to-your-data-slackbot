@@ -230,8 +230,7 @@ def _developer_message() -> OpenAIInputMessage:
 @functools.cache
 def _developer_instructions() -> str:
     return (
-        importlib.resources
-        .files(prompts)
+        importlib.resources.files(prompts)
         .joinpath(_QUESTION_INTERPRETER_DEVELOPER_PROMPT)
         .read_text(encoding="utf-8")
         .strip()
@@ -333,33 +332,37 @@ def build_semantic_layer_context(
             dataset,
             semantic_layer,
         )
-        datasets.append({
-            "name": dataset.name,
-            "information_types": list(dataset.information_types),
-            "example_questions": list(dataset.example_questions),
-            "available_metric_labels": sorted({
-                metric.label for table in dataset_tables for metric in table.metrics
-            }),
-            "available_fields": sorted(
-                [
+        datasets.append(
+            {
+                "name": dataset.name,
+                "information_types": list(dataset.information_types),
+                "example_questions": list(dataset.example_questions),
+                "available_metric_labels": sorted(
                     {
-                        "label": field.label,
-                        "data_type": field.data_type,
-                        "operations": sorted(
-                            operation.value for operation in field.operations
-                        ),
+                        metric.label
+                        for table in dataset_tables
+                        for metric in table.metrics
                     }
-                    for table in dataset_tables
-                    for field in table.fields
-                ],
-                key=lambda field_context: typing.cast(str, field_context["label"]),
-            ),
-            "available_field_labels": sorted({
-                field.label
-                for table in dataset_tables
-                for field in table.fields
-            }),
-        })
+                ),
+                "available_fields": sorted(
+                    [
+                        {
+                            "label": field.label,
+                            "data_type": field.data_type,
+                            "operations": sorted(
+                                operation.value for operation in field.operations
+                            ),
+                        }
+                        for table in dataset_tables
+                        for field in table.fields
+                    ],
+                    key=lambda field_context: typing.cast(str, field_context["label"]),
+                ),
+                "available_field_labels": sorted(
+                    {field.label for table in dataset_tables for field in table.fields}
+                ),
+            }
+        )
 
     return {
         "datasets": datasets,
@@ -377,9 +380,7 @@ def _metric_labels(semantic_layer: schema.SemanticLayer) -> tuple[str, ...]:
 
 def _field_labels(semantic_layer: schema.SemanticLayer) -> tuple[str, ...]:
     return tuple(
-        field.label
-        for table in semantic_layer.tables
-        for field in table.fields
+        field.label for table in semantic_layer.tables for field in table.fields
     )
 
 

@@ -108,9 +108,7 @@ def build_openai_answer_path(
     environ: collections_abc.Mapping[str, str],
 ) -> slack_boundary.AnswerPath:
     """Build the Slack answer path using the live OpenAI Question Interpreter."""
-    provider = question_interpreter.build_openai_question_interpreter_provider(
-        environ
-    )
+    provider = question_interpreter.build_openai_question_interpreter_provider(environ)
 
     def answer_path(
         connection: duckdb.DuckDBPyConnection,
@@ -154,9 +152,7 @@ def load_slack_runtime_config(
 ) -> SlackRuntimeConfig:
     """Load required Slack runtime config from environment variables only."""
     missing_names = [
-        name
-        for name in ("SLACK_BOT_TOKEN", "SLACK_APP_TOKEN")
-        if not environ.get(name)
+        name for name in ("SLACK_BOT_TOKEN", "SLACK_APP_TOKEN") if not environ.get(name)
     ]
     if missing_names:
         joined_names = ", ".join(missing_names)
@@ -266,8 +262,9 @@ def _default_socket_mode_handler_factory(
     )
 
 
-def _dev_connection_factory(
-) -> contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]:
+def _dev_connection_factory() -> contextlib.AbstractContextManager[
+    duckdb.DuckDBPyConnection
+]:
     """Provide a tiny local DuckDB fixture for manual Slack smoke testing."""
     return local_orders_fixture.connect_orders(
         (

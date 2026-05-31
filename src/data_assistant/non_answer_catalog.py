@@ -85,8 +85,7 @@ _DEFINITIONS: dict[contracts.NonAnswerReasonCode, _NonAnswerDefinition] = {
     contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,
         reason=(
-            "The Data Assistant could not match the requested Semantic Layer "
-            "labels."
+            "The Data Assistant could not match the requested Semantic Layer labels."
         ),
         context=(),
         next_step="Use exact Semantic Layer metric and dimension labels.",

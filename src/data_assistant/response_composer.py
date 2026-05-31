@@ -23,8 +23,12 @@ def compose_final_response(
     answer_draft: contracts.AnswerDraft,
 ) -> contracts.FinalResponse:
     """Compose a concise plain-text Final Response with a Trust Summary."""
-    formatted_metric_values = answer_draft.key_data["metric_value"].astype(float).map(
-        _format_money,
+    formatted_metric_values = (
+        answer_draft.key_data["metric_value"]
+        .astype(float)
+        .map(
+            _format_money,
+        )
     )
     revenue_lines = "\n".join(
         "- "
@@ -62,9 +66,7 @@ def compose_non_answer_response(
     response_kind = non_answer_catalog.response_kind_for(non_answer.reason_code)
     wording = wording_provider.render_wording(non_answer)
     adverb = (
-        " yet"
-        if response_kind == contracts.ResponseKind.CLARIFICATION_NEEDED
-        else ""
+        " yet" if response_kind == contracts.ResponseKind.CLARIFICATION_NEEDED else ""
     )
     reason = wording.reason[0].lower() + wording.reason[1:]
     trust_summary = contracts.TrustSummary(

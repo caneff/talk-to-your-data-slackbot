@@ -16,9 +16,7 @@ def test_data_request_asks_for_total_revenue_grouped_by_region(
     assert data_request.group_by_fields[0].field_id == "region"
     assert data_request.group_by_fields[0].label == "region"
     assert data_request.group_by_fields[0].source_column == "region"
-    assert data_request.filter_labels == (
-        "order date >= 2026-01-01 and <= 2026-01-31",
-    )
+    assert data_request.filter_labels == ("order date >= 2026-01-01 and <= 2026-01-31",)
     assert data_request.output_shape == "total revenue grouped by region"
 
 
@@ -29,6 +27,7 @@ def test_data_request_selects_orders_when_commerce_has_customer_metadata(
     assert data_request.table.table_id == "orders"
     assert data_request.metric.metric_id == "total_revenue"
     assert data_request.group_by_fields[0].field_id == "region"
+
 
 def test_data_requester_returns_non_answer_for_unknown_filter_field(
     question_frame: contracts.QuestionFrame,

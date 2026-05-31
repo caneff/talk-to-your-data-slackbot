@@ -20,10 +20,7 @@ def test_semantic_router_resolves_available_data(
     resolution = result.value
     assert resolution.resolved_match.table.table_id == "orders"
     assert len(resolution.dataset_selection.selected_datasets) == 1
-    assert (
-        resolution.dataset_selection.selected_datasets[0].dataset_id
-        == "commerce"
-    )
+    assert resolution.dataset_selection.selected_datasets[0].dataset_id == "commerce"
 
 
 def test_dataset_selection_chooses_one_curated_dataset_with_rationale(
@@ -63,8 +60,9 @@ def test_semantic_router_returns_non_answer_when_no_dataset_matches(
     )
 
 
-def test_semantic_router_returns_ambiguous_table_for_two_tables_in_one_dataset(
-) -> None:
+def test_semantic_router_returns_ambiguous_table_for_two_tables_in_one_dataset() -> (
+    None
+):
     freshness = schema.Freshness(
         as_of=datetime.date(2026, 1, 31),
         description="Clean fixture rows for January 2026.",
