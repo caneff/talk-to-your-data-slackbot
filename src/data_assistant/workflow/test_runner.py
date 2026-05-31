@@ -363,7 +363,7 @@ def _ambiguous_table_semantic_layer(
     )
     dataset = schema.CuratedDataset(
         dataset_id="commerce",
-        name="Commerce Revenue",
+        name="Commerce",
         tables=("orders", "order_rollups"),
         information_types=("revenue",),
         freshness=freshness,

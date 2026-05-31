@@ -11,6 +11,7 @@ def test_semantic_layer_loads_dataset_table_relationship() -> None:
     tables = semantic_layer_loader.tables_for_dataset(dataset, loaded_semantic_layer)
     table_ids = {table.table_id for table in tables}
 
+    assert dataset.name == "Commerce"
     assert dataset.tables == ("orders", "customers")
     assert dataset.dataset_access.allowed_identity_ids == (
         "employee_123",
