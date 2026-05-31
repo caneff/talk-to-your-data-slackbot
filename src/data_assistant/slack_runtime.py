@@ -14,7 +14,7 @@ import dotenv
 import duckdb
 
 import data_assistant.access_controller as access_controller
-import data_assistant.local_orders_fixture as local_orders_fixture
+import data_assistant.local_duckdb_fixture as local_duckdb_fixture
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.slack_boundary as slack_boundary
 import data_assistant.workflow.contracts as contracts
@@ -266,7 +266,7 @@ def _dev_connection_factory() -> contextlib.AbstractContextManager[
     duckdb.DuckDBPyConnection
 ]:
     """Provide a tiny local DuckDB fixture for manual Slack smoke testing."""
-    return local_orders_fixture.connect_orders(
+    return local_duckdb_fixture.connect_orders(
         (
             ("2026-01-03", "North", "1200.00"),
             ("2026-01-10", "South", "800.00"),
