@@ -11,6 +11,7 @@ import duckdb
 import data_assistant.access_controller as access_controller
 import data_assistant.local_orders_fixture as local_orders_fixture
 import data_assistant.question_interpreter as question_interpreter
+import data_assistant.question_interpreter.question_frame_cases as question_frame_cases
 import data_assistant.slack_boundary as slack_boundary
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
@@ -47,6 +48,12 @@ class _RecordingSlackGateway:
 
 
 class _DemoQuestionInterpreterProvider:
+    def __init__(self) -> None:
+        self._proposals_by_question = {
+            case.question: case.expected
+            for case in question_frame_cases.SHARED_QUESTION_FRAME_CASES
+        }
+
     def propose_question_frame(
         self,
         *,
@@ -54,33 +61,14 @@ class _DemoQuestionInterpreterProvider:
         semantic_layer_context: dict[str, object],
     ) -> question_interpreter.QuestionFrameProposal:
         del semantic_layer_context
-        if question == "What was total revenue by region?":
-            return question_interpreter.QuestionFrameProposal(
-                intent="summarize",
-                metric=None,
-                field_operations=(
-                    question_interpreter.GroupByOperationProposal(
-                        operation="group_by",
-                        field="region",
-                    ),
-                ),
-            )
-        return question_interpreter.QuestionFrameProposal(
-            intent="summarize",
-            metric="total revenue",
-            field_operations=(
-                question_interpreter.GroupByOperationProposal(
-                    operation="group_by",
-                    field="region",
-                ),
-                question_interpreter.RangeFilterOperationProposal(
-                    operation="range_filter",
-                    field="order date",
-                    lower="2026-01-01",
-                    upper="2026-01-31",
-                ),
-            ),
-        )
+        return self._proposals_by_question[question]
+
+
+def build_demo_question_interpreter_provider() -> (
+    question_interpreter.QuestionInterpreterProvider
+):
+    """Build the fake Question Interpreter provider used by the local demo."""
+    return _DemoQuestionInterpreterProvider()
 
 
 def run_demo() -> tuple[DemoScenarioResult, ...]:
@@ -158,7 +146,7 @@ def _run_demo_answer_path(
     return workflow_runner.run_data_assistant(
         connection,
         question,
-        question_interpreter_provider=_DemoQuestionInterpreterProvider(),
+        question_interpreter_provider=build_demo_question_interpreter_provider(),
         internal_identity=internal_identity,
     )
 
