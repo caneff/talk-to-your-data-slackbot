@@ -119,9 +119,7 @@ def figure_free_result_shape(slot_values: dict[str, object]) -> dict[str, object
     ``dimension_count`` is ``1`` (truthy) yet must not leak.
     """
     is_grouped = bool(slot_values.get("dimension"))
-    available_slots = _SCALAR_SLOT_NAMES + (
-        _GROUPING_SLOT_NAMES if is_grouped else ()
-    )
+    available_slots = _SCALAR_SLOT_NAMES + (_GROUPING_SLOT_NAMES if is_grouped else ())
     return {"available_slots": available_slots}
 
 

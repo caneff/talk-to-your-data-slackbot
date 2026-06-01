@@ -83,9 +83,7 @@ def test_comparator_reports_missing_headline_metric_total_value() -> None:
         slot_values=slot_values,
     )
 
-    assert reasons == (
-        "computed value $5,150.00 absent from filled summary",
-    )
+    assert reasons == ("computed value $5,150.00 absent from filled summary",)
 
 
 def test_comparator_reports_ungrounded_digit() -> None:
@@ -150,9 +148,7 @@ def test_comparator_reports_value_string_absent_from_filled_summary() -> None:
     )
 
     assert "$5,150.00" in slot_values["metric_total"]  # type: ignore[operator]
-    assert reasons == (
-        "computed value $5,150.00 absent from filled summary",
-    )
+    assert reasons == ("computed value $5,150.00 absent from filled summary",)
 
 
 def test_comparator_reports_provider_failure_when_not_degradable() -> None:
