@@ -3,6 +3,7 @@ import typing
 
 import pytest
 
+import data_assistant.openai_support as openai_support
 import data_assistant.reasoning_layer as reasoning_layer
 import data_assistant.reasoning_layer.openai_provider as openai_provider
 import data_assistant.reasoning_layer.test_support as test_support
@@ -151,7 +152,7 @@ def test_build_openai_reasoning_provider_passes_timeout_and_retries_to_client(
 
         responses = object()
 
-    monkeypatch.setattr(openai_provider, "OpenAI", FakeOpenAI)
+    monkeypatch.setattr(openai_support, "OpenAI", FakeOpenAI)
 
     reasoning_layer.build_openai_reasoning_provider(
         {
