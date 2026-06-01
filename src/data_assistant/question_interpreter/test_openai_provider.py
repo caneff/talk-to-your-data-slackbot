@@ -35,6 +35,76 @@ def test_load_openai_provider_config_allows_model_override() -> None:
     )
 
 
+def test_load_openai_provider_config_defaults_timeout_and_retries() -> None:
+    config = question_interpreter.load_openai_question_interpreter_config(
+        {"OPENAI_API_KEY": "test-key"}
+    )
+
+    assert config.timeout_seconds == 15.0
+    assert config.max_retries == 1
+
+
+def test_load_openai_provider_config_allows_timeout_and_retries_override() -> None:
+    config = question_interpreter.load_openai_question_interpreter_config(
+        {
+            "OPENAI_API_KEY": "test-key",
+            "OPENAI_TIMEOUT_SECONDS": "42.5",
+            "OPENAI_MAX_RETRIES": "3",
+        }
+    )
+
+    assert config.timeout_seconds == 42.5
+    assert config.max_retries == 3
+
+
+def test_load_openai_provider_config_rejects_non_numeric_timeout() -> None:
+    with pytest.raises(
+        question_interpreter.OpenAIQuestionInterpreterConfigError
+    ) as error_info:
+        question_interpreter.load_openai_question_interpreter_config(
+            {"OPENAI_API_KEY": "test-key", "OPENAI_TIMEOUT_SECONDS": "soon"}
+        )
+
+    assert "OPENAI_TIMEOUT_SECONDS" in str(error_info.value)
+
+
+def test_load_openai_provider_config_rejects_non_numeric_retries() -> None:
+    with pytest.raises(
+        question_interpreter.OpenAIQuestionInterpreterConfigError
+    ) as error_info:
+        question_interpreter.load_openai_question_interpreter_config(
+            {"OPENAI_API_KEY": "test-key", "OPENAI_MAX_RETRIES": "lots"}
+        )
+
+    assert "OPENAI_MAX_RETRIES" in str(error_info.value)
+
+
+def test_build_openai_provider_passes_timeout_and_retries_to_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_kwargs: dict[str, object] = {}
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs: object) -> None:
+            captured_kwargs.update(kwargs)
+
+        responses = object()
+
+    monkeypatch.setattr(openai_provider, "OpenAI", FakeOpenAI)
+
+    question_interpreter.build_openai_question_interpreter_provider(
+        {
+            "OPENAI_API_KEY": "test-key",
+            "OPENAI_TIMEOUT_SECONDS": "42.5",
+            "OPENAI_MAX_RETRIES": "3",
+        }
+    )
+
+    assert captured_kwargs["api_key"] == "test-key"
+    assert captured_kwargs["timeout"] == 42.5
+    assert captured_kwargs["max_retries"] == 3
+
+
 def _openai_provider_returning(
     response: object,
     *,

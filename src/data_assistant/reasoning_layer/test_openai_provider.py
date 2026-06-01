@@ -100,6 +100,72 @@ def test_build_openai_reasoning_provider_accepts_injected_client() -> None:
     assert result == FakeParsedResponse.output_parsed
 
 
+def test_load_openai_reasoning_config_defaults_timeout_and_retries() -> None:
+    config = reasoning_layer.load_openai_reasoning_config(
+        {"OPENAI_API_KEY": "test-key"}
+    )
+
+    assert config.timeout_seconds == 15.0
+    assert config.max_retries == 1
+
+
+def test_load_openai_reasoning_config_allows_timeout_and_retries_override() -> None:
+    config = reasoning_layer.load_openai_reasoning_config(
+        {
+            "OPENAI_API_KEY": "test-key",
+            "OPENAI_TIMEOUT_SECONDS": "42.5",
+            "OPENAI_MAX_RETRIES": "3",
+        }
+    )
+
+    assert config.timeout_seconds == 42.5
+    assert config.max_retries == 3
+
+
+def test_load_openai_reasoning_config_rejects_non_numeric_timeout() -> None:
+    with pytest.raises(reasoning_layer.OpenAIReasoningConfigError) as error_info:
+        reasoning_layer.load_openai_reasoning_config(
+            {"OPENAI_API_KEY": "test-key", "OPENAI_TIMEOUT_SECONDS": "soon"}
+        )
+
+    assert "OPENAI_TIMEOUT_SECONDS" in str(error_info.value)
+
+
+def test_load_openai_reasoning_config_rejects_non_numeric_retries() -> None:
+    with pytest.raises(reasoning_layer.OpenAIReasoningConfigError) as error_info:
+        reasoning_layer.load_openai_reasoning_config(
+            {"OPENAI_API_KEY": "test-key", "OPENAI_MAX_RETRIES": "lots"}
+        )
+
+    assert "OPENAI_MAX_RETRIES" in str(error_info.value)
+
+
+def test_build_openai_reasoning_provider_passes_timeout_and_retries_to_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_kwargs: dict[str, object] = {}
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs: object) -> None:
+            captured_kwargs.update(kwargs)
+
+        responses = object()
+
+    monkeypatch.setattr(openai_provider, "OpenAI", FakeOpenAI)
+
+    reasoning_layer.build_openai_reasoning_provider(
+        {
+            "OPENAI_API_KEY": "test-key",
+            "OPENAI_TIMEOUT_SECONDS": "42.5",
+            "OPENAI_MAX_RETRIES": "3",
+        }
+    )
+
+    assert captured_kwargs["api_key"] == "test-key"
+    assert captured_kwargs["timeout"] == 42.5
+    assert captured_kwargs["max_retries"] == 3
+
+
 def test_openai_provider_returns_narrative_proposal_from_parsed_response() -> None:
     parse_calls: list[dict[str, object]] = []
 
