@@ -21,6 +21,14 @@ rehearsal remains a separate human step.
 - If a prompt below says verified, that means repo-local deterministic coverage
   against seeded DuckDB data, not live-provider behavior.
 
+## Assistant Suggested Prompt Set
+
+Use these exact prompts for Assistant suggested prompts:
+
+- `What was total net revenue by store region in Q1 2026?`
+- `What was total net revenue by store region?`
+- `Which region had the highest total net revenue in Q1 2026?`
+
 ## Demo Beats
 
 ### 1. Grounded answer with Trust Summary

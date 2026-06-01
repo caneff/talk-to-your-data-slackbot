@@ -26,6 +26,11 @@ def test_retail_ops_demo_questions_artifact_locks_runtime_and_demo_beats() -> No
         "--duckdb-path :memory: "
         "--seed-sql-path examples/retail_ops_demo/seeds/retail_ops_seed.sql"
     ) in content
+    assert "Assistant Suggested Prompt Set" in content
+    assert "Use these exact prompts for Assistant suggested prompts:" in content
+    assert "`What was total net revenue by store region in Q1 2026?`" in content
+    assert "`What was total net revenue by store region?`" in content
+    assert "`Which region had the highest total net revenue in Q1 2026?`" in content
     assert "Grounded answer with Trust Summary" in content
     assert "Refusal for unspecified Time Scope" in content
     assert "Won't-fabricate / visible degradation beat" in content
