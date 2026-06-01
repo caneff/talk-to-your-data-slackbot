@@ -251,6 +251,9 @@ def test_run_eval_suite_requires_all_samples_to_match_for_case_pass() -> None:
     assert report.failures[0].reasons == (
         "sample 2: metric: expected 'total revenue', got 'gross margin'",
     )
+    assert report.failures[0].actual == test_support.question_frame_proposal(
+        metric="gross margin",
+    )
     assert provider.calls == ["flaky", "flaky", "flaky"]
 
 

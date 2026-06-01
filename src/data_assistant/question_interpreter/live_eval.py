@@ -141,6 +141,7 @@ def run_live_question_interpreter_eval(
         pass_count = 0
         sample_failures: list[str] = []
         last_actual: ProviderResult | None = None
+        last_failure_actual: ProviderResult | None = None
         for sample_index in range(sample_count):
             actual = provider.propose_question_frame(
                 question=case.question,
@@ -152,6 +153,7 @@ def run_live_question_interpreter_eval(
                 actual=actual,
             )
             if reasons:
+                last_failure_actual = actual
                 sample_failures.extend(
                     f"sample {sample_index + 1}: {reason}" for reason in reasons
                 )
@@ -166,7 +168,7 @@ def run_live_question_interpreter_eval(
                     case_name=case.name,
                     question=case.question,
                     expected=case.expected,
-                    actual=last_actual,
+                    actual=typing.cast(ProviderResult, last_failure_actual),
                     reasons=tuple(sample_failures),
                     pass_count=pass_count,
                     sample_count=sample_count,
