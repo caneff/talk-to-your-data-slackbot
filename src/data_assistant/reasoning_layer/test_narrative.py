@@ -39,6 +39,22 @@ def test_compute_slot_values_for_scalar_prepared_data_has_empty_ranking() -> Non
     }
 
 
+def test_compute_slot_values_for_empty_grouped_data_has_empty_ranking() -> None:
+    slot_values = reasoning_layer.compute_slot_values(
+        narrative_cases.prepared_empty_revenue_by_region()
+    )
+
+    assert slot_values == {
+        "metric": "Total revenue",
+        "time_range": "2025-10-01 through 2025-12-31",
+        "metric_total": "$0.00",
+        "dimension": "regions",
+        "dimension_count": 0,
+        "top_dimension": "",
+        "top_value": "",
+    }
+
+
 def test_figure_free_result_shape_grouped_lists_all_seven_slot_names() -> None:
     slot_values = reasoning_layer.compute_slot_values(
         narrative_cases.prepared_revenue_by_region()

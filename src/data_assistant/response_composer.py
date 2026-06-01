@@ -49,10 +49,11 @@ def compose_final_response(
         caveats=answer_draft.caveats,
         limitations=answer_draft.limitations,
     )
-    text = (
-        f"{answer_draft.summary}\n\n{metric_lines}\n\n"
-        f"{render_trust_summary(trust_summary)}"
-    )
+    rendered_trust_summary = render_trust_summary(trust_summary)
+    if metric_lines:
+        text = f"{answer_draft.summary}\n\n{metric_lines}\n\n{rendered_trust_summary}"
+    else:
+        text = f"{answer_draft.summary}\n\n{rendered_trust_summary}"
 
     return contracts.FinalResponse(
         text=text,

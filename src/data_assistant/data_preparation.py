@@ -64,6 +64,7 @@ def prepare_data(
     quality_query = f"""
         with {filtered_rows_cte}
         select
+            count(*) as filtered_row_count,
             coalesce(sum(
                 case
                     when {metric_source_column} is null then 1
@@ -84,13 +85,15 @@ def prepare_data(
     ).df()
     quality_counts = connection.execute(quality_query, filter_parameters).fetchone()
     assert quality_counts is not None
-    missing_metric_count = int(quality_counts[0])
-    missing_dimension_count = int(quality_counts[1])
+    filtered_row_count = int(quality_counts[0])
+    missing_metric_count = int(quality_counts[1])
+    missing_dimension_count = int(quality_counts[2])
 
     return contracts.PreparedData(
         request=data_request,
         data=prepared_dataframe,
         quality_notes=_quality_notes(
+            filtered_row_count=filtered_row_count,
             metric_column=metric_source_column,
             dimension_label=group_by_field.label if group_by_field else "",
             missing_metric_count=missing_metric_count,
@@ -145,12 +148,15 @@ def _filter_sql(
 
 def _quality_notes(
     *,
+    filtered_row_count: int,
     metric_column: str,
     dimension_label: str,
     missing_metric_count: int,
     missing_dimension_count: int,
 ) -> tuple[str, ...]:
     notes: list[str] = []
+    if filtered_row_count == 0:
+        notes.append("No rows matched the request filters.")
     if missing_metric_count:
         notes.append(
             f"{missing_metric_count} {_row_word(missing_metric_count)} excluded "
