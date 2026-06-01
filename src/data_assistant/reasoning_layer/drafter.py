@@ -46,8 +46,10 @@ def draft_narrative(
     if not proposals.proposal_is_grounded(proposal):
         return _with_withheld_caveat(deterministic_draft)
 
-    narrative_summary = proposal.summary.format_map(slot_values)
-    return dataclasses.replace(deterministic_draft, summary=narrative_summary)
+    filled = proposals.fill_narrative(proposal, slot_values)
+    if filled is None:
+        return _with_withheld_caveat(deterministic_draft)
+    return dataclasses.replace(deterministic_draft, summary=filled)
 
 
 def _template_summary(

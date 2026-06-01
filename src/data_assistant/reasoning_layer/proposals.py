@@ -112,6 +112,17 @@ def figure_free_result_shape(slot_values: dict[str, object]) -> dict[str, object
     }
 
 
+def fill_narrative(
+    proposal: NarrativeProposal,
+    slot_values: dict[str, object],
+) -> str | None:
+    """Fill slots; None if prose references an unknown slot or malformed brace."""
+    try:
+        return proposal.summary.format_map(slot_values)
+    except (KeyError, ValueError, IndexError):
+        return None
+
+
 def proposal_is_grounded(proposal: NarrativeProposal) -> bool:
     """Return whether the raw proposal prose contains no ungrounded digit.
 
