@@ -208,6 +208,13 @@ grounding properties on `propose_narrative(...)` rather than prose exact-match:
 - the proposal fills (no unknown slot or stray brace)
 - the pipeline's computed values land in the filled summary
 
+The grounded cases need a gpt-4o-class model. The default `gpt-4o-mini`
+under-performs the zero-digit rule because `result_shape` currently hands the
+model digit-bearing values (the date range, the dimension count) it is asked not
+to echo; set `OPENAI_MODEL=gpt-4o` for a representative run. The
+`scalar_customer_count` case is disabled pending the value-free `result_shape`
+fix tracked in issue #92.
+
 Run the full-pipeline adversarial eval, which drives one adversarial question
 end to end through every LLM layer (Question Interpreter and Reasoning Layer)
 against a seeded in-memory DuckDB:
