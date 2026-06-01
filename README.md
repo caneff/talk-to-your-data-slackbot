@@ -120,6 +120,33 @@ uv run python -m data_assistant.slack_runtime --semantic-layer-path examples/ret
 `--seed-sql-path` is optional for an existing DuckDB file. It is useful for demo
 data because startup stays one command.
 
+## Run in Docker
+
+Build local image:
+
+```bash
+docker build -t talk-to-your-data-slackbot:local .
+```
+
+Create local `.env` first:
+
+- `SLACK_BOT_TOKEN`
+- `SLACK_APP_TOKEN`
+- `OPENAI_API_KEY`
+- optional `OPENAI_MODEL`
+  default is `gpt-4o-mini`
+
+Run local Socket Mode adapter from the image:
+
+```bash
+docker run --env-file .env talk-to-your-data-slackbot:local
+```
+
+The container still runs `python -m data_assistant.slack_runtime`, so the Slack
+app from `slack-app-manifest.yaml` is still required. Socket Mode opens an
+outbound connection to Slack and binds no inbound port, so no `-p` flag is
+needed for local Docker runs.
+
 ## Manual Slack smoke test
 
 1. Start the adapter with `uv run python -m data_assistant.slack_runtime`.
