@@ -3,23 +3,28 @@ _metadata:
   minor_version: 1
 display_information:
   name: Talk to Your Data Slackbot
-  description: DM-only local MVP for asking governed data questions.
+  description: A grounded assistant for governed retail-operations data questions.
 features:
   app_home:
     home_tab_enabled: false
     messages_tab_enabled: true
     messages_tab_read_only_enabled: false
+  assistant_view:
+    assistant_description: Ask grounded questions about the retail operations data — orders, products, customers, stores, support, inventory.
   bot_user:
     display_name: Data Assistant
     always_online: false
 oauth_config:
   scopes:
     bot:
+      - assistant:write
       - chat:write
       - im:history
 settings:
   event_subscriptions:
     bot_events:
+      - assistant_thread_started
+      - assistant_thread_context_changed
       - message.im
   org_deploy_enabled: false
   socket_mode_enabled: true
