@@ -23,8 +23,10 @@ class FieldOperationProposal(pydantic.BaseModel):
             "Use group_by for requested grouping, range_filter for complete "
             "calendar months or date ranges, include_filter for exact dates or "
             "explicitly included dimension values, and exclude_filter only for "
-            "explicitly excluded values. Do not emit operations for fields that "
-            "are merely available in semantic_layer_context."
+            "explicitly excluded values with non-empty values. Do not emit "
+            "operations for fields that are merely available in "
+            "semantic_layer_context, and never use include_filter or "
+            "exclude_filter with empty values."
         ),
     )
     field: str = pydantic.Field(
@@ -34,14 +36,16 @@ class FieldOperationProposal(pydantic.BaseModel):
         default=None,
         description=(
             "Lower range_filter value. Use ISO YYYY-MM-DD for date ranges. "
-            "Null for group_by, include_filter, and exclude_filter."
+            "Null for group_by, include_filter, and exclude_filter. At least "
+            "one of lower or upper must be non-null for range_filter."
         ),
     )
     upper: str | None = pydantic.Field(
         default=None,
         description=(
             "Upper range_filter value. Use ISO YYYY-MM-DD for date ranges. "
-            "Null for group_by, include_filter, and exclude_filter."
+            "Null for group_by, include_filter, and exclude_filter. At least "
+            "one of lower or upper must be non-null for range_filter."
         ),
     )
     values: tuple[str, ...] = pydantic.Field(
@@ -69,21 +73,27 @@ class QuestionFrameProposal(pydantic.BaseModel):
         description=(
             "Use summarize for supported Data Questions that ask for historical "
             "metric totals, summaries, or grouped results, including phrases "
-            "like 'what was', 'show', and 'summarize'. Use null only when no "
-            "supported intent applies."
+            "like 'what was', 'show', and 'summarize'. Use rank for deferred "
+            "top/bottom questions that ask for highest, lowest, most, least, "
+            "biggest, smallest, top, or bottom results. Other deferred intent "
+            "names such as compare, trend, forecast, explain, prescribe, or "
+            "diagnose are allowed for clearly classified unsupported Data "
+            "Questions. Use null only when no Data Question intent applies."
         ),
     )
     metric: str | None = pydantic.Field(
         description=(
             "Business-facing Semantic Metric label from semantic_layer_context, "
-            "or null when no matching metric is present."
+            "or null when no matching metric is present. Unsupported intents "
+            "still set this when the Data Question names a known metric."
         ),
     )
     field_operations: tuple[FieldOperationProposal, ...] = pydantic.Field(
         description=(
             "Every explicit grouping, date constraint, and filter from the "
             "Data Question, represented with Semantic Field labels. Do not add "
-            "operations for fields that are merely available in context."
+            "operations for fields that are merely available in context or "
+            "examples. If the question omits time, omit date operations."
         ),
     )
     all_time: bool = pydantic.Field(

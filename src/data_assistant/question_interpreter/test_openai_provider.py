@@ -125,6 +125,7 @@ def test_openai_provider_returns_question_frame_proposal_from_parsed_response() 
 
     assert result == FakeParsedResponse.output_parsed
     assert len(parse_calls) == 1
+    assert parse_calls[0]["temperature"] == 0
     input_messages = typing.cast(
         list[dict[str, str]],
         parse_calls[0]["input"],
@@ -159,6 +160,10 @@ def test_openai_provider_schema_rejects_empty_implicit_filters() -> None:
     values_schema = field_operation_schema["properties"]["values"]
 
     assert "merely available in context" in field_operations_schema["description"]
+    assert (
+        "question omits time, omit date operations"
+        in (field_operations_schema["description"])
+    )
     assert (
         "merely available in semantic_layer_context" in operation_schema["description"]
     )
@@ -289,6 +294,46 @@ def test_openai_provider_prompt_forbids_implicit_empty_filters() -> None:
     assert 'For "What was total revenue by region?"' in developer_prompt
     assert "exactly one field_operation" in developer_prompt
     assert 'operation "group_by", field "region"' in developer_prompt
+    assert 'Do not add any "order date" operation' in developer_prompt
+    assert 'range_filter for "order date" with null bounds' in developer_prompt
+    assert "Semantic Layer examples and available fields describe capabilities" in (
+        developer_prompt
+    )
+
+
+def test_openai_provider_prompt_classifies_rank_as_unsupported_intent() -> None:
+    parse_calls: list[dict[str, object]] = []
+
+    class FakeParsedResponse:
+        output_parsed = test_support.question_frame_proposal(intent="rank")
+
+    provider = _openai_provider_returning(
+        FakeParsedResponse(),
+        parse_calls=parse_calls,
+    )
+
+    provider.propose_question_frame(
+        question="Which region had the highest total revenue in January 2026?",
+        semantic_layer_context={"datasets": []},
+    )
+
+    input_messages = typing.cast(
+        list[dict[str, str]],
+        parse_calls[0]["input"],
+    )
+    developer_prompt = input_messages[0]["content"]
+    assert 'Use intent "rank" for unsupported top or bottom Data Questions' in (
+        developer_prompt
+    )
+    assert "highest, lowest, most, least, biggest, smallest, top, or bottom" in (
+        developer_prompt
+    )
+    assert (
+        'For "Which region had the highest total revenue in January 2026?"'
+        in developer_prompt
+    )
+    assert 'return\nintent "rank"' in developer_prompt
+    assert 'Do not collapse that question into intent "summarize"' in (developer_prompt)
 
 
 def test_openai_provider_prompt_describes_dimension_value_filters() -> None:

@@ -83,6 +83,7 @@ class OpenAIQuestionInterpreterProvider:
                     semantic_layer_context=semantic_layer_context,
                 ),
                 text_format=QuestionFrameProposal,
+                temperature=0,
             )
         except Exception as error:
             return ProviderFailure(reason=str(error) or "OpenAI provider failed")

@@ -18,13 +18,31 @@ _Avoid_: Query, prompt, report request
 
 **Supported Intent**:
 A type of **Data Question** the **Data Assistant** is expected to handle in v1,
-including summarize, compare, explain, list top or bottom results, and trend.
+including summarize.
 _Avoid_: Capability, command, query type
 
 **Deferred Intent**:
-A type of **Data Question** intentionally left out of v1, including forecast,
-prescribe, automated root-cause analysis, and background anomaly detection.
+A type of **Data Question** intentionally left out of v1, including compare,
+explain, list top or bottom results, trend, forecast, prescribe, automated
+root-cause analysis, and background anomaly detection.
 _Avoid_: Unsupported feature, backlog item, advanced query
+
+**Unsupported Intent**:
+A **Deferred Intent** identified by the **Question Interpreter** and rejected by
+the current workflow because v1 supports only summarize.
+_Avoid_: Invalid question, parser failure, unsupported shape
+
+**Rank Intent**:
+An **Unsupported Intent** for Data Questions that ask for top, bottom, highest,
+lowest, most, least, biggest, or smallest results. v1 rejects this intent rather
+than collapsing it into a grouped summarize answer.
+_Avoid_: Grouped summary, comparison, sort request
+
+**Unsupported Intent Guard**:
+A deterministic **Question Interpreter** check that rejects high-confidence
+**Unsupported Intent** wording before provider calls, backed by provider-output
+promotion that rejects every non-summarize intent.
+_Avoid_: Prompt-only support policy, LLM fallback, best-effort classification
 
 **Slack Acknowledgement**:
 The quick confirmation sent to Slack that a request was received, before the

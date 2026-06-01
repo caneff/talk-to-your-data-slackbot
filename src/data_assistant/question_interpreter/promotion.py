@@ -34,6 +34,11 @@ def interpret_question(
             contracts.NonAnswerReasonCode.UNSUPPORTED_DATA,
             stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         )
+    if interpreter_guards.mentions_rank_intent(normalized_question):
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
 
     # Semantic Layer context is intentionally business-facing: labels and
     # examples, not table names, SQL, column names, or access internals.

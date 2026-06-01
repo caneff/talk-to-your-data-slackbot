@@ -237,12 +237,36 @@ CONTRACT_SNAPSHOT_CASES = (
             contracts.NonAnswerReasonCode.UNSUPPORTED_DATA, stage=_STAGE
         ),
     ),
+    provider_snapshot_case(
+        name="rank_intent_pre_provider_guard",
+        question="Which region had the highest total revenue in January 2026?",
+        provider=interpreter_support.provider_that_must_not_be_called(),
+        expected=non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT, stage=_STAGE
+        ),
+    ),
+    provider_snapshot_case(
+        name="rank_intent_most_money_pre_provider_guard",
+        question="Which region made most money in January?",
+        provider=interpreter_support.provider_that_must_not_be_called(),
+        expected=non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT, stage=_STAGE
+        ),
+    ),
     snapshot_case(
-        name="unsupported_intent",
+        name="unsupported_forecast_intent",
         proposal=interpreter_support.question_frame_proposal(intent="forecast"),
         expected=non_answer_catalog.non_answer(
             contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT, stage=_STAGE
         ),
+    ),
+    snapshot_case(
+        name="unsupported_rank_intent",
+        proposal=interpreter_support.question_frame_proposal(intent="rank"),
+        expected=non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT, stage=_STAGE
+        ),
+        question="Which region had total revenue ranked first in January 2026?",
     ),
     snapshot_case(
         name="hallucinated_metric",
