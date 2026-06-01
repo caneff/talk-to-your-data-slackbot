@@ -186,6 +186,41 @@ If any case fails, output includes each failed case name, question, expected
 proposal, actual provider result, and field-level mismatch reason. Missing
 `OPENAI_API_KEY` exits nonzero with a clear config error.
 
+## Manual live Reasoning Layer evals
+
+The same agent guard applies: do not run these without an explicit request for a
+live OpenAI-backed run. Both read `OPENAI_API_KEY` (and optional `OPENAI_MODEL`)
+from `.env`, and exit nonzero on any failure or missing key.
+
+Run the Reasoning Layer narrative eval (grounding-property comparator, not exact
+match) with `OPENAI_API_KEY` in `.env`:
+
+```bash
+uv run python -m data_assistant.reasoning_layer.live_eval
+```
+
+It samples each enabled case k=3, passes only when every sample passes, reports
+a per-case pass rate, and exits nonzero on any failure. The comparator asserts
+grounding properties on `propose_narrative(...)` rather than prose exact-match:
+
+- the required slot tokens appear in the raw proposal (e.g. `{top_dimension}`)
+- the prose is grounded (no digit anywhere — slots carry every figure)
+- the proposal fills (no unknown slot or stray brace)
+- the pipeline's computed values land in the filled summary
+
+Run the full-pipeline adversarial eval, which drives one adversarial question
+end to end through every LLM layer (Question Interpreter and Reasoning Layer)
+against a seeded in-memory DuckDB:
+
+```bash
+uv run python -m data_assistant.workflow.live_eval
+```
+
+It asserts the safe property — the final answer ships no fabricated figure: it
+either grounds and fills with only legitimate pipeline values, or degrades
+visibly to the deterministic template. It never asserts the live model always
+degrades.
+
 ## Development
 
 Run checks with `uv`:
