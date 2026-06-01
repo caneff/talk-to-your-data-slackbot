@@ -86,8 +86,12 @@ def test_build_openai_answer_path_uses_openai_provider_without_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured_providers: list[object] = []
+    captured_reasoning_providers: list[object] = []
 
     class FakeProvider:
+        pass
+
+    class FakeReasoningProvider:
         pass
 
     def fake_build_openai_provider(
@@ -99,15 +103,26 @@ def test_build_openai_answer_path_uses_openai_provider_without_fallback(
         assert environ["OPENAI_API_KEY"] == "test-key"
         return FakeProvider()
 
+    def fake_build_openai_reasoning_provider(
+        environ: collections.abc.Mapping[str, str],
+        *,
+        client: object | None = None,
+    ) -> FakeReasoningProvider:
+        del client
+        assert environ["OPENAI_API_KEY"] == "test-key"
+        return FakeReasoningProvider()
+
     def fake_run_data_assistant(
         connection: duckdb.DuckDBPyConnection,
         question: str,
         internal_identity: contracts.InternalIdentity,
         semantic_layer: object | None = None,
         question_interpreter_provider: object | None = None,
+        reasoning_provider: object | None = None,
     ) -> contracts.FinalResponse:
         del connection, question, internal_identity, semantic_layer
         captured_providers.append(question_interpreter_provider)
+        captured_reasoning_providers.append(reasoning_provider)
         return contracts.FinalResponse(
             text="openai answer path",
             trust_summary=contracts.TrustSummary(),
@@ -118,6 +133,11 @@ def test_build_openai_answer_path_uses_openai_provider_without_fallback(
         slack_runtime.question_interpreter,
         "build_openai_question_interpreter_provider",
         fake_build_openai_provider,
+    )
+    monkeypatch.setattr(
+        slack_runtime.reasoning_layer,
+        "build_openai_reasoning_provider",
+        fake_build_openai_reasoning_provider,
     )
     monkeypatch.setattr(
         slack_runtime.workflow_runner,
@@ -139,6 +159,8 @@ def test_build_openai_answer_path_uses_openai_provider_without_fallback(
     assert result.response_kind == contracts.ResponseKind.ANSWER
     assert len(captured_providers) == 1
     assert isinstance(captured_providers[0], FakeProvider)
+    assert len(captured_reasoning_providers) == 1
+    assert isinstance(captured_reasoning_providers[0], FakeReasoningProvider)
 
 
 @pytest.mark.parametrize(
