@@ -40,11 +40,16 @@ def _payload(
     }
 
 
-def _final_response(text: str = "Final answer text.") -> contracts.FinalResponse:
+def _final_response(
+    text: str = "Final answer text.",
+    *,
+    blocks: tuple[contracts.SlackBlock, ...] = (),
+) -> contracts.FinalResponse:
     return contracts.FinalResponse(
         text=text,
         trust_summary=contracts.TrustSummary(datasets=("Commerce",)),
         response_kind=contracts.ResponseKind.ANSWER,
+        blocks=blocks,
     )
 
 
@@ -129,3 +134,40 @@ def test_handle_slack_event_passes_resolved_internal_identity_to_answer_path(
 
     assert seen_slack_user_ids == ["U999"]
     assert seen_identity_ids == ["employee_123"]
+
+
+def test_handle_slack_event_carries_final_response_blocks_into_delivery(
+    canonical_question: str,
+) -> None:
+    gateway = RecordingSlackGateway()
+    blocks: tuple[contracts.SlackBlock, ...] = (
+        {
+            "type": "table",
+            "rows": [
+                [
+                    {"type": "raw_text", "text": "Group"},
+                    {"type": "raw_text", "text": "Value"},
+                ],
+            ],
+        },
+    )
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        question: str,
+        internal_identity: contracts.InternalIdentity,
+    ) -> slack_boundary.SlackWorkflowResult:
+        del internal_identity
+        assert question == canonical_question
+        return _final_response(blocks=blocks)
+
+    with duckdb.connect(":memory:") as connection:
+        result = slack_boundary.handle_slack_event(
+            payload=_payload(text=canonical_question),
+            connection=connection,
+            gateway=gateway,
+            answer_path=answer_path,
+        )
+
+    assert gateway.deliveries[0].blocks == blocks
+    assert result.delivery.blocks == blocks

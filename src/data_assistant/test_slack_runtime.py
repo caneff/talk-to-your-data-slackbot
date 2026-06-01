@@ -245,16 +245,24 @@ class RecordingSlackClient:
     """Capture Slack DM replies without calling Slack APIs."""
 
     def __init__(self) -> None:
-        self.calls: list[dict[str, str]] = []
+        self.calls: list[dict[str, object]] = []
 
-    def chat_postMessage(self, *, channel: str, thread_ts: str, text: str) -> None:
-        self.calls.append(
-            {
-                "channel": channel,
-                "thread_ts": thread_ts,
-                "text": text,
-            }
-        )
+    def chat_postMessage(
+        self,
+        *,
+        channel: str,
+        thread_ts: str,
+        text: str,
+        blocks: collections.abc.Sequence[contracts.SlackBlock] | None = None,
+    ) -> None:
+        call: dict[str, object] = {
+            "channel": channel,
+            "thread_ts": thread_ts,
+            "text": text,
+        }
+        if blocks is not None:
+            call["blocks"] = blocks
+        self.calls.append(call)
 
 
 class RecordingBoltApp:
@@ -309,6 +317,17 @@ def test_handle_socket_mode_event_routes_human_dm_through_existing_boundary(
         text="Final answer text.",
         trust_summary=contracts.TrustSummary(datasets=("Commerce",)),
         response_kind=contracts.ResponseKind.ANSWER,
+        blocks=(
+            {
+                "type": "table",
+                "rows": [
+                    [
+                        {"type": "raw_text", "text": "Group"},
+                        {"type": "raw_text", "text": "Value"},
+                    ],
+                ],
+            },
+        ),
     )
 
     def acknowledge() -> None:
@@ -349,6 +368,7 @@ def test_handle_socket_mode_event_routes_human_dm_through_existing_boundary(
             "channel": "D123",
             "thread_ts": "1710000000.654321",
             "text": "Final answer text.",
+            "blocks": final_response.blocks,
         }
     ]
 

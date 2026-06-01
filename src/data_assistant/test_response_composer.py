@@ -37,10 +37,12 @@ def test_response_composer_returns_plain_text_with_trust_summary() -> None:
             datasets_used=("Commerce",),
             dataset_tables_used=("orders",),
             metric_kind=schema.MetricKind.MONEY,
+            metric_label="total revenue",
             time_range="January 2026",
             filters=(),
             freshness="Commerce order data refreshed through 2026-01-31.",
             caveats=("1 row excluded because revenue was missing.",),
+            group_by_label="region",
         )
     )
 
@@ -63,6 +65,79 @@ def test_response_composer_returns_plain_text_with_trust_summary() -> None:
     )
 
 
+def test_response_composer_returns_visible_slack_blocks_for_answer_package() -> None:
+    response = response_composer.compose_final_response(
+        contracts.AnswerDraft(
+            summary=(
+                "Total revenue in January 2026 was $2,050.00, grouped across 2 regions."
+            ),
+            key_data=pd.DataFrame(
+                {
+                    "dimension_value": ("North", "South"),
+                    "metric_value": (1200.0, 850.0),
+                }
+            ),
+            datasets_used=("Commerce",),
+            dataset_tables_used=("orders",),
+            metric_kind=schema.MetricKind.MONEY,
+            metric_label="total revenue",
+            time_range="January 2026",
+            filters=(),
+            freshness="Commerce order data refreshed through 2026-01-31.",
+            caveats=("1 row excluded because revenue was missing.",),
+            group_by_label="region",
+        )
+    )
+
+    assert response.blocks == (
+        {
+            "type": "section",
+            "text": {
+                "type": "plain_text",
+                "text": (
+                    "Total revenue in January 2026 was $2,050.00, grouped across "
+                    "2 regions."
+                ),
+            },
+        },
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "plain_text",
+                    "text": (
+                        "Trust Summary: Curated Dataset: Commerce. Dataset Table: "
+                        "orders. Time range: January 2026. Freshness: Commerce "
+                        "order data refreshed through 2026-01-31. Caveats: 1 row "
+                        "excluded because revenue was missing."
+                    ),
+                },
+            ],
+        },
+        {
+            "type": "table",
+            "column_settings": [
+                {"is_wrapped": True},
+                {"align": "right"},
+            ],
+            "rows": [
+                [
+                    {"type": "raw_text", "text": "Region"},
+                    {"type": "raw_text", "text": "Total revenue"},
+                ],
+                [
+                    {"type": "raw_text", "text": "North"},
+                    {"type": "raw_text", "text": "$1,200.00"},
+                ],
+                [
+                    {"type": "raw_text", "text": "South"},
+                    {"type": "raw_text", "text": "$850.00"},
+                ],
+            ],
+        },
+    )
+
+
 def test_response_composer_formats_count_rows_from_metric_kind() -> None:
     response = response_composer.compose_final_response(
         contracts.AnswerDraft(
@@ -78,6 +153,7 @@ def test_response_composer_formats_count_rows_from_metric_kind() -> None:
             datasets_used=("Commerce Customers",),
             dataset_tables_used=("customers",),
             metric_kind=schema.MetricKind.COUNT,
+            metric_label="customer count",
             time_range="January 2026",
             filters=(),
             freshness="Commerce customer data refreshed through 2026-01-31.",

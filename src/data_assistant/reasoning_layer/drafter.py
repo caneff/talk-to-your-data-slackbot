@@ -85,10 +85,14 @@ def _answer_draft(
         datasets_used=(request.dataset.name,),
         dataset_tables_used=(request.table.table_id,),
         metric_kind=request.metric.kind,
+        metric_label=request.metric.label,
         time_range=time_range,
         filters=request.filter_labels,
         freshness=request.dataset.freshness.description,
         caveats=prepared_data.quality_notes,
+        group_by_label=(
+            request.group_by_fields[0].label if request.group_by_fields else None
+        ),
     )
 
 

@@ -54,11 +54,14 @@ class SlackDelivery:
         this as `thread_ts` so responses appear in the original thread.
     text : str
         User-facing Final Response or Non-Answer Response text.
+    blocks : tuple[contracts.SlackBlock, ...]
+        Optional Slack Block Kit payload for richer rendering.
     """
 
     channel: str
     thread_ts: str
     text: str
+    blocks: tuple[contracts.SlackBlock, ...] = ()
 
 
 @dataclasses.dataclass(frozen=True)
@@ -147,17 +150,21 @@ def handle_slack_event(
     gateway.acknowledge()
     internal_identity = internal_identity_resolver(payload["event"])
     result = answer_path(connection, payload["event"]["text"], internal_identity)
+    final_response = _final_response_from_workflow_result(result)
     delivery = SlackDelivery(
         channel=payload["event"]["channel"],
         thread_ts=payload["event"]["ts"],
-        text=_render_workflow_result(result),
+        text=final_response.text,
+        blocks=final_response.blocks,
     )
     gateway.deliver_response(delivery)
     return SlackRequestResult(acknowledged=True, delivery=delivery)
 
 
-def _render_workflow_result(result: SlackWorkflowResult) -> str:
-    """Render a core workflow result as user-facing Slack text."""
+def _final_response_from_workflow_result(
+    result: SlackWorkflowResult,
+) -> contracts.FinalResponse:
+    """Return the core workflow result's user-facing Final Response."""
     if isinstance(result, contracts.FinalResponse):
-        return result.text
-    return result.final_response.text
+        return result
+    return result.final_response

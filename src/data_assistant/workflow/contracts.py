@@ -173,6 +173,9 @@ class ResponseKind(enum.StrEnum):
     UNSUPPORTED = "unsupported"
 
 
+SlackBlock: typing.TypeAlias = dict[str, object]
+
+
 @dataclasses.dataclass(frozen=True)
 class NonAnswer:
     """Workflow short-circuit when a stage cannot safely proceed.
@@ -257,11 +260,13 @@ class AnswerDraft:
     datasets_used: tuple[str, ...]
     dataset_tables_used: tuple[str, ...]
     metric_kind: schema.MetricKind
+    metric_label: str
     time_range: str
     filters: tuple[str, ...]
     freshness: str
     caveats: tuple[str, ...]
     limitations: tuple[str, ...] = ()
+    group_by_label: str | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -284,6 +289,7 @@ class FinalResponse:
     text: str
     trust_summary: TrustSummary
     response_kind: ResponseKind
+    blocks: tuple[SlackBlock, ...] = ()
 
 
 @dataclasses.dataclass(frozen=True)

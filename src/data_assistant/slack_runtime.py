@@ -94,7 +94,14 @@ class SlackBoltMessageEvent(typing.TypedDict):
 class SlackBoltChatClient(typing.Protocol):
     """Minimal Slack client surface used by the runtime adapter."""
 
-    def chat_postMessage(self, *, channel: str, thread_ts: str, text: str) -> None:
+    def chat_postMessage(
+        self,
+        *,
+        channel: str,
+        thread_ts: str,
+        text: str,
+        blocks: collections_abc.Sequence[contracts.SlackBlock] | None = None,
+    ) -> None:
         """Post a threaded DM response back to Slack."""
 
 
@@ -112,10 +119,12 @@ class _SocketModeSlackGateway:
             self._acknowledged = True
 
     def deliver_response(self, delivery: slack_boundary.SlackDelivery) -> None:
+        payload_blocks = delivery.blocks or None
         self._client.chat_postMessage(
             channel=delivery.channel,
             thread_ts=delivery.thread_ts,
             text=delivery.text,
+            blocks=payload_blocks,
         )
 
 

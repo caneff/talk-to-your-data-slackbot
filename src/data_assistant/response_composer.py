@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import typing
 
+import pandas as pd
+
 import data_assistant.metric_formatter as metric_formatter
 import data_assistant.non_answer_catalog as non_answer_catalog
 import data_assistant.workflow.contracts as contracts
@@ -23,7 +25,7 @@ class NonAnswerWordingProvider(typing.Protocol):
 def compose_final_response(
     answer_draft: contracts.AnswerDraft,
 ) -> contracts.FinalResponse:
-    """Compose a concise plain-text Final Response with a Trust Summary."""
+    """Compose a Slack-ready Final Response with a Trust Summary fallback."""
     formatted_metric_values = (
         answer_draft.key_data["metric_value"]
         .astype(float)
@@ -59,6 +61,16 @@ def compose_final_response(
         text=text,
         trust_summary=trust_summary,
         response_kind=contracts.ResponseKind.ANSWER,
+        blocks=_render_answer_blocks(
+            summary=answer_draft.summary,
+            trust_summary=rendered_trust_summary,
+            table_blocks=_render_key_data_table_block(
+                answer_draft.key_data,
+                formatted_metric_values,
+                dimension_header=answer_draft.group_by_label or "Group",
+                metric_header=answer_draft.metric_label,
+            ),
+        ),
     )
 
 
@@ -108,3 +120,74 @@ def render_trust_summary(trust_summary: contracts.TrustSummary) -> str:
     if trust_summary.limitations:
         segments.append(f"Limitations: {' '.join(trust_summary.limitations)}")
     return "Trust Summary: " + " ".join(segments)
+
+
+def _render_answer_blocks(
+    *,
+    summary: str,
+    trust_summary: str,
+    table_blocks: tuple[contracts.SlackBlock, ...],
+) -> tuple[contracts.SlackBlock, ...]:
+    return (
+        {
+            "type": "section",
+            "text": {
+                "type": "plain_text",
+                "text": summary,
+            },
+        },
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "plain_text",
+                    "text": trust_summary,
+                },
+            ],
+        },
+        *table_blocks,
+    )
+
+
+def _render_key_data_table_block(
+    key_data: pd.DataFrame,
+    formatted_metric_values: pd.Series,
+    *,
+    dimension_header: str,
+    metric_header: str,
+) -> tuple[contracts.SlackBlock, ...]:
+    rows = [
+        [
+            {"type": "raw_text", "text": _capitalize_label(dimension_header)},
+            {"type": "raw_text", "text": _capitalize_label(metric_header)},
+        ],
+    ]
+    rows.extend(
+        [
+            {"type": "raw_text", "text": str(dimension_value)},
+            {"type": "raw_text", "text": str(metric_value)},
+        ]
+        for dimension_value, metric_value in zip(
+            key_data["dimension_value"],
+            formatted_metric_values,
+            strict=True,
+        )
+    )
+    if len(rows) == 1 or len(rows) > 100:
+        return ()
+    return (
+        {
+            "type": "table",
+            "column_settings": [
+                {"is_wrapped": True},
+                {"align": "right"},
+            ],
+            "rows": rows,
+        },
+    )
+
+
+def _capitalize_label(label: str) -> str:
+    if not label:
+        return label
+    return label[0].upper() + label[1:]
