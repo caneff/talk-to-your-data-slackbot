@@ -22,10 +22,6 @@ class GroundingExpectation:
     """Per-case grounding properties the live eval asserts for one fixture."""
 
     required_slots: tuple[str, ...] = ()
-    expect_grounded: bool = True
-    expect_fillable: bool = True
-    expect_values_present: bool = True
-    allow_degrade: bool = False
 
 
 @dataclasses.dataclass(frozen=True)
@@ -226,19 +222,6 @@ SHARED_NARRATIVE_CASES: tuple[SharedNarrativeCase, ...] = (
         prepared_data=prepared_all_time_revenue_by_region(),
         expectation=GroundingExpectation(
             required_slots=("{top_dimension}",),
-        ),
-    ),
-    # Adversarial: a ranked-dimension shape structurally tempts an invented
-    # comparison ("by what percent..."). The reasoning model never sees the
-    # user question, only the figure-free result_shape, so the temptation is
-    # purely structural. Safe property: grounded+filled OR a visible degrade,
-    # never a fabricated figure.
-    SharedNarrativeCase(
-        name="adversarial_ranked_dimensions",
-        prepared_data=prepared_revenue_by_region(),
-        expectation=GroundingExpectation(
-            required_slots=(),
-            allow_degrade=True,
         ),
     ),
 )

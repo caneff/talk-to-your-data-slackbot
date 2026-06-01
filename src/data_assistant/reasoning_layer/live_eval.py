@@ -10,7 +10,6 @@ The live entry point (``main``) is run manually by the user against a real
 
 from __future__ import annotations
 
-import argparse
 import collections.abc
 import dataclasses
 import os
@@ -23,7 +22,6 @@ import dotenv
 import data_assistant.reasoning_layer as reasoning_layer
 import data_assistant.reasoning_layer.narrative_cases as narrative_cases
 import data_assistant.reasoning_layer.proposals as proposals
-import data_assistant.workflow.contracts as contracts
 
 ProviderResult: typing.TypeAlias = (
     reasoning_layer.NarrativeProposal | reasoning_layer.ProviderFailure
@@ -31,16 +29,6 @@ ProviderResult: typing.TypeAlias = (
 
 # Slots whose computed value-strings must survive into the filled summary.
 _VALUE_SLOTS: tuple[str, ...] = ("metric_total", "top_value")
-
-
-@dataclasses.dataclass(frozen=True)
-class LiveEvalCase:
-    """One manual live eval fixture with its grounding expectation."""
-
-    name: str
-    prepared_data: contracts.PreparedData
-    expectation: narrative_cases.GroundingExpectation
-    enabled: bool = True
 
 
 @dataclasses.dataclass(frozen=True)
@@ -79,15 +67,7 @@ class LiveEvalReport:
         return len(self.failures)
 
 
-DEFAULT_CASES: tuple[LiveEvalCase, ...] = tuple(
-    LiveEvalCase(
-        name=case.name,
-        prepared_data=case.prepared_data,
-        expectation=case.expectation,
-        enabled=case.enabled,
-    )
-    for case in narrative_cases.SHARED_NARRATIVE_CASES
-)
+DEFAULT_CASES = narrative_cases.SHARED_NARRATIVE_CASES
 DEFAULT_SAMPLE_COUNT = 3
 
 
@@ -97,77 +77,34 @@ def compare_grounding(
     expectation: narrative_cases.GroundingExpectation,
     slot_values: dict[str, object],
 ) -> tuple[str, ...]:
-    """Return grounding-property mismatches for one proposal.
-
-    With ``allow_degrade`` the adversarial safe property holds: a proposal that
-    would degrade visibly to the template (provider failure, ungrounded prose,
-    or an unfillable summary) passes, because that path never ships a fabricated
-    figure. Otherwise every requested grounding property must hold.
-    """
+    """Return grounding-property mismatches for one proposal."""
     if isinstance(proposal, reasoning_layer.ProviderFailure):
-        if expectation.allow_degrade:
-            return ()
         return (f"provider failure: {proposal.reason}",)
-
-    grounded = proposals.proposal_is_grounded(proposal)
-    filled = proposals.fill_narrative(proposal, slot_values)
-
-    if expectation.allow_degrade:
-        # Safe property: grounded + fillable (a usable narrative) OR a visible
-        # degrade. The only failure is prose that is grounded AND fillable yet
-        # still drops a fabricated figure — impossible here, since grounding
-        # already rejects every digit. So any outcome is safe.
-        if grounded and filled is not None:
-            return _value_presence_reasons(
-                filled=filled,
-                slot_values=slot_values,
-                require=False,
-            )
-        return ()
-
     reasons: list[str] = []
-    if expectation.expect_grounded and not grounded:
+    if not proposals.proposal_is_grounded(proposal):
         reasons.append("proposal is not grounded: prose contains a digit")
-    if expectation.expect_fillable and filled is None:
+    filled = proposals.fill_narrative(proposal, slot_values)
+    if filled is None:
         reasons.append("proposal is not fillable: references an unknown slot")
     for required_slot in expectation.required_slots:
         if required_slot not in proposal.summary:
             reasons.append(
                 f"required slot {required_slot} missing from proposal summary"
             )
-    if expectation.expect_values_present and filled is not None:
-        reasons.extend(
-            _value_presence_reasons(
-                filled=filled,
-                slot_values=slot_values,
-                require=True,
-            )
-        )
-    return tuple(reasons)
-
-
-def _value_presence_reasons(
-    *,
-    filled: str,
-    slot_values: dict[str, object],
-    require: bool,
-) -> tuple[str, ...]:
-    if not require:
-        return ()
-    reasons: list[str] = []
-    for slot_name in _VALUE_SLOTS:
-        value = str(slot_values.get(slot_name, ""))
-        if not value:
-            continue
-        if value not in filled:
-            reasons.append(f"computed value {value} absent from filled summary")
+    if filled is not None:
+        for slot_name in _VALUE_SLOTS:
+            value = str(slot_values.get(slot_name, ""))
+            if value and value not in filled:
+                reasons.append(f"computed value {value} absent from filled summary")
     return tuple(reasons)
 
 
 def run_live_reasoning_eval(
     *,
     provider: reasoning_layer.ReasoningProvider,
-    cases: collections.abc.Iterable[LiveEvalCase] = DEFAULT_CASES,
+    cases: collections.abc.Iterable[
+        narrative_cases.SharedNarrativeCase
+    ] = DEFAULT_CASES,
     sample_count: int = DEFAULT_SAMPLE_COUNT,
 ) -> LiveEvalReport:
     """Run all enabled live eval cases k times and aggregate failures."""
@@ -222,10 +159,8 @@ def write_live_eval_report(
     *,
     stdout: typing.TextIO,
     report: LiveEvalReport,
-    verbose: bool = False,
 ) -> None:
     """Print aggregate results and detailed failures."""
-    del verbose
     stdout.write(f"Total cases: {report.total}\n")
     stdout.write(f"Passed: {report.passed}\n")
     stdout.write(f"Failed: {report.failed}\n")
@@ -249,10 +184,8 @@ def main(
     stderr: typing.TextIO = sys.stderr,
     environ: collections.abc.Mapping[str, str] | None = None,
     env_file: str | pathlib.Path = ".env",
-    argv: collections.abc.Sequence[str] = (),
 ) -> int:
     """Run the manual live eval suite against the real OpenAI provider config."""
-    verbose = _parse_verbose(argv)
     active_environ = environ
     if active_environ is None:
         dotenv.load_dotenv(dotenv_path=env_file, override=False)
@@ -265,25 +198,11 @@ def main(
         return 1
 
     report = run_live_reasoning_eval(provider=provider)
-    write_live_eval_report(stdout=stdout, report=report, verbose=verbose)
+    write_live_eval_report(stdout=stdout, report=report)
     if report.failed:
         return 1
     return 0
 
 
-def _parse_verbose(argv: collections.abc.Sequence[str]) -> bool:
-    parser = argparse.ArgumentParser(
-        description="Run manual live evals for the OpenAI Reasoning Layer.",
-    )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="print full per-case detail",
-    )
-    args = parser.parse_args(list(argv))
-    return typing.cast(bool, args.verbose)
-
-
 if __name__ == "__main__":
-    raise SystemExit(main(argv=sys.argv[1:]))
+    raise SystemExit(main())

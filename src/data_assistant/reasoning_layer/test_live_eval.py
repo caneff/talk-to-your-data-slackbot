@@ -1,7 +1,6 @@
 import collections.abc
 import io
 import pathlib
-import typing
 
 import pytest
 
@@ -58,13 +57,11 @@ def test_comparator_reports_ungrounded_digit() -> None:
 
     reasons = live_eval.compare_grounding(
         proposal=proposal,
-        expectation=narrative_cases.GroundingExpectation(
-            expect_values_present=False,
-        ),
+        expectation=narrative_cases.GroundingExpectation(),
         slot_values=slot_values,
     )
 
-    assert reasons == ("proposal is not grounded: prose contains a digit",)
+    assert "proposal is not grounded: prose contains a digit" in reasons
 
 
 def test_comparator_reports_unfillable_unknown_slot() -> None:
@@ -75,13 +72,11 @@ def test_comparator_reports_unfillable_unknown_slot() -> None:
 
     reasons = live_eval.compare_grounding(
         proposal=proposal,
-        expectation=narrative_cases.GroundingExpectation(
-            expect_values_present=False,
-        ),
+        expectation=narrative_cases.GroundingExpectation(),
         slot_values=slot_values,
     )
 
-    assert reasons == ("proposal is not fillable: references an unknown slot",)
+    assert "proposal is not fillable: references an unknown slot" in reasons
 
 
 def test_comparator_reports_missing_required_slot_token() -> None:
@@ -96,12 +91,11 @@ def test_comparator_reports_missing_required_slot_token() -> None:
         proposal=proposal,
         expectation=narrative_cases.GroundingExpectation(
             required_slots=("{top_dimension}",),
-            expect_values_present=False,
         ),
         slot_values=slot_values,
     )
 
-    assert reasons == ("required slot {top_dimension} missing from proposal summary",)
+    assert "required slot {top_dimension} missing from proposal summary" in reasons
 
 
 def test_comparator_reports_value_string_absent_from_filled_summary() -> None:
@@ -123,41 +117,6 @@ def test_comparator_reports_value_string_absent_from_filled_summary() -> None:
     )
 
 
-def test_comparator_allow_degrade_accepts_ungrounded_proposal() -> None:
-    proposal = reasoning_layer.NarrativeProposal(summary="West led by 6%.")
-    slot_values = reasoning_layer.compute_slot_values(
-        narrative_cases.prepared_revenue_by_region()
-    )
-
-    reasons = live_eval.compare_grounding(
-        proposal=proposal,
-        expectation=narrative_cases.GroundingExpectation(allow_degrade=True),
-        slot_values=slot_values,
-    )
-
-    assert reasons == ()
-
-
-def test_comparator_allow_degrade_accepts_grounded_filled_proposal() -> None:
-    proposal = reasoning_layer.NarrativeProposal(
-        summary=(
-            "{metric} in {time_range} totaled {metric_total}, led by "
-            "{top_dimension} at {top_value}."
-        )
-    )
-    slot_values = reasoning_layer.compute_slot_values(
-        narrative_cases.prepared_revenue_by_region()
-    )
-
-    reasons = live_eval.compare_grounding(
-        proposal=proposal,
-        expectation=narrative_cases.GroundingExpectation(allow_degrade=True),
-        slot_values=slot_values,
-    )
-
-    assert reasons == ()
-
-
 def test_comparator_reports_provider_failure_when_not_degradable() -> None:
     slot_values = reasoning_layer.compute_slot_values(
         narrative_cases.prepared_revenue_by_region()
@@ -170,20 +129,6 @@ def test_comparator_reports_provider_failure_when_not_degradable() -> None:
     )
 
     assert reasons == ("provider failure: offline",)
-
-
-def test_comparator_allow_degrade_accepts_provider_failure() -> None:
-    slot_values = reasoning_layer.compute_slot_values(
-        narrative_cases.prepared_revenue_by_region()
-    )
-
-    reasons = live_eval.compare_grounding(
-        proposal=reasoning_layer.ProviderFailure(reason="offline"),
-        expectation=narrative_cases.GroundingExpectation(allow_degrade=True),
-        slot_values=slot_values,
-    )
-
-    assert reasons == ()
 
 
 # --- degrade-guarantee tests via draft_narrative (the hard guarantee) ---
@@ -249,20 +194,25 @@ def test_run_eval_reports_all_failures_without_fail_fast() -> None:
         ) -> reasoning_layer.NarrativeProposal | reasoning_layer.ProviderFailure:
             del result_shape
             self.calls += 1
-            return reasoning_layer.NarrativeProposal(summary="West led by 6%.")
+            return reasoning_layer.NarrativeProposal(
+                summary="{metric} in {time_range} totaled {metric_total}, led by "
+                "{top_dimension} at {top_value}."
+            )
 
     provider = FakeProvider()
     cases = (
-        live_eval.LiveEvalCase(
+        narrative_cases.SharedNarrativeCase(
             name="passing",
             prepared_data=narrative_cases.prepared_revenue_by_region(),
-            expectation=narrative_cases.GroundingExpectation(allow_degrade=True),
+            expectation=narrative_cases.GroundingExpectation(
+                required_slots=("{top_dimension}",),
+            ),
         ),
-        live_eval.LiveEvalCase(
+        narrative_cases.SharedNarrativeCase(
             name="failing",
             prepared_data=narrative_cases.prepared_revenue_by_region(),
             expectation=narrative_cases.GroundingExpectation(
-                expect_values_present=False,
+                required_slots=("{missing_slot}",),
             ),
         ),
     )
@@ -277,9 +227,9 @@ def test_run_eval_reports_all_failures_without_fail_fast() -> None:
     assert report.passes[0].sample_count == 3
     assert report.failures[0].case_name == "failing"
     assert report.failures[0].reasons == (
-        "sample 1: proposal is not grounded: prose contains a digit",
-        "sample 2: proposal is not grounded: prose contains a digit",
-        "sample 3: proposal is not grounded: prose contains a digit",
+        "sample 1: required slot {missing_slot} missing from proposal summary",
+        "sample 2: required slot {missing_slot} missing from proposal summary",
+        "sample 3: required slot {missing_slot} missing from proposal summary",
     )
     assert provider.calls == 6
 
@@ -312,12 +262,10 @@ def test_run_eval_requires_all_samples_to_pass_for_case_pass() -> None:
 
     provider = FakeProvider()
     cases = (
-        live_eval.LiveEvalCase(
+        narrative_cases.SharedNarrativeCase(
             name="flaky",
             prepared_data=narrative_cases.prepared_revenue_by_region(),
-            expectation=narrative_cases.GroundingExpectation(
-                expect_values_present=False,
-            ),
+            expectation=narrative_cases.GroundingExpectation(),
         ),
     )
 
@@ -327,15 +275,16 @@ def test_run_eval_requires_all_samples_to_pass_for_case_pass() -> None:
     assert report.failed == 1
     assert report.failures[0].pass_count == 2
     assert report.failures[0].sample_count == 3
-    assert report.failures[0].reasons == (
-        "sample 2: proposal is not grounded: prose contains a digit",
+    assert (
+        "sample 2: proposal is not grounded: prose contains a digit"
+        in report.failures[0].reasons
     )
 
 
 def test_run_eval_skips_disabled_cases() -> None:
     provider = _fake_provider(reasoning_layer.NarrativeProposal(summary="West led."))
     cases = (
-        live_eval.LiveEvalCase(
+        narrative_cases.SharedNarrativeCase(
             name="disabled",
             prepared_data=narrative_cases.prepared_revenue_by_region(),
             expectation=narrative_cases.GroundingExpectation(),
@@ -360,15 +309,8 @@ def test_run_eval_rejects_non_positive_sample_count() -> None:
 
 
 def test_default_cases_come_from_shared_narrative_cases() -> None:
-    assert live_eval.DEFAULT_CASES == tuple(
-        live_eval.LiveEvalCase(
-            name=case.name,
-            prepared_data=case.prepared_data,
-            expectation=case.expectation,
-            enabled=case.enabled,
-        )
-        for case in narrative_cases.SHARED_NARRATIVE_CASES
-    )
+    assert live_eval.DEFAULT_CASES is narrative_cases.SHARED_NARRATIVE_CASES
+    assert len(live_eval.DEFAULT_CASES) == 3
 
 
 # --- report writing ---
@@ -451,7 +393,7 @@ def test_main_returns_zero_when_all_cases_pass(
     def fake_run_eval(
         *,
         provider: reasoning_layer.ReasoningProvider,
-        cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
+        cases: collections.abc.Iterable[narrative_cases.SharedNarrativeCase] = (
             live_eval.DEFAULT_CASES
         ),
         sample_count: int = live_eval.DEFAULT_SAMPLE_COUNT,
@@ -492,7 +434,7 @@ def test_main_returns_one_when_report_has_failures(
     def fake_run_eval(
         *,
         provider: reasoning_layer.ReasoningProvider,
-        cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
+        cases: collections.abc.Iterable[narrative_cases.SharedNarrativeCase] = (
             live_eval.DEFAULT_CASES
         ),
         sample_count: int = live_eval.DEFAULT_SAMPLE_COUNT,
@@ -525,57 +467,3 @@ def test_main_returns_one_when_report_has_failures(
     )
 
     assert exit_code == 1
-
-
-def test_main_passes_verbose_flag_to_report_writer(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: pathlib.Path,
-) -> None:
-    env_file = tmp_path / ".env"
-    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    captured_verbose: list[bool] = []
-
-    def fake_build_provider(
-        environ: collections.abc.Mapping[str, str],
-    ) -> reasoning_layer.ReasoningProvider:
-        del environ
-        return _fake_provider(reasoning_layer.NarrativeProposal(summary="x"))
-
-    def fake_run_eval(
-        *,
-        provider: reasoning_layer.ReasoningProvider,
-        cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
-            live_eval.DEFAULT_CASES
-        ),
-        sample_count: int = live_eval.DEFAULT_SAMPLE_COUNT,
-    ) -> live_eval.LiveEvalReport:
-        del provider, cases, sample_count
-        return live_eval.LiveEvalReport(total=0, passes=(), failures=())
-
-    def fake_write_report(
-        *,
-        stdout: typing.TextIO,
-        report: live_eval.LiveEvalReport,
-        verbose: bool = False,
-    ) -> None:
-        del stdout, report
-        captured_verbose.append(verbose)
-
-    monkeypatch.setattr(
-        live_eval.reasoning_layer,
-        "build_openai_reasoning_provider",
-        fake_build_provider,
-    )
-    monkeypatch.setattr(live_eval, "run_live_reasoning_eval", fake_run_eval)
-    monkeypatch.setattr(live_eval, "write_live_eval_report", fake_write_report)
-
-    exit_code = live_eval.main(
-        stdout=io.StringIO(),
-        stderr=io.StringIO(),
-        env_file=env_file,
-        argv=("--verbose",),
-    )
-
-    assert exit_code == 0
-    assert captured_verbose == [True]
