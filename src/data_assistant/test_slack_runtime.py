@@ -390,9 +390,8 @@ def test_main_starts_socket_mode_with_dev_connection_factory(
     tmp_path: pathlib.Path,
 ) -> None:
     dev_connection_factory = slack_runtime._dev_connection_factory  # pyright: ignore[reportPrivateUsage]
-    dev_identity_resolver = typing.cast(
-        slack_assistant.AssistantIdentityResolver,
-        slack_assistant._dev_identity,  # pyright: ignore[reportPrivateUsage]
+    dev_identity_resolver: slack_assistant.AssistantIdentityResolver = (
+        slack_assistant.dev_identity
     )
     received_connection_factory: list[slack_runtime.ConnectionFactory | None] = []
     received_identity_resolver: list[

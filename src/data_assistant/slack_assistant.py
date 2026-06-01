@@ -112,14 +112,12 @@ class SuggestedPromptsSetter(typing.Protocol):
         """Offer suggested prompts in the assistant thread."""
 
 
-def _default_identity(user: str) -> contracts.InternalIdentity:
+def default_identity(user: str) -> contracts.InternalIdentity:
     """Map a Slack user id into the workflow contract without org policy."""
     return contracts.InternalIdentity(identity_id=f"slack_user:{user}")
 
 
-def _dev_identity(  # pyright: ignore[reportUnusedFunction]
-    user: str,
-) -> contracts.InternalIdentity:
+def dev_identity(user: str) -> contracts.InternalIdentity:
     """Use the local allowed identity for manual development smoke testing."""
     del user
     return access_controller.DEFAULT_LOCAL_ALLOWED_IDENTITY
@@ -144,7 +142,7 @@ class AssistantAdapter:
 
     connection_factory: ConnectionFactory
     answer_path: AnswerPath
-    internal_identity_resolver: AssistantIdentityResolver = _default_identity
+    internal_identity_resolver: AssistantIdentityResolver = default_identity
 
     def on_thread_started(
         self,

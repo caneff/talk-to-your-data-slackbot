@@ -175,7 +175,7 @@ def run_socket_mode_from_env(
     ),
     connection_factory: ConnectionFactory | None = None,
     internal_identity_resolver: slack_assistant.AssistantIdentityResolver = (
-        slack_assistant._default_identity  # pyright: ignore[reportPrivateUsage]
+        slack_assistant.default_identity
     ),
     answer_path: slack_assistant.AnswerPath | None = None,
 ) -> SocketModeHandler:
@@ -213,7 +213,7 @@ def main(
         answer_path = _configured_answer_path(os.environ, args)
         run_socket_mode_from_env(
             connection_factory=connection_factory,
-            internal_identity_resolver=slack_assistant._dev_identity,  # pyright: ignore[reportPrivateUsage]
+            internal_identity_resolver=slack_assistant.dev_identity,
             answer_path=answer_path,
         )
     except (

@@ -318,14 +318,14 @@ def test_on_user_message_passes_resolved_identity_to_answer_path(
 
 
 def test_default_identity_maps_slack_user() -> None:
-    identity = slack_assistant._default_identity("U777")  # pyright: ignore[reportPrivateUsage]
+    identity = slack_assistant.default_identity("U777")
     assert identity == contracts.InternalIdentity(identity_id="slack_user:U777")
 
 
 def test_dev_identity_uses_local_allowed_identity() -> None:
     import data_assistant.access_controller as access_controller
 
-    identity = slack_assistant._dev_identity("U777")  # pyright: ignore[reportPrivateUsage]
+    identity = slack_assistant.dev_identity("U777")
     assert identity == access_controller.DEFAULT_LOCAL_ALLOWED_IDENTITY
 
 
