@@ -3,6 +3,69 @@
 This roadmap keeps the first implementation small while preserving the larger
 Data Assistant ideas for later expansion.
 
+## Final-Project Demo Push (4-day, prioritized)
+
+Target: a 5-minute live Slack DM demo. Differentiator: the assistant refuses to
+fabricate — grounded answers, visible degradation, and **Non-Answer Responses**
+instead of confident guesses. Favor code quality over scope; never put an
+unfinished feature on the demo path.
+
+Work in strict value order. Each item must be green (tests, pyright, ruff) and
+rehearsed before the next starts. Tracked as issues #99 (resilience), #100
+(Assistant surface), #101 (retail demo target), #102 (top-N + table), #103
+(stretch: clarification turn).
+
+1. **Resilience** (must, cheap — protects the live demo). Set an explicit
+   request timeout (~15s) and an explicit `max_retries` (1) on both OpenAI
+   providers; the SDK already retries transient errors and the only real
+   demo-killer is the 600s default read timeout. A bounded call falls through to
+   the existing typed **Non-Answer** instead of a silent on-stage hang. ~2h.
+2. **Convert to a Slack Assistant** (the demo surface; diverges from the course's
+   classic-bot manifest — see ADR-0015). ~1–1.5 days; touches the working path,
+   so do it while fresh and re-rehearse after.
+   - **Manifest**: add `features.assistant_view` (`assistant_description`,
+     optional static `suggested_prompts: [{title, message}]`); scopes
+     `assistant:write` + `chat:write` + `im:history`; events
+     `assistant_thread_started`, `assistant_thread_context_changed`, `message.im`.
+     Reinstall the app.
+   - **Code**: a dedicated `AssistantAdapter` on Bolt's `Assistant` container —
+     NOT routed through the old `handle_slack_event` / `SlackGateway` envelope.
+     Reuse only the pipeline (`answer_path`) and lift `_render_workflow_result`.
+     The adapter speaks the assistant model directly: `thread_started` → greeting
+     + `set_suggested_prompts([retail Qs])`; `user_message` →
+     `set_status("analyzing your data…")` → run pipeline → `say(reply)` (posting
+     the reply auto-clears the status, so there is no separate "working" message).
+   - The interpret→…→compose pipeline, evals, and Non-Answer path stay untouched;
+     divergence is contained to the Slack edge.
+3. **Retail dataset as the demo target.** Drive the existing `retail_ops` demo
+   Semantic Layer (denormalized tables, no joins needed) via the runtime flags;
+   rehearse and lock the demo questions (these feed the suggested prompts). Watch
+   for routing ambiguity across the seven tables (e.g. "revenue" matching two
+   tables) — phrase around it or use it as the refusal beat.
+4. **Top-N intent + compact output.** Add a typed top-N **Supported Intent**
+   (ORDER BY / LIMIT in deterministic retrieval per ADR-0014) and render the
+   ranked result as a Slack table. Headline stays grounded
+   (`led by {top_dimension} at {top_value}`); the table carries the ranking, so
+   the existing Narrative Slots need no rework. Pressured by the Assistant cost.
+5. **Stretch — agentic clarification turn.** Replace the refusal beat with an LLM
+   follow-up question that resolves a **Material Ambiguity**, then proceeds. The
+   Assistant container is natural groundwork for this; per ADR-0004 it is also
+   the trigger to choose an orchestration framework. **Cut line.**
+
+Honest budget: the Assistant conversion reclasses former "Chunk 1 insurance"
+into a feature. Realistic 4-day outcome is resilience + Assistant + retail +
+*one* of {top-N, clarification}, not both. The day-3 freeze governs.
+
+**Day-3 freeze:** whatever is green-and-rehearsed is the demo. Anything
+unfinished is reverted off the demo path, not dragged on stage half-built. The
+refusal beat (built today) is the rehearsed default for Beat 2; the clarification
+turn replaces it only if it lands green by the freeze.
+
+Deliberately **not** in this push (talking points, not builds): multiple group-by
+dimensions, multi-table joins (the demo data is denormalized precisely to avoid
+them, and a join is invisible on stage), LLM text-to-SQL retrieval (ADR-0014),
+observability / Decision Trail (invisible in a live demo), chart images.
+
 ## MVP
 
 The MVP proves a thin, governed path from one Slack message containing one Data
