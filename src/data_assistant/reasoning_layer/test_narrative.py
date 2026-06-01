@@ -166,6 +166,26 @@ def test_draft_narrative_degrades_visibly_when_proposal_slips_a_digit() -> None:
     )
 
 
+def test_draft_narrative_degrades_when_proposal_repeats_metric_modifier() -> None:
+    prepared_data = narrative_cases.prepared_customer_count()
+    proposal = reasoning_layer.NarrativeProposal(
+        summary="In {time_range}, the total {metric} reached {metric_total}."
+    )
+
+    answer_draft = reasoning_layer.draft_narrative(
+        prepared_data,
+        provider=reasoning_support.fixed_narrative_provider(proposal),
+    )
+    deterministic = reasoning_layer.draft_answer(prepared_data)
+
+    assert answer_draft.summary == deterministic.summary
+    assert "total Customer count" not in answer_draft.summary
+    assert answer_draft.caveats == (
+        *deterministic.caveats,
+        reasoning_layer.WITHHELD_WORDING_CAVEAT,
+    )
+
+
 def test_draft_narrative_degrades_on_provider_failure() -> None:
     prepared_data = narrative_cases.prepared_revenue_by_region()
 

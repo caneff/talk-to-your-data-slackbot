@@ -19,6 +19,9 @@ Rules:
 - Omit the grouping clause when the grouping slots are absent from
   `available_slots`; in that case do not use `{dimension}`,
   `{dimension_count}`, `{top_dimension}`, or `{top_value}`.
+- Do not place aggregate words like "total", "sum", or "count" immediately
+  before `{metric}`. The metric slot already contains the business metric name
+  exactly as it should appear.
 
 Example summary:
 `{metric} in {time_range} totaled {metric_total} across {dimension_count} {dimension}, led by {top_dimension} at {top_value}.`

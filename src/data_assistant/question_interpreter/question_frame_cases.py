@@ -68,6 +68,14 @@ def _january_2026_created_date_filter() -> (
     )
 
 
+def _region_filter(value: str) -> question_interpreter.IncludeFilterOperationProposal:
+    return question_interpreter.IncludeFilterOperationProposal(
+        operation="include_filter",
+        field="region",
+        values=(value,),
+    )
+
+
 def _january_revenue_by_region_proposal() -> question_interpreter.QuestionFrameProposal:
     return _proposal(
         intent="summarize",
@@ -102,6 +110,17 @@ def _missing_time_scope_revenue_by_region_proposal() -> (
     )
 
 
+def _all_time_region_value_revenue_proposal(
+    value: str,
+) -> question_interpreter.QuestionFrameProposal:
+    return _proposal(
+        intent="summarize",
+        metric="total revenue",
+        field_operations=(_region_filter(value),),
+        all_time=True,
+    )
+
+
 SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
     SharedQuestionFrameCase(
         name="canonical_question",
@@ -127,5 +146,10 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
         name="safe_non_answer_question",
         question="What was total revenue by region?",
         expected=_missing_time_scope_revenue_by_region_proposal(),
+    ),
+    SharedQuestionFrameCase(
+        name="all_time_revenue_for_region_value",
+        question="What was total revenue in the West region for all time?",
+        expected=_all_time_region_value_revenue_proposal("West"),
     ),
 )

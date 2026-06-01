@@ -309,6 +309,76 @@ def test_data_assistant_runs_all_time_scalar_revenue_end_to_end(
     assert "Filters:" not in run.final_response.text
 
 
+@pytest.mark.parametrize(
+    ("region_value", "expected_total", "question"),
+    [
+        (
+            "North",
+            1200.0,
+            "What was total revenue in the North region for all time?",
+        ),
+        (
+            "West",
+            9999.0,
+            "What was total revenue in the West region for all time?",
+        ),
+    ],
+)
+def test_data_assistant_runs_all_time_scalar_revenue_with_dimension_value_filter(
+    allowed_internal_identity: contracts.InternalIdentity,
+    region_value: str,
+    expected_total: float,
+    question: str,
+) -> None:
+    provider = _static_provider(
+        question_interpreter.QuestionFrameProposal(
+            intent="summarize",
+            metric="total revenue",
+            field_operations=(
+                question_interpreter.IncludeFilterOperationProposal(
+                    operation="include_filter",
+                    field="region",
+                    values=(region_value,),
+                ),
+            ),
+            all_time=True,
+        )
+    )
+    order_rows = (
+        ("2026-01-03", "North", "1200.00"),
+        ("2026-01-08", "South", "850.00"),
+        ("2026-02-01", "West", "9999.00"),
+    )
+
+    with local_duckdb_fixture.connect_orders(order_rows) as connection:
+        run = workflow_runner.run_data_assistant(
+            connection,
+            question,
+            question_interpreter_provider=provider,
+            internal_identity=allowed_internal_identity,
+        )
+
+    assert isinstance(run, contracts.DataAssistantRun)
+    assert run.question_frame.time_scope == contracts.TimeScope.ALL_TIME
+    assert run.question_frame.field_operations == (
+        contracts.SemanticFieldOperation(
+            operation=schema.FieldOperation.INCLUDE_FILTER,
+            field="region",
+            values=(region_value,),
+        ),
+    )
+    assert run.data_request.group_by_fields == ()
+    assert run.data_request.filter_labels == (f"region in ({region_value})",)
+    assert run.prepared_data.data.loc[0, "dimension_value"] == "All"
+    assert run.prepared_data.data.loc[0, "metric_value"] == expected_total
+    formatted_total = f"${expected_total:,.2f}"
+    assert f"Total revenue in all available data was {formatted_total}." in (
+        run.final_response.text
+    )
+    assert f"Filters: region in ({region_value})." in run.final_response.text
+    assert "- South:" not in run.final_response.text
+
+
 def test_data_assistant_uses_supplied_reasoning_provider_for_final_narrative(
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:

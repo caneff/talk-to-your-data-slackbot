@@ -218,3 +218,6 @@ def test_openai_provider_developer_prompt_lists_slots_and_forbids_digits() -> No
     ):
         assert slot_name in developer_prompt
     assert "never write a literal digit" in developer_prompt.lower()
+    assert "Do not place aggregate words" in developer_prompt
+    assert '"total", "sum", or "count"' in developer_prompt
+    assert "metric slot already contains the business metric name" in developer_prompt

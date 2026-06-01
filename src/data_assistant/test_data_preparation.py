@@ -216,6 +216,41 @@ def test_prepared_data_supports_scalar_aggregate_without_group_by(
     pd_testing.assert_frame_equal(prepared_data.data, expected_data)
 
 
+def test_prepared_data_returns_empty_scalar_result_when_filtered_metric_rows_missing(
+    data_request: contracts.DataRequest,
+    connect_orders: local_duckdb_fixture.OrdersConnector,
+) -> None:
+    region_field = data_request.group_by_fields[0]
+    data_request = dataclasses.replace(
+        data_request,
+        group_by_fields=(),
+        filter_operations=(
+            contracts.ResolvedSemanticFieldOperation(
+                operation=schema.FieldOperation.INCLUDE_FILTER,
+                field=region_field,
+                values=("West",),
+            ),
+        ),
+    )
+    order_rows = (
+        ("2026-01-03", "North", "1200.00"),
+        ("2026-01-28", "West", None),
+    )
+    with connect_orders(order_rows) as connection:
+        prepared_data = data_preparation.prepare_data(data_request, connection)
+
+    expected_data = pd.DataFrame(
+        {
+            "dimension_value": pd.Series(dtype="object"),
+            "metric_value": pd.Series(dtype="float64"),
+        },
+    )
+    pd_testing.assert_frame_equal(prepared_data.data, expected_data)
+    assert prepared_data.quality_notes == (
+        "1 row excluded because revenue was missing.",
+    )
+
+
 def test_prepared_data_contains_all_time_grouped_revenue_results(
     data_request: contracts.DataRequest,
     connect_orders: local_duckdb_fixture.OrdersConnector,

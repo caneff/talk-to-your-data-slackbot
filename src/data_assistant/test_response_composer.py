@@ -1,3 +1,5 @@
+import typing
+
 import pandas as pd
 import pytest
 
@@ -123,7 +125,7 @@ def test_response_composer_returns_visible_slack_blocks_for_answer_package() -> 
             "rows": [
                 [
                     {"type": "raw_text", "text": "Region"},
-                    {"type": "raw_text", "text": "Total revenue"},
+                    {"type": "raw_text", "text": "Total Revenue"},
                 ],
                 [
                     {"type": "raw_text", "text": "North"},
@@ -164,6 +166,36 @@ def test_response_composer_formats_count_rows_from_metric_kind() -> None:
     assert "- North: 1,200" in response.text
     assert "- South: 850" in response.text
     assert "$1,200.00" not in response.text
+
+
+def test_response_composer_title_cases_each_word_in_table_headers() -> None:
+    response = response_composer.compose_final_response(
+        contracts.AnswerDraft(
+            summary="Customer count in all available data was 2,050.",
+            key_data=pd.DataFrame(
+                {
+                    "dimension_value": ("All",),
+                    "metric_value": (2050,),
+                }
+            ),
+            datasets_used=("Commerce Customers",),
+            dataset_tables_used=("customers",),
+            metric_kind=schema.MetricKind.COUNT,
+            metric_label="customer count",
+            time_range="all available data",
+            filters=(),
+            freshness="Commerce customer data refreshed through 2026-01-31.",
+            caveats=(),
+        )
+    )
+
+    table_block = response.blocks[2]
+    assert table_block["type"] == "table"
+    rows = typing.cast(list[list[dict[str, str]]], table_block["rows"])
+    assert rows[0] == [
+        {"type": "raw_text", "text": "Group"},
+        {"type": "raw_text", "text": "Customer Count"},
+    ]
 
 
 def test_response_composer_renders_through_injected_wording_provider() -> None:

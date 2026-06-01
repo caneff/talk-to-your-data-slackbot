@@ -33,6 +33,7 @@ _GROUPING_SLOT_NAMES: tuple[str, ...] = (
     "top_dimension",
     "top_value",
 )
+_REDUNDANT_METRIC_MODIFIERS = frozenset({"total", "sum", "count"})
 
 
 class NarrativeProposal(pydantic.BaseModel):
@@ -132,6 +133,8 @@ def fill_narrative(
     slot_values: dict[str, object],
 ) -> str | None:
     """Fill slots; None if prose references an unknown slot or malformed brace."""
+    if _has_redundant_metric_modifier(proposal.summary):
+        return None
     try:
         return proposal.summary.format_map(slot_values)
     except (KeyError, ValueError, IndexError):
@@ -145,6 +148,16 @@ def proposal_is_grounded(proposal: NarrativeProposal) -> bool:
     violation; slot names contain no digits, so unfilled slots are fine.
     """
     return not any(ch.isdigit() for ch in proposal.summary)
+
+
+def _has_redundant_metric_modifier(summary: str) -> bool:
+    words = summary.lower().replace("{metric}", " {metric} ").split()
+    return any(
+        word == "{metric}"
+        and index > 0
+        and words[index - 1].strip(",.;:") in _REDUNDANT_METRIC_MODIFIERS
+        for index, word in enumerate(words)
+    )
 
 
 def _pluralize(label: str) -> str:

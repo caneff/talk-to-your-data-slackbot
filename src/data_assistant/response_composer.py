@@ -158,8 +158,8 @@ def _render_key_data_table_block(
 ) -> tuple[contracts.SlackBlock, ...]:
     rows = [
         [
-            {"type": "raw_text", "text": _capitalize_label(dimension_header)},
-            {"type": "raw_text", "text": _capitalize_label(metric_header)},
+            {"type": "raw_text", "text": _title_case_label(dimension_header)},
+            {"type": "raw_text", "text": _title_case_label(metric_header)},
         ],
     ]
     rows.extend(
@@ -187,7 +187,5 @@ def _render_key_data_table_block(
     )
 
 
-def _capitalize_label(label: str) -> str:
-    if not label:
-        return label
-    return label[0].upper() + label[1:]
+def _title_case_label(label: str) -> str:
+    return " ".join(word[:1].upper() + word[1:] for word in label.split(" "))

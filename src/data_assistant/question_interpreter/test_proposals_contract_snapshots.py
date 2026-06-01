@@ -139,6 +139,37 @@ CONTRACT_SNAPSHOT_CASES = (
         question="What was total revenue by region for all time?",
     ),
     snapshot_case(
+        name="all_time_scope_with_dimension_value_filter",
+        proposal=question_interpreter.QuestionFrameProposal(
+            intent="summarize",
+            metric="total revenue",
+            field_operations=(
+                question_interpreter.IncludeFilterOperationProposal(
+                    operation="include_filter",
+                    field="region",
+                    values=("West",),
+                ),
+            ),
+            all_time=True,
+        ),
+        expected=contracts.Success(
+            contracts.QuestionFrame(
+                intent="summarize",
+                metric="total revenue",
+                field_operations=(
+                    contracts.SemanticFieldOperation(
+                        operation=schema.FieldOperation.INCLUDE_FILTER,
+                        field="region",
+                        values=("West",),
+                    ),
+                ),
+                unresolved_ambiguities=(),
+                time_scope=contracts.TimeScope.ALL_TIME,
+            )
+        ),
+        question="What was total revenue in the West region for all time?",
+    ),
+    snapshot_case(
         name="exact_date_include_filter",
         proposal=interpreter_support.question_frame_proposal(
             field_operations=(

@@ -162,7 +162,11 @@ def test_openai_provider_schema_rejects_empty_implicit_filters() -> None:
     assert (
         "merely available in semantic_layer_context" in operation_schema["description"]
     )
-    assert "Non-empty explicit values" in values_schema["description"]
+    assert "explicitly included dimension values" in operation_schema["description"]
+    assert (
+        "Non-empty explicit date or dimension values" in (values_schema["description"])
+    )
+    assert "date or dimension values" in values_schema["description"]
     assert (
         "never emit include_filter or exclude_filter with empty values"
         in (values_schema["description"])
@@ -285,6 +289,43 @@ def test_openai_provider_prompt_forbids_implicit_empty_filters() -> None:
     assert 'For "What was total revenue by region?"' in developer_prompt
     assert "exactly one field_operation" in developer_prompt
     assert 'operation "group_by", field "region"' in developer_prompt
+
+
+def test_openai_provider_prompt_describes_dimension_value_filters() -> None:
+    parse_calls: list[dict[str, object]] = []
+
+    class FakeParsedResponse:
+        output_parsed = test_support.question_frame_proposal()
+
+    provider = _openai_provider_returning(
+        FakeParsedResponse(),
+        parse_calls=parse_calls,
+    )
+
+    provider.propose_question_frame(
+        question="What was total revenue in the West region for all time?",
+        semantic_layer_context={"datasets": []},
+    )
+
+    input_messages = typing.cast(
+        list[dict[str, str]],
+        parse_calls[0]["input"],
+    )
+    developer_prompt = input_messages[0]["content"]
+    assert "Use include_filter when the user asks for one concrete value" in (
+        developer_prompt
+    )
+    assert '"in the <value> <field label>"' in developer_prompt
+    assert "Copy the\n  requested value into values" in developer_prompt
+    assert (
+        'For a dimension-value filter question like "What was total revenue'
+        in developer_prompt
+    )
+    assert 'operation "include_filter", field "region"' in developer_prompt
+    assert 'values ["West"]' in developer_prompt
+    assert "Apply the same pattern to\nany single requested dimension value" in (
+        developer_prompt
+    )
 
 
 def test_openai_provider_maps_refusal_to_provider_failure() -> None:

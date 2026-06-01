@@ -27,7 +27,7 @@ def prepare_data(
     """
     if group_by_field is None:
         dimension_select = "'All'"
-        group_and_order = ""
+        group_and_order = "having count(*) > 0"
     else:
         dimension_select = (
             f"coalesce(nullif(trim({group_by_field.source_column}), ''), 'Unknown')"

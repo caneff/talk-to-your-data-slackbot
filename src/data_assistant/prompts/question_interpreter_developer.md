@@ -25,6 +25,9 @@ Rules:
   appears only under a different metric_context is unrelated to the selected
   metric and must not be used.
 - Use group_by when the user asks for grouping such as "by region".
+- Use include_filter when the user asks for one concrete value of a dimension
+  field, such as "in the <value> <field label>" or "for <value>". Copy the
+  requested value into values. Do not treat that value as group_by.
 - If the Data Question names a complete calendar month and year, express it as a
   range_filter on a date Semantic Field when that field allows range_filter.
   Example: "January 2026" means lower "2026-01-01" and upper "2026-01-31".
@@ -76,3 +79,13 @@ For "What was total revenue by region?", return intent "summarize", metric
 Do not add a date range for that question, because no date phrase is present.
 Do not add include_filter or exclude_filter, because no included or excluded
 value is present.
+
+For a dimension-value filter question like "What was total revenue in the West
+region for all time?", return intent "summarize", metric "total revenue",
+all_time true, and exactly one field_operation:
+- operation "include_filter", field "region", lower null, upper null,
+  values ["West"]
+
+Do not add group_by for that question, because "West" is the requested included
+region value, not a request to compare all regions. Apply the same pattern to
+any single requested dimension value.

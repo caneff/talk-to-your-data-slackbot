@@ -22,9 +22,9 @@ class FieldOperationProposal(pydantic.BaseModel):
         description=(
             "Use group_by for requested grouping, range_filter for complete "
             "calendar months or date ranges, include_filter for exact dates or "
-            "included values, and exclude_filter only for explicitly excluded "
-            "values. Do not emit operations for fields that are merely "
-            "available in semantic_layer_context."
+            "explicitly included dimension values, and exclude_filter only for "
+            "explicitly excluded values. Do not emit operations for fields that "
+            "are merely available in semantic_layer_context."
         ),
     )
     field: str = pydantic.Field(
@@ -47,9 +47,9 @@ class FieldOperationProposal(pydantic.BaseModel):
     values: tuple[str, ...] = pydantic.Field(
         default=(),
         description=(
-            "Non-empty explicit values for include_filter or exclude_filter. "
-            "Empty only for group_by and range_filter; never emit "
-            "include_filter or exclude_filter with empty values."
+            "Non-empty explicit date or dimension values for include_filter or "
+            "exclude_filter. Empty only for group_by and range_filter; never "
+            "emit include_filter or exclude_filter with empty values."
         ),
     )
 
