@@ -10,8 +10,8 @@ the regular test suite does not load it as the default app dataset.
   dataset.
 - `seeds/retail_ops_seed.sql`: complete DuckDB seed script that creates and
   fills seven demo tables.
-- `demo_questions.md`: locked prompts and deterministic rehearsal notes for the
-  issue #101 demo flow.
+- `demo_questions.md`: locked prompts and rehearsal notes for the issue #101
+  demo flow.
 
 The seed script generates deterministic synthetic data:
 
