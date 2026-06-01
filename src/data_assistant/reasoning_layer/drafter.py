@@ -32,7 +32,8 @@ def draft_narrative(
 
     Propose prose around the Narrative Slots, ground it (any digit fails),
     fill the slots deterministically, and degrade visibly to the template
-    answer on provider failure or grounding violation.
+    answer on provider failure, grounding violation, or an unfillable
+    proposal (an unknown slot or a malformed brace).
     """
     slot_values = proposals.compute_slot_values(prepared_data)
     template_summary = _template_summary(prepared_data, slot_values)
