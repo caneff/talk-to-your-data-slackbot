@@ -241,11 +241,18 @@ class RecordingRuntimeFactories:
         return handler
 
 
+class RecordedSlackCall(typing.TypedDict):
+    channel: str
+    thread_ts: str
+    text: str
+    blocks: typing.NotRequired[collections.abc.Sequence[contracts.SlackBlock]]
+
+
 class RecordingSlackClient:
     """Capture Slack DM replies without calling Slack APIs."""
 
     def __init__(self) -> None:
-        self.calls: list[dict[str, object]] = []
+        self.calls: list[RecordedSlackCall] = []
 
     def chat_postMessage(
         self,
@@ -255,7 +262,7 @@ class RecordingSlackClient:
         text: str,
         blocks: collections.abc.Sequence[contracts.SlackBlock] | None = None,
     ) -> None:
-        call: dict[str, object] = {
+        call: RecordedSlackCall = {
             "channel": channel,
             "thread_ts": thread_ts,
             "text": text,
