@@ -20,6 +20,8 @@ def test_reasoning_layer_produces_answer_draft_from_prepared_data() -> None:
     assert answer_draft.datasets_used == ("Commerce",)
     assert answer_draft.dataset_tables_used == ("orders",)
     assert answer_draft.metric_kind == schema.MetricKind.MONEY
+    assert answer_draft.metric_label == "total revenue"
+    assert answer_draft.group_by_label == "region"
     assert answer_draft.time_range == "2026-01-01 through 2026-01-31"
     assert answer_draft.filters == ("order date >= 2026-01-01 and <= 2026-01-31",)
     assert answer_draft.freshness == (
@@ -40,6 +42,8 @@ def test_reasoning_layer_formats_count_summary_and_carries_metric_kind() -> None
         "Customer count in 2026-01-01 through 2026-01-31 was 1,234."
     )
     assert answer_draft.metric_kind == schema.MetricKind.COUNT
+    assert answer_draft.metric_label == "customer count"
+    assert answer_draft.group_by_label is None
 
 
 def test_reasoning_layer_says_no_data_when_prepared_data_is_empty() -> None:
