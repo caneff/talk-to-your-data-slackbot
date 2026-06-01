@@ -201,6 +201,14 @@ def test_data_assistant_runs_all_time_grouped_revenue_end_to_end(
         run.final_response.text
     )
     assert "Time range: all available data." in run.final_response.text
+    assert (
+        run.final_response.trust_summary.freshness
+        == "Commerce order data refreshed through 2026-01-31."
+    )
+    assert (
+        "Freshness: Commerce order data refreshed through 2026-01-31."
+        in run.final_response.text
+    )
     assert "Filters:" not in run.final_response.text
 
 
@@ -240,6 +248,14 @@ def test_data_assistant_runs_all_time_scalar_revenue_end_to_end(
         run.final_response.text
     )
     assert "Time range: all available data." in run.final_response.text
+    assert (
+        run.final_response.trust_summary.freshness
+        == "Commerce order data refreshed through 2026-01-31."
+    )
+    assert (
+        "Freshness: Commerce order data refreshed through 2026-01-31."
+        in run.final_response.text
+    )
     assert "Filters:" not in run.final_response.text
 
 
