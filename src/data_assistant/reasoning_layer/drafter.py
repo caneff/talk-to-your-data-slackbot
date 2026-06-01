@@ -12,6 +12,7 @@ import data_assistant.workflow.contracts as contracts
 WITHHELD_WORDING_CAVEAT = (
     "Phrased from a standard template; generated wording was withheld."
 )
+NO_DATA_SUMMARY = "No data was returned for this query."
 
 
 def draft_answer(
@@ -19,6 +20,8 @@ def draft_answer(
 ) -> contracts.AnswerDraft:
     """Produce a deterministic Answer Draft from Prepared Data."""
     slot_values = proposals.compute_slot_values(prepared_data)
+    if prepared_data.data.empty:
+        return _answer_draft(prepared_data, NO_DATA_SUMMARY, slot_values)
     summary = _template_summary(prepared_data, slot_values)
     return _answer_draft(prepared_data, summary, slot_values)
 
@@ -36,6 +39,8 @@ def draft_narrative(
     proposal (an unknown slot or a malformed brace).
     """
     slot_values = proposals.compute_slot_values(prepared_data)
+    if prepared_data.data.empty:
+        return _answer_draft(prepared_data, NO_DATA_SUMMARY, slot_values)
     template_summary = _template_summary(prepared_data, slot_values)
     deterministic_draft = _answer_draft(prepared_data, template_summary, slot_values)
 

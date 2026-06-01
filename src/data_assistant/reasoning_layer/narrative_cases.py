@@ -130,6 +130,33 @@ def prepared_revenue_by_region(*, all_time: bool = False) -> contracts.PreparedD
     )
 
 
+def prepared_empty_revenue_by_region() -> contracts.PreparedData:
+    """Grouped revenue-by-region fixture where filters match no rows."""
+    prepared_data = prepared_revenue_by_region()
+    request = dataclasses.replace(
+        prepared_data.request,
+        filter_operations=(
+            contracts.ResolvedSemanticFieldOperation(
+                operation=schema.FieldOperation.RANGE_FILTER,
+                field=prepared_data.request.filter_operations[0].field,
+                lower=datetime.date(2025, 10, 1),
+                upper=datetime.date(2025, 12, 31),
+            ),
+        ),
+    )
+    return dataclasses.replace(
+        prepared_data,
+        request=request,
+        data=pd.DataFrame(
+            {
+                "dimension_value": pd.Series(dtype="object"),
+                "metric_value": pd.Series(dtype="float64"),
+            }
+        ),
+        quality_notes=("No rows matched the request filters.",),
+    )
+
+
 def prepared_customer_count() -> contracts.PreparedData:
     """Scalar customer-count fixture with no group-by ranking."""
     dataset = schema.CuratedDataset(

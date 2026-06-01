@@ -89,6 +89,54 @@ def test_data_assistant_runs_end_to_end(
     assert "Trust Summary:" in run.final_response.text
 
 
+def test_data_assistant_answers_empty_commerce_q4_result_without_crashing(
+    connect_orders: local_duckdb_fixture.OrdersConnector,
+    allowed_internal_identity: contracts.InternalIdentity,
+) -> None:
+    provider = _static_provider(
+        question_interpreter.QuestionFrameProposal(
+            intent="summarize",
+            metric="total revenue",
+            field_operations=(
+                question_interpreter.GroupByOperationProposal(
+                    operation="group_by",
+                    field="region",
+                ),
+                question_interpreter.RangeFilterOperationProposal(
+                    operation="range_filter",
+                    field="order date",
+                    lower="2025-10-01",
+                    upper="2025-12-31",
+                ),
+            ),
+        )
+    )
+    order_rows = (
+        ("2026-01-03", "North", "1200.00"),
+        ("2026-01-08", "South", "850.00"),
+    )
+
+    with connect_orders(order_rows) as connection:
+        run = workflow_runner.run_data_assistant(
+            connection,
+            "What was total revenue by region in Q4 2025?",
+            question_interpreter_provider=provider,
+            internal_identity=allowed_internal_identity,
+        )
+
+    assert isinstance(run, contracts.DataAssistantRun)
+    assert run.prepared_data.data.empty
+    assert run.answer_draft.summary == "No data was returned for this query."
+    assert run.answer_draft.caveats == ("No rows matched the request filters.",)
+    assert run.final_response.response_kind == contracts.ResponseKind.ANSWER
+    assert "No data was returned for this query." in run.final_response.text
+    assert "$0.00" not in run.final_response.text
+    assert "0 regions" not in run.final_response.text
+    assert "Time range: 2025-10-01 through 2025-12-31." in run.final_response.text
+    assert "Caveats: No rows matched the request filters." in run.final_response.text
+    assert "- North:" not in run.final_response.text
+
+
 def test_data_assistant_runs_customer_count_by_customer_region_end_to_end(
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:

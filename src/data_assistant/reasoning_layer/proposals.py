@@ -88,11 +88,15 @@ def compute_slot_values(
 
     if group_by_fields:
         dimension = _pluralize(group_by_fields[0].label)
-        top_dimension = str(data["dimension_value"].iloc[0])
-        top_value = metric_formatter.format_metric_value(
-            float(data["metric_value"].iloc[0]),
-            request.metric.kind,
-        )
+        if data.empty:
+            top_dimension = ""
+            top_value = ""
+        else:
+            top_dimension = str(data["dimension_value"].iloc[0])
+            top_value = metric_formatter.format_metric_value(
+                float(data["metric_value"].iloc[0]),
+                request.metric.kind,
+            )
     else:
         dimension = ""
         top_dimension = ""
