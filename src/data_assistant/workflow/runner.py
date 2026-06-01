@@ -22,6 +22,7 @@ def run_data_assistant(
     question: str,
     *,
     question_interpreter_provider: question_interpreter.QuestionInterpreterProvider,
+    reasoning_provider: reasoning_layer.ReasoningProvider | None = None,
     internal_identity: contracts.InternalIdentity,
     semantic_layer: schema.SemanticLayer | None = None,
 ) -> contracts.WorkflowResult:
@@ -35,6 +36,8 @@ def run_data_assistant(
         User question to interpret, route, authorize, query, and answer.
     question_interpreter_provider
         Provider for the LLM-backed question interpreter.
+    reasoning_provider
+        Optional provider for grounded narrative wording in the Reasoning Layer.
     internal_identity
         Caller identity for access control.
     semantic_layer
@@ -110,9 +113,15 @@ def run_data_assistant(
     )
 
     # 5. Synthesize Final Response.
-    answer_draft = reasoning_layer.draft_answer(
-        prepared_data=prepared_data,
-    )
+    if reasoning_provider is None:
+        answer_draft = reasoning_layer.draft_answer(
+            prepared_data=prepared_data,
+        )
+    else:
+        answer_draft = reasoning_layer.draft_narrative(
+            prepared_data=prepared_data,
+            provider=reasoning_provider,
+        )
     final_response = response_composer.compose_final_response(
         answer_draft=answer_draft,
     )

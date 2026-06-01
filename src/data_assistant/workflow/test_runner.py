@@ -6,6 +6,8 @@ import data_assistant.data_preparation as data_preparation
 import data_assistant.data_requester as data_requester
 import data_assistant.local_duckdb_fixture as local_duckdb_fixture
 import data_assistant.question_interpreter as question_interpreter
+import data_assistant.reasoning_layer as reasoning_layer
+import data_assistant.reasoning_layer.test_support as reasoning_test_support
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
@@ -257,6 +259,124 @@ def test_data_assistant_runs_all_time_scalar_revenue_end_to_end(
         in run.final_response.text
     )
     assert "Filters:" not in run.final_response.text
+
+
+def test_data_assistant_uses_supplied_reasoning_provider_for_final_narrative(
+    allowed_internal_identity: contracts.InternalIdentity,
+) -> None:
+    provider = _static_provider(
+        question_interpreter.QuestionFrameProposal(
+            intent="summarize",
+            metric="total revenue",
+            field_operations=(
+                question_interpreter.GroupByOperationProposal(
+                    operation="group_by",
+                    field="region",
+                ),
+                question_interpreter.RangeFilterOperationProposal(
+                    operation="range_filter",
+                    field="order date",
+                    lower="2026-01-01",
+                    upper="2026-01-31",
+                ),
+            ),
+        )
+    )
+    reasoning_provider = reasoning_test_support.fixed_narrative_provider(
+        reasoning_test_support.narrative_proposal(
+            summary=(
+                "{metric} in {time_range} stretched across {dimension_count} "
+                "{dimension}, with {top_dimension} out front at {top_value}."
+            )
+        )
+    )
+
+    with local_duckdb_fixture.connect_orders(
+        (
+            ("2026-01-03", "North", "1200.00"),
+            ("2026-01-08", "South", "850.00"),
+            ("2026-01-15", "West", "1600.00"),
+            ("2026-01-22", "North", "300.00"),
+        )
+    ) as connection:
+        run = workflow_runner.run_data_assistant(
+            connection,
+            "What was total revenue by region in January 2026?",
+            question_interpreter_provider=provider,
+            reasoning_provider=reasoning_provider,
+            internal_identity=allowed_internal_identity,
+        )
+
+    assert isinstance(run, contracts.DataAssistantRun)
+    assert (
+        run.answer_draft.summary
+        == "Total revenue in 2026-01-01 through 2026-01-31 stretched across 3 "
+        "regions, with West out front at $1,600.00."
+    )
+    assert (
+        "Total revenue in 2026-01-01 through 2026-01-31 stretched across 3 "
+        "regions, with West out front at $1,600.00." in run.final_response.text
+    )
+    assert reasoning_layer.WITHHELD_WORDING_CAVEAT not in run.answer_draft.caveats
+
+
+def test_data_assistant_degrades_to_floor_when_reasoning_proposal_contains_digits(
+    allowed_internal_identity: contracts.InternalIdentity,
+) -> None:
+    provider = _static_provider(
+        question_interpreter.QuestionFrameProposal(
+            intent="summarize",
+            metric="total revenue",
+            field_operations=(
+                question_interpreter.GroupByOperationProposal(
+                    operation="group_by",
+                    field="region",
+                ),
+                question_interpreter.RangeFilterOperationProposal(
+                    operation="range_filter",
+                    field="order date",
+                    lower="2026-01-01",
+                    upper="2026-01-31",
+                ),
+            ),
+        )
+    )
+    reasoning_provider = reasoning_test_support.fixed_narrative_provider(
+        reasoning_layer.NarrativeProposal(
+            summary="{metric} in {time_range} had 3 standout regions."
+        )
+    )
+
+    with local_duckdb_fixture.connect_orders(
+        (
+            ("2026-01-03", "North", "1200.00"),
+            ("2026-01-08", "South", "850.00"),
+            ("2026-01-15", "West", "1600.00"),
+            ("2026-01-22", "North", "300.00"),
+        )
+    ) as connection:
+        run = workflow_runner.run_data_assistant(
+            connection,
+            "What was total revenue by region in January 2026?",
+            question_interpreter_provider=provider,
+            reasoning_provider=reasoning_provider,
+            internal_identity=allowed_internal_identity,
+        )
+
+    assert isinstance(run, contracts.DataAssistantRun)
+    assert (
+        run.answer_draft.summary
+        == "Total revenue in 2026-01-01 through 2026-01-31 was $3,950.00, "
+        "grouped across 3 regions."
+    )
+    assert run.answer_draft.caveats == (reasoning_layer.WITHHELD_WORDING_CAVEAT,)
+    assert run.final_response.trust_summary.caveats == (
+        reasoning_layer.WITHHELD_WORDING_CAVEAT,
+    )
+    assert (
+        "Caveats: Phrased from a standard template; generated wording was "
+        "withheld." in run.final_response.text
+    )
 
 
 def test_data_assistant_short_circuits_question_ambiguity(
