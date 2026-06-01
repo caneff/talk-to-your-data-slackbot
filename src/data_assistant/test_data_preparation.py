@@ -180,3 +180,55 @@ def test_prepared_data_supports_scalar_aggregate_without_group_by(
         },
     )
     pd_testing.assert_frame_equal(prepared_data.data, expected_data)
+
+
+def test_prepared_data_contains_all_time_grouped_revenue_results(
+    data_request: contracts.DataRequest,
+    connect_orders: local_duckdb_fixture.OrdersConnector,
+) -> None:
+    data_request = dataclasses.replace(data_request, filter_operations=())
+    order_rows = (
+        ("2026-01-03", "North", "1200.00"),
+        ("2026-01-08", "South", "850.00"),
+        ("2026-01-15", "West", "1600.00"),
+        ("2026-01-22", "North", "300.00"),
+        ("2026-01-28", "East", "950.00"),
+        ("2026-02-01", "West", "9999.00"),
+    )
+    with connect_orders(order_rows) as connection:
+        prepared_data = data_preparation.prepare_data(data_request, connection)
+
+    expected_data = pd.DataFrame(
+        {
+            "dimension_value": ("West", "North", "East", "South"),
+            "metric_value": (11599.0, 1500.0, 950.0, 850.0),
+        },
+    )
+    pd_testing.assert_frame_equal(prepared_data.data, expected_data)
+
+
+def test_prepared_data_supports_scalar_all_time_aggregate_without_filters(
+    data_request: contracts.DataRequest,
+    connect_orders: local_duckdb_fixture.OrdersConnector,
+) -> None:
+    data_request = dataclasses.replace(
+        data_request,
+        group_by_fields=(),
+        filter_operations=(),
+    )
+    order_rows = (
+        ("2026-01-03", "North", "1200.00"),
+        ("2026-01-08", "South", "850.00"),
+        ("2026-01-22", "North", "300.00"),
+        ("2026-02-01", "West", "9999.00"),
+    )
+    with connect_orders(order_rows) as connection:
+        prepared_data = data_preparation.prepare_data(data_request, connection)
+
+    expected_data = pd.DataFrame(
+        {
+            "dimension_value": ("All",),
+            "metric_value": (12349.0,),
+        },
+    )
+    pd_testing.assert_frame_equal(prepared_data.data, expected_data)

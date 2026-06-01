@@ -183,3 +183,28 @@ def test_reasoning_layer_formats_count_summary_and_carries_metric_kind() -> None
         "Customer count in 2026-01-01 through 2026-01-31 was 1,234."
     )
     assert answer_draft.metric_kind == schema.MetricKind.COUNT
+
+
+def test_reasoning_layer_labels_all_time_when_no_date_filter_exists() -> None:
+    prepared_data = _prepared_revenue_by_region()
+    prepared_data = contracts.PreparedData(
+        request=contracts.DataRequest(
+            dataset=prepared_data.request.dataset,
+            table=prepared_data.request.table,
+            metric=prepared_data.request.metric,
+            group_by_fields=prepared_data.request.group_by_fields,
+            filter_operations=(),
+            output_shape=prepared_data.request.output_shape,
+            result_limit=prepared_data.request.result_limit,
+        ),
+        data=prepared_data.data,
+        quality_notes=prepared_data.quality_notes,
+    )
+
+    answer_draft = reasoning_layer.draft_answer(prepared_data)
+
+    assert answer_draft.summary == (
+        "Total revenue in all available data was $5,150.00, grouped across 5 regions."
+    )
+    assert answer_draft.time_range == "all available data"
+    assert answer_draft.filters == ()
