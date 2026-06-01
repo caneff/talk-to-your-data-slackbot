@@ -18,6 +18,8 @@ from data_assistant.reasoning_layer.proposals import (
 )
 
 _DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
+_DEFAULT_OPENAI_TIMEOUT_SECONDS = 15.0
+_DEFAULT_OPENAI_MAX_RETRIES = 1
 OpenAIInputMessage: typing.TypeAlias = dict[str, str]
 _REASONING_LAYER_DEVELOPER_PROMPT = "reasoning_layer_developer.md"
 
@@ -28,6 +30,8 @@ class OpenAIReasoningConfig:
 
     api_key: str
     model: str
+    timeout_seconds: float = 15.0
+    max_retries: int = 1
 
 
 class OpenAIReasoningConfigError(ValueError):
@@ -45,7 +49,37 @@ def load_openai_reasoning_config(
     return OpenAIReasoningConfig(
         api_key=environ["OPENAI_API_KEY"],
         model=environ.get("OPENAI_MODEL", _DEFAULT_OPENAI_MODEL),
+        timeout_seconds=_parse_timeout_seconds(environ),
+        max_retries=_parse_max_retries(environ),
     )
+
+
+def _parse_timeout_seconds(
+    environ: collections.abc.Mapping[str, str],
+) -> float:
+    raw_value = environ.get("OPENAI_TIMEOUT_SECONDS")
+    if raw_value is None:
+        return _DEFAULT_OPENAI_TIMEOUT_SECONDS
+    try:
+        return float(raw_value)
+    except ValueError as error:
+        raise OpenAIReasoningConfigError(
+            f"Invalid OPENAI_TIMEOUT_SECONDS: {raw_value!r}"
+        ) from error
+
+
+def _parse_max_retries(
+    environ: collections.abc.Mapping[str, str],
+) -> int:
+    raw_value = environ.get("OPENAI_MAX_RETRIES")
+    if raw_value is None:
+        return _DEFAULT_OPENAI_MAX_RETRIES
+    try:
+        return int(raw_value)
+    except ValueError as error:
+        raise OpenAIReasoningConfigError(
+            f"Invalid OPENAI_MAX_RETRIES: {raw_value!r}"
+        ) from error
 
 
 class _OpenAIResponsesClient(typing.Protocol):
@@ -160,9 +194,16 @@ def build_openai_reasoning_provider(
     config = load_openai_reasoning_config(environ)
     return OpenAIReasoningProvider(
         config=config,
-        client=client or _build_openai_client(config.api_key),
+        client=client or _build_openai_client(config),
     )
 
 
-def _build_openai_client(api_key: str) -> _OpenAIClient:
-    return typing.cast(_OpenAIClient, OpenAI(api_key=api_key))
+def _build_openai_client(config: OpenAIReasoningConfig) -> _OpenAIClient:
+    return typing.cast(
+        _OpenAIClient,
+        OpenAI(
+            api_key=config.api_key,
+            timeout=config.timeout_seconds,
+            max_retries=config.max_retries,
+        ),
+    )
