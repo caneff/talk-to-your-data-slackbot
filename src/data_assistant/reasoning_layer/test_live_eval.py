@@ -1,6 +1,7 @@
 import collections.abc
 import io
 import pathlib
+import typing
 
 import pytest
 
@@ -251,7 +252,13 @@ def test_run_eval_reports_all_failures_without_fail_fast() -> None:
         ),
     )
 
-    report = live_eval.run_live_reasoning_eval(provider=provider, cases=cases)
+    progress_file = io.StringIO()
+    report = live_eval.run_live_reasoning_eval(
+        provider=provider,
+        cases=cases,
+        progress=True,
+        progress_file=progress_file,
+    )
 
     assert report.total == 2
     assert report.passed == 1
@@ -266,6 +273,9 @@ def test_run_eval_reports_all_failures_without_fail_fast() -> None:
         "sample 3: required slot {missing_slot} missing from proposal summary",
     )
     assert provider.calls == 6
+    progress_output = progress_file.getvalue()
+    assert "Live eval cases 1/2: passing" in progress_output
+    assert "Live eval cases 2/2: failing" in progress_output
 
 
 def test_run_eval_requires_all_samples_to_pass_for_case_pass() -> None:
@@ -431,8 +441,10 @@ def test_main_returns_zero_when_all_cases_pass(
             live_eval.DEFAULT_CASES
         ),
         sample_count: int = live_eval.DEFAULT_SAMPLE_COUNT,
+        progress: bool = False,
+        progress_file: typing.TextIO | None = None,
     ) -> live_eval.LiveEvalReport:
-        del provider, cases, sample_count
+        del provider, cases, sample_count, progress, progress_file
         return live_eval.LiveEvalReport(total=0, passes=(), failures=())
 
     monkeypatch.setattr(
@@ -449,6 +461,64 @@ def test_main_returns_zero_when_all_cases_pass(
     )
 
     assert exit_code == 0
+
+
+def test_main_enables_progress_by_default_and_accepts_no_progress(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    captured_progress: list[bool] = []
+    captured_progress_files: list[typing.TextIO | None] = []
+
+    def fake_build_provider(
+        environ: collections.abc.Mapping[str, str],
+    ) -> reasoning_layer.ReasoningProvider:
+        assert environ["OPENAI_API_KEY"] == "dotenv-key"
+        return _fake_provider(reasoning_layer.NarrativeProposal(summary="x"))
+
+    def fake_run_eval(
+        *,
+        provider: reasoning_layer.ReasoningProvider,
+        cases: collections.abc.Iterable[narrative_cases.SharedNarrativeCase] = (
+            live_eval.DEFAULT_CASES
+        ),
+        sample_count: int = live_eval.DEFAULT_SAMPLE_COUNT,
+        progress: bool = False,
+        progress_file: typing.TextIO | None = None,
+    ) -> live_eval.LiveEvalReport:
+        del provider, cases, sample_count
+        captured_progress.append(progress)
+        captured_progress_files.append(progress_file)
+        return live_eval.LiveEvalReport(total=0, passes=(), failures=())
+
+    monkeypatch.setattr(
+        live_eval.reasoning_layer,
+        "build_openai_reasoning_provider",
+        fake_build_provider,
+    )
+    monkeypatch.setattr(live_eval, "run_live_reasoning_eval", fake_run_eval)
+
+    default_stderr = io.StringIO()
+    no_progress_stderr = io.StringIO()
+    default_exit_code = live_eval.main(
+        stdout=io.StringIO(),
+        stderr=default_stderr,
+        env_file=env_file,
+    )
+    no_progress_exit_code = live_eval.main(
+        stdout=io.StringIO(),
+        stderr=no_progress_stderr,
+        env_file=env_file,
+        argv=("--no-progress",),
+    )
+
+    assert default_exit_code == 0
+    assert no_progress_exit_code == 0
+    assert captured_progress == [True, False]
+    assert captured_progress_files == [default_stderr, no_progress_stderr]
 
 
 def test_main_returns_one_when_report_has_failures(
@@ -472,8 +542,10 @@ def test_main_returns_one_when_report_has_failures(
             live_eval.DEFAULT_CASES
         ),
         sample_count: int = live_eval.DEFAULT_SAMPLE_COUNT,
+        progress: bool = False,
+        progress_file: typing.TextIO | None = None,
     ) -> live_eval.LiveEvalReport:
-        del provider, cases, sample_count
+        del provider, cases, sample_count, progress, progress_file
         return live_eval.LiveEvalReport(
             total=1,
             passes=(),

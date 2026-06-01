@@ -10,6 +10,7 @@ The live entry point (``main``) is run manually by the user against a real
 
 from __future__ import annotations
 
+import argparse
 import collections.abc
 import dataclasses
 import os
@@ -18,6 +19,7 @@ import sys
 import typing
 
 import dotenv
+import tqdm
 
 import data_assistant.reasoning_layer as reasoning_layer
 import data_assistant.reasoning_layer.narrative_cases as narrative_cases
@@ -115,6 +117,8 @@ def run_live_reasoning_eval(
         narrative_cases.SharedNarrativeCase
     ] = DEFAULT_CASES,
     sample_count: int = DEFAULT_SAMPLE_COUNT,
+    progress: bool = False,
+    progress_file: typing.TextIO | None = None,
 ) -> LiveEvalReport:
     """Run all enabled live eval cases k times and aggregate failures."""
     if sample_count < 1:
@@ -122,41 +126,58 @@ def run_live_reasoning_eval(
     enabled_cases = tuple(case for case in cases if case.enabled)
     passes: list[LiveEvalPass] = []
     failures: list[LiveEvalFailure] = []
-    for case in enabled_cases:
-        slot_values = proposals.compute_slot_values(case.prepared_data)
-        result_shape = proposals.figure_free_result_shape(slot_values)
-        pass_count = 0
-        sample_failures: list[str] = []
-        for sample_index in range(sample_count):
-            proposal = provider.propose_narrative(result_shape=result_shape)
-            reasons = compare_grounding(
-                proposal=proposal,
-                expectation=case.expectation,
-                slot_values=slot_values,
+    progress_bar = _new_case_progress_bar(
+        enabled=progress,
+        total=len(enabled_cases),
+        progress_file=progress_file,
+    )
+    try:
+        for case_index, case in enumerate(enabled_cases, start=1):
+            _set_case_progress(
+                progress_bar=progress_bar,
+                case_index=case_index,
+                total=len(enabled_cases),
+                case_name=case.name,
             )
-            if reasons:
-                sample_failures.extend(
-                    f"sample {sample_index + 1}: {reason}" for reason in reasons
+            slot_values = proposals.compute_slot_values(case.prepared_data)
+            result_shape = proposals.figure_free_result_shape(slot_values)
+            pass_count = 0
+            sample_failures: list[str] = []
+            for sample_index in range(sample_count):
+                proposal = provider.propose_narrative(result_shape=result_shape)
+                reasons = compare_grounding(
+                    proposal=proposal,
+                    expectation=case.expectation,
+                    slot_values=slot_values,
                 )
+                if reasons:
+                    sample_failures.extend(
+                        f"sample {sample_index + 1}: {reason}" for reason in reasons
+                    )
+                    continue
+                pass_count += 1
+            if sample_failures:
+                failures.append(
+                    LiveEvalFailure(
+                        case_name=case.name,
+                        reasons=tuple(sample_failures),
+                        pass_count=pass_count,
+                        sample_count=sample_count,
+                    )
+                )
+                _update_case_progress(progress_bar)
                 continue
-            pass_count += 1
-        if sample_failures:
-            failures.append(
-                LiveEvalFailure(
+            passes.append(
+                LiveEvalPass(
                     case_name=case.name,
-                    reasons=tuple(sample_failures),
                     pass_count=pass_count,
                     sample_count=sample_count,
                 )
             )
-            continue
-        passes.append(
-            LiveEvalPass(
-                case_name=case.name,
-                pass_count=pass_count,
-                sample_count=sample_count,
-            )
-        )
+            _update_case_progress(progress_bar)
+    finally:
+        if progress_bar is not None:
+            progress_bar.close()
     return LiveEvalReport(
         total=len(enabled_cases),
         passes=tuple(passes),
@@ -193,8 +214,10 @@ def main(
     stderr: typing.TextIO = sys.stderr,
     environ: collections.abc.Mapping[str, str] | None = None,
     env_file: str | pathlib.Path = ".env",
+    argv: collections.abc.Sequence[str] = (),
 ) -> int:
     """Run the manual live eval suite against the real OpenAI provider config."""
+    args = _parse_args(argv)
     active_environ = environ
     if active_environ is None:
         dotenv.load_dotenv(dotenv_path=env_file, override=False)
@@ -206,11 +229,71 @@ def main(
         print(str(error), file=stderr)
         return 1
 
-    report = run_live_reasoning_eval(provider=provider)
+    report = run_live_reasoning_eval(
+        provider=provider,
+        progress=args.progress,
+        progress_file=stderr,
+    )
     write_live_eval_report(stdout=stdout, report=report)
     if report.failed:
         return 1
     return 0
+
+
+@dataclasses.dataclass(frozen=True)
+class _CliArgs:
+    progress: bool
+
+
+def _parse_args(argv: collections.abc.Sequence[str]) -> _CliArgs:
+    parser = argparse.ArgumentParser(
+        description="Run manual live evals for OpenAI Reasoning Layer output.",
+    )
+    parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="disable the live case progress bar",
+    )
+    args = parser.parse_args(list(argv))
+    return _CliArgs(progress=not typing.cast(bool, args.no_progress))
+
+
+def _new_case_progress_bar(
+    *,
+    enabled: bool,
+    total: int,
+    progress_file: typing.TextIO | None,
+) -> typing.Any | None:
+    if not enabled:
+        return None
+    return tqdm.tqdm(
+        total=total,
+        file=progress_file,
+        leave=False,
+        dynamic_ncols=True,
+        bar_format="{desc} |{bar}| {percentage:3.0f}%",
+    )
+
+
+def _set_case_progress(
+    *,
+    progress_bar: typing.Any | None,
+    case_index: int,
+    total: int,
+    case_name: str,
+) -> None:
+    if progress_bar is None:
+        return
+    progress_bar.set_description_str(
+        f"Live eval cases {case_index}/{total}: {case_name}",
+        refresh=True,
+    )
+
+
+def _update_case_progress(progress_bar: typing.Any | None) -> None:
+    if progress_bar is None:
+        return
+    progress_bar.update(1)
 
 
 if __name__ == "__main__":

@@ -169,10 +169,13 @@ def test_run_eval_suite_reports_all_failures_without_fail_fast() -> None:
         ),
     )
 
+    progress_file = io.StringIO()
     report = live_eval.run_live_question_interpreter_eval(
         provider=provider,
         semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
         cases=cases,
+        progress=True,
+        progress_file=progress_file,
     )
 
     assert report.total == 3
@@ -204,6 +207,10 @@ def test_run_eval_suite_reports_all_failures_without_fail_fast() -> None:
         "provider failure",
         "provider failure",
     ]
+    progress_output = progress_file.getvalue()
+    assert "Live eval cases 1/3: passing_case" in progress_output
+    assert "Live eval cases 2/3: mismatch_case" in progress_output
+    assert "Live eval cases 3/3: provider_failure_case" in progress_output
 
 
 def test_run_eval_suite_requires_all_samples_to_match_for_case_pass() -> None:
@@ -376,8 +383,10 @@ def test_main_loads_openai_config_from_dotenv(
         cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
             live_eval.DEFAULT_CASES
         ),
+        progress: bool = False,
+        progress_file: typing.TextIO | None = None,
     ) -> live_eval.LiveEvalReport:
-        del provider, semantic_layer, cases
+        del provider, semantic_layer, cases, progress, progress_file
         return live_eval.LiveEvalReport(total=0, passes=(), failures=())
 
     monkeypatch.setattr(
@@ -432,8 +441,10 @@ def test_main_passes_verbose_flag_to_report_writer(
         cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
             live_eval.DEFAULT_CASES
         ),
+        progress: bool = False,
+        progress_file: typing.TextIO | None = None,
     ) -> live_eval.LiveEvalReport:
-        del provider, semantic_layer, cases
+        del provider, semantic_layer, cases, progress, progress_file
         return live_eval.LiveEvalReport(total=0, passes=(), failures=())
 
     def fake_write_report(
@@ -468,6 +479,78 @@ def test_main_passes_verbose_flag_to_report_writer(
     assert captured_verbose == [True]
 
 
+def test_main_enables_progress_by_default_and_accepts_no_progress(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    captured_progress: list[bool] = []
+    captured_progress_files: list[typing.TextIO | None] = []
+
+    class FakeProvider:
+        def propose_question_frame(
+            self,
+            *,
+            question: str,
+            semantic_layer_context: dict[str, object],
+        ) -> live_eval.ProviderResult:
+            del question, semantic_layer_context
+            raise AssertionError("live eval runner is stubbed")
+
+    def fake_build_openai_provider(
+        environ: collections.abc.Mapping[str, str],
+    ) -> question_interpreter.QuestionInterpreterProvider:
+        assert environ["OPENAI_API_KEY"] == "dotenv-key"
+        return FakeProvider()
+
+    def fake_run_live_eval(
+        *,
+        provider: question_interpreter.QuestionInterpreterProvider,
+        semantic_layer: schema.SemanticLayer,
+        cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
+            live_eval.DEFAULT_CASES
+        ),
+        progress: bool = False,
+        progress_file: typing.TextIO | None = None,
+    ) -> live_eval.LiveEvalReport:
+        del provider, semantic_layer, cases
+        captured_progress.append(progress)
+        captured_progress_files.append(progress_file)
+        return live_eval.LiveEvalReport(total=0, passes=(), failures=())
+
+    monkeypatch.setattr(
+        live_eval.question_interpreter,
+        "build_openai_question_interpreter_provider",
+        fake_build_openai_provider,
+    )
+    monkeypatch.setattr(
+        live_eval,
+        "run_live_question_interpreter_eval",
+        fake_run_live_eval,
+    )
+
+    default_stderr = io.StringIO()
+    no_progress_stderr = io.StringIO()
+    default_exit_code = live_eval.main(
+        stdout=io.StringIO(),
+        stderr=default_stderr,
+        env_file=env_file,
+    )
+    no_progress_exit_code = live_eval.main(
+        stdout=io.StringIO(),
+        stderr=no_progress_stderr,
+        env_file=env_file,
+        argv=("--no-progress",),
+    )
+
+    assert default_exit_code == 0
+    assert no_progress_exit_code == 0
+    assert captured_progress == [True, False]
+    assert captured_progress_files == [default_stderr, no_progress_stderr]
+
+
 def test_main_returns_one_when_live_eval_report_has_failures(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: pathlib.Path,
@@ -500,8 +583,10 @@ def test_main_returns_one_when_live_eval_report_has_failures(
             live_eval.DEFAULT_CASES
         ),
         sample_count: int = live_eval.DEFAULT_SAMPLE_COUNT,
+        progress: bool = False,
+        progress_file: typing.TextIO | None = None,
     ) -> live_eval.LiveEvalReport:
-        del provider, semantic_layer, cases, sample_count
+        del provider, semantic_layer, cases, sample_count, progress, progress_file
         return live_eval.LiveEvalReport(
             total=1,
             passes=(),
@@ -621,8 +706,10 @@ def test_main_loads_real_semantic_layer_for_live_eval(
         cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
             live_eval.DEFAULT_CASES
         ),
+        progress: bool = False,
+        progress_file: typing.TextIO | None = None,
     ) -> live_eval.LiveEvalReport:
-        del provider, cases
+        del provider, cases, progress, progress_file
         captured_semantic_layers.append(semantic_layer)
         return live_eval.LiveEvalReport(total=0, passes=(), failures=())
 

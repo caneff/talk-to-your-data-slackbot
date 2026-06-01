@@ -13,6 +13,7 @@ import textwrap
 import typing
 
 import dotenv
+import tqdm
 
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.question_interpreter.question_frame_cases as question_frame_cases
@@ -127,6 +128,8 @@ def run_live_question_interpreter_eval(
     semantic_layer: schema.SemanticLayer,
     cases: collections.abc.Iterable[LiveEvalCase] = DEFAULT_CASES,
     sample_count: int = DEFAULT_SAMPLE_COUNT,
+    progress: bool = False,
+    progress_file: typing.TextIO | None = None,
 ) -> LiveEvalReport:
     """Run all enabled live eval cases and aggregate failures."""
     if sample_count < 1:
@@ -137,57 +140,74 @@ def run_live_question_interpreter_eval(
     enabled_cases = tuple(case for case in cases if case.enabled)
     passes: list[LiveEvalPass] = []
     failures: list[LiveEvalFailure] = []
-    for case in enabled_cases:
-        pass_count = 0
-        sample_failures: list[str] = []
-        last_actual: ProviderResult | None = None
-        last_failure_actual: ProviderResult | None = None
-        for sample_index in range(sample_count):
-            actual = provider.propose_question_frame(
-                question=case.question,
-                semantic_layer_context=semantic_layer_context,
+    progress_bar = _new_case_progress_bar(
+        enabled=progress,
+        total=len(enabled_cases),
+        progress_file=progress_file,
+    )
+    try:
+        for case_index, case in enumerate(enabled_cases, start=1):
+            _set_case_progress(
+                progress_bar=progress_bar,
+                case_index=case_index,
+                total=len(enabled_cases),
+                case_name=case.name,
             )
-            last_actual = actual
-            reasons = _case_failure_reasons(
-                expected=case.expected,
-                actual=actual,
-            )
-            if reasons:
-                last_failure_actual = actual
-                sample_failures.extend(
-                    f"sample {sample_index + 1}: {reason}" for reason in reasons
+            pass_count = 0
+            sample_failures: list[str] = []
+            last_actual: ProviderResult | None = None
+            last_failure_actual: ProviderResult | None = None
+            for sample_index in range(sample_count):
+                actual = provider.propose_question_frame(
+                    question=case.question,
+                    semantic_layer_context=semantic_layer_context,
                 )
-                continue
-            pass_count += 1
+                last_actual = actual
+                reasons = _case_failure_reasons(
+                    expected=case.expected,
+                    actual=actual,
+                )
+                if reasons:
+                    last_failure_actual = actual
+                    sample_failures.extend(
+                        f"sample {sample_index + 1}: {reason}" for reason in reasons
+                    )
+                    continue
+                pass_count += 1
 
-        if last_actual is None:
-            raise AssertionError("live eval must record at least one sample result")
-        if sample_failures:
-            failures.append(
-                LiveEvalFailure(
+            if last_actual is None:
+                raise AssertionError("live eval must record at least one sample result")
+            if sample_failures:
+                failures.append(
+                    LiveEvalFailure(
+                        case_name=case.name,
+                        question=case.question,
+                        expected=case.expected,
+                        actual=typing.cast(ProviderResult, last_failure_actual),
+                        reasons=tuple(sample_failures),
+                        pass_count=pass_count,
+                        sample_count=sample_count,
+                    )
+                )
+                _update_case_progress(progress_bar)
+                continue
+            passes.append(
+                LiveEvalPass(
                     case_name=case.name,
                     question=case.question,
                     expected=case.expected,
-                    actual=typing.cast(ProviderResult, last_failure_actual),
-                    reasons=tuple(sample_failures),
+                    actual=typing.cast(
+                        question_interpreter.QuestionFrameProposal,
+                        last_actual,
+                    ),
                     pass_count=pass_count,
                     sample_count=sample_count,
                 )
             )
-            continue
-        passes.append(
-            LiveEvalPass(
-                case_name=case.name,
-                question=case.question,
-                expected=case.expected,
-                actual=typing.cast(
-                    question_interpreter.QuestionFrameProposal,
-                    last_actual,
-                ),
-                pass_count=pass_count,
-                sample_count=sample_count,
-            )
-        )
+            _update_case_progress(progress_bar)
+    finally:
+        if progress_bar is not None:
+            progress_bar.close()
     return LiveEvalReport(
         total=len(enabled_cases),
         passes=tuple(passes),
@@ -261,7 +281,7 @@ def main(
     argv: collections.abc.Sequence[str] = (),
 ) -> int:
     """Run manual live eval suite against real OpenAI provider config."""
-    verbose = _parse_verbose(argv)
+    args = _parse_args(argv)
     active_environ = environ
     if active_environ is None:
         _load_env_file(env_file)
@@ -278,14 +298,22 @@ def main(
     report = run_live_question_interpreter_eval(
         provider=provider,
         semantic_layer=semantic_layer_loader.load_semantic_layer(),
+        progress=args.progress,
+        progress_file=stderr,
     )
-    write_live_eval_report(stdout=stdout, report=report, verbose=verbose)
+    write_live_eval_report(stdout=stdout, report=report, verbose=args.verbose)
     if report.failed:
         return 1
     return 0
 
 
-def _parse_verbose(argv: collections.abc.Sequence[str]) -> bool:
+@dataclasses.dataclass(frozen=True)
+class _CliArgs:
+    verbose: bool
+    progress: bool
+
+
+def _parse_args(argv: collections.abc.Sequence[str]) -> _CliArgs:
     parser = argparse.ArgumentParser(
         description="Run manual live evals for OpenAI Question Interpreter output.",
     )
@@ -295,8 +323,54 @@ def _parse_verbose(argv: collections.abc.Sequence[str]) -> bool:
         action="store_true",
         help="print full expected and actual details for passed cases",
     )
+    parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="disable the live case progress bar",
+    )
     args = parser.parse_args(list(argv))
-    return typing.cast(bool, args.verbose)
+    return _CliArgs(
+        verbose=typing.cast(bool, args.verbose),
+        progress=not typing.cast(bool, args.no_progress),
+    )
+
+
+def _new_case_progress_bar(
+    *,
+    enabled: bool,
+    total: int,
+    progress_file: typing.TextIO | None,
+) -> typing.Any | None:
+    if not enabled:
+        return None
+    return tqdm.tqdm(
+        total=total,
+        file=progress_file,
+        leave=False,
+        dynamic_ncols=True,
+        bar_format="{desc} |{bar}| {percentage:3.0f}%",
+    )
+
+
+def _set_case_progress(
+    *,
+    progress_bar: typing.Any | None,
+    case_index: int,
+    total: int,
+    case_name: str,
+) -> None:
+    if progress_bar is None:
+        return
+    progress_bar.set_description_str(
+        f"Live eval cases {case_index}/{total}: {case_name}",
+        refresh=True,
+    )
+
+
+def _update_case_progress(progress_bar: typing.Any | None) -> None:
+    if progress_bar is None:
+        return
+    progress_bar.update(1)
 
 
 def _load_env_file(

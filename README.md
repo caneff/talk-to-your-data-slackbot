@@ -183,6 +183,13 @@ cases too:
 uv run python -m data_assistant.question_interpreter.live_eval --verbose
 ```
 
+Multi-case live evals show a `tqdm` case progress bar on stderr by default. Use
+`--no-progress` when capturing logs:
+
+```bash
+uv run python -m data_assistant.question_interpreter.live_eval --no-progress
+```
+
 Optional model override in `.env`:
 
 ```dotenv
@@ -225,6 +232,8 @@ match) with `OPENAI_API_KEY` in `.env`:
 ```bash
 uv run python -m data_assistant.reasoning_layer.live_eval
 ```
+
+Use `--no-progress` to disable the stderr case progress bar when capturing logs.
 
 It samples each enabled case k=3, passes only when every sample passes, reports
 a per-case pass rate, and exits nonzero on any failure. The comparator asserts
