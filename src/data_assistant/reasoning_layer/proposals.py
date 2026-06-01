@@ -24,9 +24,15 @@ SLOT_NAMES: tuple[str, ...] = (
     "top_value",
 )
 
-# The figure-free subset handed to the provider as result_shape: labels and
-# ranking by name only, with every value-bearing slot withheld.
-_FIGURE_BEARING_SLOTS: frozenset[str] = frozenset({"metric_total", "top_value"})
+# The slot tokens available for a scalar (no group-by) query, in SLOT_NAMES
+# order. A grouped query additionally exposes the four grouping slots.
+_SCALAR_SLOT_NAMES: tuple[str, ...] = ("metric", "time_range", "metric_total")
+_GROUPING_SLOT_NAMES: tuple[str, ...] = (
+    "dimension",
+    "dimension_count",
+    "top_dimension",
+    "top_value",
+)
 
 
 class NarrativeProposal(pydantic.BaseModel):
@@ -104,12 +110,19 @@ def compute_slot_values(
 
 
 def figure_free_result_shape(slot_values: dict[str, object]) -> dict[str, object]:
-    """Return the value-withheld subset of slots handed to the provider."""
-    return {
-        name: value
-        for name, value in slot_values.items()
-        if name not in _FIGURE_BEARING_SLOTS
-    }
+    """Return the fully value-free Result Shape handed to the provider.
+
+    Carries only ``available_slots`` — the slot-token names writeable for this
+    query, in :data:`SLOT_NAMES` order — and never any slot contents (see
+    ADR-0012). Grouped-vs-scalar is derived from whether the ``dimension`` slot
+    is populated, not from value truthiness: a scalar query's
+    ``dimension_count`` is ``1`` (truthy) yet must not leak.
+    """
+    is_grouped = bool(slot_values.get("dimension"))
+    available_slots = _SCALAR_SLOT_NAMES + (
+        _GROUPING_SLOT_NAMES if is_grouped else ()
+    )
+    return {"available_slots": available_slots}
 
 
 def fill_narrative(

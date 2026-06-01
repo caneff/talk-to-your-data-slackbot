@@ -39,7 +39,7 @@ def test_compute_slot_values_for_scalar_prepared_data_has_empty_ranking() -> Non
     }
 
 
-def test_figure_free_result_shape_withholds_values() -> None:
+def test_figure_free_result_shape_grouped_lists_all_seven_slot_names() -> None:
     slot_values = reasoning_layer.compute_slot_values(
         narrative_cases.prepared_revenue_by_region()
     )
@@ -47,12 +47,45 @@ def test_figure_free_result_shape_withholds_values() -> None:
     result_shape = reasoning_layer.figure_free_result_shape(slot_values)
 
     assert result_shape == {
-        "metric": "Total revenue",
-        "time_range": "2026-01-01 through 2026-01-31",
-        "dimension": "regions",
-        "dimension_count": 5,
-        "top_dimension": "West",
+        "available_slots": (
+            "metric",
+            "time_range",
+            "metric_total",
+            "dimension",
+            "dimension_count",
+            "top_dimension",
+            "top_value",
+        ),
     }
+
+
+def test_figure_free_result_shape_scalar_lists_only_scalar_slot_names() -> None:
+    slot_values = reasoning_layer.compute_slot_values(
+        narrative_cases.prepared_customer_count()
+    )
+
+    result_shape = reasoning_layer.figure_free_result_shape(slot_values)
+
+    assert result_shape == {
+        "available_slots": ("metric", "time_range", "metric_total"),
+    }
+
+
+def test_figure_free_result_shape_carries_no_computed_value() -> None:
+    slot_values = reasoning_layer.compute_slot_values(
+        narrative_cases.prepared_revenue_by_region()
+    )
+
+    result_shape = reasoning_layer.figure_free_result_shape(slot_values)
+
+    flat = repr(result_shape)
+    for leaked in ("West", "2026", "$", "5,150", "1,600", "regions"):
+        assert leaked not in flat
+    # The bare scalar dimension_count value (1) must not leak for a scalar query.
+    scalar_shape = reasoning_layer.figure_free_result_shape(
+        reasoning_layer.compute_slot_values(narrative_cases.prepared_customer_count())
+    )
+    assert "1" not in repr(scalar_shape)
 
 
 def test_grounding_passes_clean_slot_only_prose() -> None:

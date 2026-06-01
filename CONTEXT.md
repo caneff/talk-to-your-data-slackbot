@@ -195,6 +195,19 @@ key numbers, caveats, datasets used, limitations, and optional chart or table
 payloads.
 _Avoid_: Final response, Slack message, report
 
+**Narrative Slot**:
+A named placeholder in a generated narrative that the pipeline — never the
+**Reasoning Layer**'s model — fills deterministically from **Prepared Data**,
+so every figure, date, and label in the prose is owned by the pipeline.
+_Avoid_: Template variable, merge field, token
+
+**Result Shape**:
+The figure-free description of a query result handed to the **Reasoning
+Layer**'s model: which **Narrative Slots** are available to write, and never
+their contents. Withholding the values is the first line of defense against a
+model that invents or misstates a number.
+_Avoid_: Query result, payload, data summary
+
 **Response Composer**:
 The part of the **Data Assistant** that turns an **Answer Draft** into a
 team-member-facing **Final Response**.
