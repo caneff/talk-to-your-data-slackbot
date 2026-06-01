@@ -63,6 +63,7 @@ CONTRACT_SNAPSHOT_CASES = (
             contracts.QuestionFrame(
                 intent="summarize",
                 metric="total revenue",
+                time_scope=contracts.TimeScope.BOUNDED,
                 field_operations=(
                     contracts.SemanticFieldOperation(
                         operation=schema.FieldOperation.GROUP_BY,
@@ -95,6 +96,7 @@ CONTRACT_SNAPSHOT_CASES = (
             contracts.QuestionFrame(
                 intent="summarize",
                 metric="total revenue",
+                time_scope=contracts.TimeScope.BOUNDED,
                 field_operations=(
                     contracts.SemanticFieldOperation(
                         operation=schema.FieldOperation.RANGE_FILTER,
@@ -106,6 +108,35 @@ CONTRACT_SNAPSHOT_CASES = (
                 unresolved_ambiguities=(),
             )
         ),
+    ),
+    snapshot_case(
+        name="all_time_scope",
+        proposal=question_interpreter.QuestionFrameProposal(
+            intent="summarize",
+            metric="total revenue",
+            field_operations=(
+                question_interpreter.GroupByOperationProposal(
+                    operation="group_by",
+                    field="region",
+                ),
+            ),
+            all_time=True,
+        ),
+        expected=contracts.Success(
+            contracts.QuestionFrame(
+                intent="summarize",
+                metric="total revenue",
+                field_operations=(
+                    contracts.SemanticFieldOperation(
+                        operation=schema.FieldOperation.GROUP_BY,
+                        field="region",
+                    ),
+                ),
+                unresolved_ambiguities=(),
+                time_scope=contracts.TimeScope.ALL_TIME,
+            )
+        ),
+        question="What was total revenue by region for all time?",
     ),
     snapshot_case(
         name="exact_date_include_filter",
@@ -126,6 +157,7 @@ CONTRACT_SNAPSHOT_CASES = (
             contracts.QuestionFrame(
                 intent="summarize",
                 metric="total revenue",
+                time_scope=contracts.TimeScope.BOUNDED,
                 field_operations=(
                     contracts.SemanticFieldOperation(
                         operation=schema.FieldOperation.GROUP_BY,
@@ -149,10 +181,19 @@ CONTRACT_SNAPSHOT_CASES = (
         ),
     ),
     snapshot_case(
-        name="missing_metric",
-        proposal=interpreter_support.question_frame_proposal(metric=None),
-        expected=non_answer_catalog.missing_required_field_non_answer(
-            "metric", stage=_STAGE
+        name="missing_time_scope_non_answer",
+        proposal=question_interpreter.QuestionFrameProposal(
+            intent="summarize",
+            metric="total revenue",
+            field_operations=(
+                question_interpreter.GroupByOperationProposal(
+                    operation="group_by",
+                    field="region",
+                ),
+            ),
+        ),
+        expected=non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.MISSING_TIME_SCOPE, stage=_STAGE
         ),
     ),
     provider_snapshot_case(
@@ -207,6 +248,29 @@ CONTRACT_SNAPSHOT_CASES = (
         ),
         expected=non_answer_catalog.non_answer(
             contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION, stage=_STAGE
+        ),
+    ),
+    snapshot_case(
+        name="all_time_with_filter_contradiction",
+        proposal=question_interpreter.QuestionFrameProposal(
+            intent="summarize",
+            metric="total revenue",
+            field_operations=(
+                question_interpreter.GroupByOperationProposal(
+                    operation="group_by",
+                    field="region",
+                ),
+                question_interpreter.RangeFilterOperationProposal(
+                    operation="range_filter",
+                    field="order date",
+                    lower="2026-01-01",
+                    upper="2026-01-31",
+                ),
+            ),
+            all_time=True,
+        ),
+        expected=non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT, stage=_STAGE
         ),
     ),
     snapshot_case(

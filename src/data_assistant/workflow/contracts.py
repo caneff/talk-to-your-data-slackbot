@@ -80,12 +80,28 @@ def _format_field_value(value: FieldValue) -> str:
     return str(value)
 
 
+class NonAnswerStage(enum.StrEnum):
+    """Pipeline stage that returned a Non-Answer."""
+
+    ACCESS_CONTROLLER = "access_controller"
+    QUESTION_INTERPRETER = "question_interpreter"
+    SEMANTIC_ROUTER = "semantic_router"
+
+
+class TimeScope(enum.StrEnum):
+    """Resolved temporal scope for a trusted Data Question."""
+
+    BOUNDED = "bounded"
+    ALL_TIME = "all_time"
+
+
 @dataclasses.dataclass(frozen=True)
 class QuestionFrame:
     """Structured interpretation of a Data Question."""
 
     intent: str
     metric: str
+    time_scope: TimeScope
     field_operations: tuple[SemanticFieldOperation, ...]
     unresolved_ambiguities: tuple[str, ...]
 
@@ -113,14 +129,6 @@ class Success(typing.Generic[T]):
     value: T
 
 
-class NonAnswerStage(enum.StrEnum):
-    """Pipeline stage that returned a Non-Answer."""
-
-    ACCESS_CONTROLLER = "access_controller"
-    QUESTION_INTERPRETER = "question_interpreter"
-    SEMANTIC_ROUTER = "semantic_router"
-
-
 class NonAnswerReasonCode(enum.StrEnum):
     """Typed reason categories for Non-Answer Responses."""
 
@@ -134,6 +142,8 @@ class NonAnswerReasonCode(enum.StrEnum):
     INVALID_PROVIDER_OUTPUT = "invalid_provider_output"
     # Question Frame is missing a required business interpretation field.
     MISSING_REQUIRED_FIELD = "missing_required_field"
+    # Question omits required time scope and must be clarified.
+    MISSING_TIME_SCOPE = "missing_time_scope"
     # No Curated Dataset can answer the Question Frame.
     NO_MATCHING_DATASET = "no_matching_dataset"
     # No Dataset Table can satisfy the Question Frame.

@@ -104,6 +104,13 @@ def _promote_provider_result(
     )
     if isinstance(field_operations_result, contracts.NonAnswer):
         return field_operations_result
+    time_scope = _derive_time_scope(
+        proposal=proposal,
+        field_operations=field_operations_result,
+        semantic_layer=semantic_layer,
+    )
+    if isinstance(time_scope, contracts.NonAnswer):
+        return time_scope
 
     return contracts.Success(
         contracts.QuestionFrame(
@@ -111,7 +118,40 @@ def _promote_provider_result(
             metric=metric_value,
             field_operations=field_operations_result,
             unresolved_ambiguities=(),
+            time_scope=time_scope,
         )
+    )
+
+
+def _derive_time_scope(
+    *,
+    proposal: QuestionFrameProposal,
+    field_operations: tuple[contracts.SemanticFieldOperation, ...],
+    semantic_layer: schema.SemanticLayer,
+) -> contracts.TimeScope | contracts.NonAnswer:
+    date_field_labels = {
+        field.label
+        for table in semantic_layer.tables
+        for field in table.fields
+        if field.data_type == schema.DataType.DATE
+    }
+    has_date_filter = any(
+        operation.operation != schema.FieldOperation.GROUP_BY
+        and operation.field in date_field_labels
+        for operation in field_operations
+    )
+    if has_date_filter and proposal.all_time:
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
+    if has_date_filter:
+        return contracts.TimeScope.BOUNDED
+    if proposal.all_time:
+        return contracts.TimeScope.ALL_TIME
+    return non_answer_catalog.non_answer(
+        contracts.NonAnswerReasonCode.MISSING_TIME_SCOPE,
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
     )
 
 

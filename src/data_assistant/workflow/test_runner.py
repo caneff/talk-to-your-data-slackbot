@@ -162,7 +162,7 @@ def test_data_assistant_runs_customer_count_by_customer_region_end_to_end(
 def test_data_assistant_short_circuits_question_ambiguity(
     monkeypatch: pytest.MonkeyPatch,
     connect_orders: local_duckdb_fixture.OrdersConnector,
-    missing_time_range_provider: question_interpreter.QuestionInterpreterProvider,
+    missing_time_scope_provider: question_interpreter.QuestionInterpreterProvider,
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
     sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
@@ -171,7 +171,7 @@ def test_data_assistant_short_circuits_question_ambiguity(
         result = workflow_runner.run_data_assistant(
             connection,
             "What was total revenue by region?",
-            question_interpreter_provider=missing_time_range_provider,
+            question_interpreter_provider=missing_time_scope_provider,
             internal_identity=allowed_internal_identity,
         )
 
@@ -179,7 +179,7 @@ def test_data_assistant_short_circuits_question_ambiguity(
     assert len(captured_non_answers) == 1
     non_answer = captured_non_answers[0]
     assert non_answer.stage == contracts.NonAnswerStage.QUESTION_INTERPRETER
-    assert non_answer.context == ("metric",)
+    assert non_answer.reason_code == contracts.NonAnswerReasonCode.MISSING_TIME_SCOPE
 
 
 def test_data_assistant_denies_dataset_access_before_request_or_preparation(
@@ -242,13 +242,14 @@ def test_data_assistant_returns_ambiguous_table_before_access_denial(
                     field="region",
                 ),
             ),
+            all_time=True,
         )
     )
 
     with connect_orders((("2026-01-03", "North", "1200.00"),)) as connection:
         result = workflow_runner.run_data_assistant(
             connection,
-            "What was total revenue by region?",
+            "What was total revenue by region for all time?",
             question_interpreter_provider=provider,
             internal_identity=contracts.InternalIdentity(identity_id="employee_999"),
             semantic_layer=semantic_layer,
@@ -337,6 +338,7 @@ def test_data_assistant_uses_required_question_interpreter_provider(
     assert run.question_frame == contracts.QuestionFrame(
         intent="summarize",
         metric="total revenue",
+        time_scope=contracts.TimeScope.BOUNDED,
         field_operations=(
             contracts.SemanticFieldOperation(
                 operation=schema.FieldOperation.GROUP_BY,

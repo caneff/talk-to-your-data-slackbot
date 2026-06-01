@@ -102,6 +102,12 @@ def compare_question_frame_meaning(
         expected=expected.metric,
         actual=actual.metric,
     )
+    _append_scalar_mismatch(
+        mismatches=mismatches,
+        field="all_time",
+        expected=expected.all_time,
+        actual=actual.all_time,
+    )
     _append_field_operations_mismatches(
         mismatches=mismatches,
         expected=expected.field_operations,

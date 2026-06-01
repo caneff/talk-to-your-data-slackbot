@@ -38,7 +38,12 @@ def test_run_demo_safe_non_answer_returns_clarification_response() -> None:
 
     assert non_answer.request_text == "What was total revenue by region?"
     assert "I cannot answer safely yet" in non_answer.response_text
-    assert "Next step: Ask a clarification question" in non_answer.response_text
+    assert "specify a time period or explicitly ask for all time" in (
+        non_answer.response_text
+    )
+    assert "Next step: Ask which time period should be used, or confirm all time." in (
+        non_answer.response_text
+    )
     assert "Trust Summary:" in non_answer.response_text
 
 
