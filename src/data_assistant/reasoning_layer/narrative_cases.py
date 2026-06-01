@@ -197,27 +197,20 @@ SHARED_NARRATIVE_CASES: tuple[SharedNarrativeCase, ...] = (
     SharedNarrativeCase(
         name="grouped_revenue_by_region",
         prepared_data=prepared_revenue_by_region(),
-        expectation=GroundingExpectation(
-            required_slots=("{top_dimension}",),
-        ),
+        # The leader clause is stylistic; the safety-only bar (grounded +
+        # fillable + headline {metric_total} survives) carries the floor.
+        expectation=GroundingExpectation(required_slots=()),
     ),
-    # Disabled pending #92: result_shape hands the model digit-bearing
-    # time_range/dimension_count, so the terse scalar sentence trips the
-    # zero-digit grounding rule even on gpt-4o. Re-enable once result_shape
-    # is value-free.
     SharedNarrativeCase(
         name="scalar_customer_count",
         prepared_data=prepared_customer_count(),
         expectation=GroundingExpectation(
             required_slots=("{metric_total}",),
         ),
-        enabled=False,
     ),
     SharedNarrativeCase(
         name="all_time_revenue_by_region",
         prepared_data=prepared_revenue_by_region(all_time=True),
-        expectation=GroundingExpectation(
-            required_slots=("{top_dimension}",),
-        ),
+        expectation=GroundingExpectation(required_slots=()),
     ),
 )

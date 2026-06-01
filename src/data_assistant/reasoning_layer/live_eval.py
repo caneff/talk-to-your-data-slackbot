@@ -27,8 +27,11 @@ ProviderResult: typing.TypeAlias = (
     reasoning_layer.NarrativeProposal | reasoning_layer.ProviderFailure
 )
 
-# Slots whose computed value-strings must survive into the filled summary.
-_VALUE_SLOTS: tuple[str, ...] = ("metric_total", "top_value")
+# Headline slot whose computed value-string must survive into the filled
+# summary. Only the headline ``{metric_total}`` is in the safety-only bar; the
+# leader clause (`{top_dimension} at {top_value}`) is stylistic, so terser
+# prose that omits it passes (see ADR-0012).
+_VALUE_SLOTS: tuple[str, ...] = ("metric_total",)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -77,7 +80,13 @@ def compare_grounding(
     expectation: narrative_cases.GroundingExpectation,
     slot_values: dict[str, object],
 ) -> tuple[str, ...]:
-    """Return grounding-property mismatches for one proposal."""
+    """Return grounding-property mismatches for one proposal.
+
+    The all-pass (k=3) bar is a safety-only property set: grounded (zero
+    digits) + fillable + the headline ``{metric_total}`` value survives into
+    the filled prose. The optional leader clause is stylistic, so safe-but-
+    terser prose that omits it still passes (see ADR-0012).
+    """
     if isinstance(proposal, reasoning_layer.ProviderFailure):
         return (f"provider failure: {proposal.reason}",)
     reasons: list[str] = []

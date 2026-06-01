@@ -49,6 +49,45 @@ def test_comparator_passes_grounded_filled_proposal_with_values() -> None:
     assert reasons == ()
 
 
+def test_comparator_passes_terser_prose_omitting_the_leader_clause() -> None:
+    proposal = reasoning_layer.NarrativeProposal(
+        summary=(
+            "{metric} in {time_range} totaled {metric_total} across "
+            "{dimension_count} {dimension}."
+        )
+    )
+    slot_values = reasoning_layer.compute_slot_values(
+        narrative_cases.prepared_revenue_by_region()
+    )
+
+    reasons = live_eval.compare_grounding(
+        proposal=proposal,
+        expectation=narrative_cases.GroundingExpectation(),
+        slot_values=slot_values,
+    )
+
+    assert reasons == ()
+
+
+def test_comparator_reports_missing_headline_metric_total_value() -> None:
+    proposal = reasoning_layer.NarrativeProposal(
+        summary="{metric} in {time_range} led by {top_dimension}."
+    )
+    slot_values = reasoning_layer.compute_slot_values(
+        narrative_cases.prepared_revenue_by_region()
+    )
+
+    reasons = live_eval.compare_grounding(
+        proposal=proposal,
+        expectation=narrative_cases.GroundingExpectation(),
+        slot_values=slot_values,
+    )
+
+    assert reasons == (
+        "computed value $5,150.00 absent from filled summary",
+    )
+
+
 def test_comparator_reports_ungrounded_digit() -> None:
     proposal = reasoning_layer.NarrativeProposal(summary="West led by 6%.")
     slot_values = reasoning_layer.compute_slot_values(
@@ -113,7 +152,6 @@ def test_comparator_reports_value_string_absent_from_filled_summary() -> None:
     assert "$5,150.00" in slot_values["metric_total"]  # type: ignore[operator]
     assert reasons == (
         "computed value $5,150.00 absent from filled summary",
-        "computed value $1,600.00 absent from filled summary",
     )
 
 
