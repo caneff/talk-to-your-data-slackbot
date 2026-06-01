@@ -65,11 +65,11 @@ def canonical_question_proposal() -> question_interpreter.QuestionFrameProposal:
     )
 
 
-def missing_time_range_proposal() -> question_interpreter.QuestionFrameProposal:
-    """Return provider proposal that omits a required metric."""
+def missing_time_scope_proposal() -> question_interpreter.QuestionFrameProposal:
+    """Return provider proposal that omits required time scope."""
     return question_interpreter.QuestionFrameProposal(
         intent="summarize",
-        metric=None,
+        metric="total revenue",
         field_operations=(
             question_interpreter.GroupByOperationProposal(
                 operation="group_by",
@@ -110,9 +110,9 @@ def canonical_question_provider() -> question_interpreter.QuestionInterpreterPro
 
 
 @pytest.fixture
-def missing_time_range_provider() -> question_interpreter.QuestionInterpreterProvider:
-    """Return a fake provider that triggers missing-time-range NonAnswer."""
-    return StaticQuestionInterpreterProvider(missing_time_range_proposal())
+def missing_time_scope_provider() -> question_interpreter.QuestionInterpreterProvider:
+    """Return a fake provider that triggers missing-time-scope NonAnswer."""
+    return StaticQuestionInterpreterProvider(missing_time_scope_proposal())
 
 
 @pytest.fixture

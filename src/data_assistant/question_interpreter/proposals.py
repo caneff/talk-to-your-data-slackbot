@@ -86,6 +86,13 @@ class QuestionFrameProposal(pydantic.BaseModel):
             "operations for fields that are merely available in context."
         ),
     )
+    all_time: bool = pydantic.Field(
+        default=False,
+        description=(
+            "True only when the Data Question explicitly asks across all time "
+            "and no date filter operation is emitted."
+        ),
+    )
 
 
 @dataclasses.dataclass(frozen=True)

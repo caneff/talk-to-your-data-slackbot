@@ -151,6 +151,18 @@ _GOLDEN_WORDING: tuple[
     ),
     (
         non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.MISSING_TIME_SCOPE, stage=_STAGE
+        ),
+        non_answer_catalog.NonAnswerWording(
+            reason=(
+                "The Data Question must specify a time period or explicitly ask "
+                "for all time."
+            ),
+            next_step="Ask which time period should be used, or confirm all time.",
+        ),
+    ),
+    (
+        non_answer_catalog.non_answer(
             contracts.NonAnswerReasonCode.NO_MATCHING_DATASET, stage=_STAGE
         ),
         non_answer_catalog.NonAnswerWording(

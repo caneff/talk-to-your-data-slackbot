@@ -22,11 +22,13 @@ def _proposal(
     intent: str | None,
     metric: str | None,
     field_operations: tuple[question_interpreter.FieldOperationProposal, ...],
+    all_time: bool = False,
 ) -> question_interpreter.QuestionFrameProposal:
     return question_interpreter.QuestionFrameProposal(
         intent=intent,
         metric=metric,
         field_operations=field_operations,
+        all_time=all_time,
     )
 
 
@@ -90,12 +92,12 @@ def _january_customer_count_by_customer_region_proposal() -> (
     )
 
 
-def _missing_time_range_revenue_by_region_proposal() -> (
+def _missing_time_scope_revenue_by_region_proposal() -> (
     question_interpreter.QuestionFrameProposal
 ):
     return _proposal(
         intent="summarize",
-        metric=None,
+        metric="total revenue",
         field_operations=(_group_by_region(),),
     )
 
@@ -124,7 +126,6 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
     SharedQuestionFrameCase(
         name="safe_non_answer_question",
         question="What was total revenue by region?",
-        expected=_missing_time_range_revenue_by_region_proposal(),
-        enabled=False,
+        expected=_missing_time_scope_revenue_by_region_proposal(),
     ),
 )

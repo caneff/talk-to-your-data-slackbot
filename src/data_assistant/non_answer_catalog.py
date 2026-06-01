@@ -20,6 +20,7 @@ _StaticReasonCode: typing.TypeAlias = typing.Literal[
     contracts.NonAnswerReasonCode.AMBIGUOUS_DATASET,
     contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE,
     contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+    contracts.NonAnswerReasonCode.MISSING_TIME_SCOPE,
     contracts.NonAnswerReasonCode.NO_MATCHING_DATASET,
     contracts.NonAnswerReasonCode.NO_MATCHING_TABLE,
     contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
@@ -63,6 +64,15 @@ _DEFINITIONS: dict[contracts.NonAnswerReasonCode, _NonAnswerDefinition] = {
         reason="The Data Question is missing required interpretation details.",
         context=(),
         next_step="Ask a clarification question before selecting data.",
+    ),
+    contracts.NonAnswerReasonCode.MISSING_TIME_SCOPE: _NonAnswerDefinition(
+        response_kind=contracts.ResponseKind.CLARIFICATION_NEEDED,
+        reason=(
+            "The Data Question must specify a time period or explicitly ask "
+            "for all time."
+        ),
+        context=("time scope",),
+        next_step="Ask which time period should be used, or confirm all time.",
     ),
     contracts.NonAnswerReasonCode.NO_MATCHING_DATASET: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,
