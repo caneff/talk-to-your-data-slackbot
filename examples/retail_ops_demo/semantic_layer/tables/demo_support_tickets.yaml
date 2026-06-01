@@ -1,0 +1,69 @@
+table_id: demo_support_tickets
+dataset_id: retail_ops
+description: Synthetic customer support tickets tied to retail orders and customers.
+columns:
+  - column_id: ticket_id
+    data_type: string
+    semantic_role: identifier
+  - column_id: created_date
+    data_type: date
+  - column_id: customer_id
+    data_type: string
+    semantic_role: identifier
+  - column_id: order_id
+    data_type: string
+    semantic_role: identifier
+  - column_id: issue_category
+    data_type: string
+    semantic_role: dimension
+  - column_id: priority
+    data_type: string
+    semantic_role: dimension
+  - column_id: status
+    data_type: string
+    semantic_role: dimension
+  - column_id: first_response_minutes
+    data_type: decimal
+    semantic_role: measure
+  - column_id: resolution_hours
+    data_type: decimal
+    semantic_role: measure
+metrics:
+  - metric_id: support_ticket_count
+    label: support ticket count
+    expression: count(ticket_id)
+    source_column: ticket_id
+    kind: count
+fields:
+  - field_id: ticket_created_date
+    label: ticket created date
+    source_column: created_date
+    data_type: date
+    operations:
+      - include_filter
+      - exclude_filter
+      - range_filter
+  - field_id: issue_category
+    label: issue category
+    source_column: issue_category
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter
+  - field_id: priority
+    label: ticket priority
+    source_column: priority
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter
+  - field_id: status
+    label: ticket status
+    source_column: status
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter

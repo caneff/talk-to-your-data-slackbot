@@ -110,6 +110,16 @@ not fall back to a deterministic interpreter.
 
 For local development, the runtime uses a tiny in-memory DuckDB `orders` table. It is only there to support a manual Slack smoke test. No dataset files are committed.
 
+To run the same Slack bot against a different Semantic Layer and DuckDB
+location, pass runtime data flags:
+
+```bash
+uv run python -m data_assistant.slack_runtime --semantic-layer-path examples/retail_ops_demo/semantic_layer --duckdb-path :memory: --seed-sql-path examples/retail_ops_demo/seeds/retail_ops_seed.sql
+```
+
+`--seed-sql-path` is optional for an existing DuckDB file. It is useful for demo
+data because startup stays one command.
+
 ## Manual Slack smoke test
 
 1. Start the adapter with `uv run python -m data_assistant.slack_runtime`.

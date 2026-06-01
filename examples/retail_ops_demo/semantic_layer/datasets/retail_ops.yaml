@@ -1,0 +1,30 @@
+dataset_id: retail_ops
+name: Retail Operations
+tables:
+  - demo_orders
+  - demo_order_lines
+  - demo_customers
+  - demo_products
+  - demo_stores
+  - demo_support_tickets
+  - demo_inventory_snapshots
+information_types:
+  - retail revenue
+  - gross margin
+  - product performance
+  - customer segments
+  - store operations
+  - support operations
+  - inventory health
+freshness:
+  as_of: "2026-05-31"
+  description: Retail operations demo data refreshed through 2026-05-31.
+example_questions:
+  - What was total net revenue by store region in Q1 2026?
+  - What was gross margin by product category in March 2026?
+  - What was support ticket count by issue category in April 2026?
+  - Which product categories had the most stockout days in May 2026?
+dataset_access:
+  allowed_identity_ids:
+    - employee_123
+    - local_development_user

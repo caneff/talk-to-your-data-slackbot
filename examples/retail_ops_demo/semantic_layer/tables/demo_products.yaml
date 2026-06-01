@@ -1,0 +1,56 @@
+table_id: demo_products
+dataset_id: retail_ops
+description: Synthetic product catalog with category, subcategory, brand, price, and cost attributes.
+columns:
+  - column_id: product_id
+    data_type: string
+    semantic_role: identifier
+  - column_id: sku
+    data_type: string
+    semantic_role: identifier
+  - column_id: product_category
+    data_type: string
+    semantic_role: dimension
+  - column_id: product_subcategory
+    data_type: string
+    semantic_role: dimension
+  - column_id: brand
+    data_type: string
+    semantic_role: dimension
+  - column_id: standard_cost
+    data_type: decimal
+    semantic_role: measure
+  - column_id: list_price
+    data_type: decimal
+    semantic_role: measure
+metrics:
+  - metric_id: product_count
+    label: product count
+    expression: count(product_id)
+    source_column: product_id
+    kind: count
+fields:
+  - field_id: product_category
+    label: product category
+    source_column: product_category
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter
+  - field_id: product_subcategory
+    label: product subcategory
+    source_column: product_subcategory
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter
+  - field_id: brand
+    label: brand
+    source_column: brand
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter

@@ -11,6 +11,7 @@ import duckdb
 import pytest
 
 import data_assistant.local_duckdb_fixture as local_duckdb_fixture
+import data_assistant.semantic_layer.schema as schema
 import data_assistant.slack_boundary as slack_boundary
 import data_assistant.slack_runtime as slack_runtime
 import data_assistant.workflow.contracts as contracts
@@ -425,6 +426,109 @@ def test_run_socket_mode_from_env_registers_message_handler_before_startup() -> 
     assert handler.app is app
     assert handler.app_token == "xapp-live-token"
     assert handler.starts == 1
+
+
+def test_build_duckdb_connection_factory_runs_seed_sql(tmp_path: pathlib.Path) -> None:
+    seed_sql_path = tmp_path / "seed.sql"
+    seed_sql_path.write_text(
+        "create table demo_value (value integer); insert into demo_value values (42);",
+        encoding="utf-8",
+    )
+    connection_factory = slack_runtime.build_duckdb_connection_factory(
+        ":memory:",
+        seed_sql_path=seed_sql_path,
+    )
+
+    with connection_factory() as connection:
+        row = connection.execute("select value from demo_value").fetchone()
+
+    assert row == (42,)
+
+
+def test_main_uses_configured_semantic_layer_and_duckdb_paths(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+) -> None:
+    semantic_layer_path = tmp_path / "semantic-layer"
+    seed_sql_path = tmp_path / "seed.sql"
+    seed_sql_path.write_text(
+        "create table demo_value (value integer); insert into demo_value values (7);",
+        encoding="utf-8",
+    )
+    loaded_semantic_layer = typing.cast(schema.SemanticLayer, object())
+    loaded_paths: list[pathlib.Path] = []
+    built_answer_paths: list[slack_boundary.AnswerPath] = []
+    received_connection_factories: list[slack_runtime.ConnectionFactory | None] = []
+
+    def fake_load_semantic_layer(path: pathlib.Path) -> schema.SemanticLayer:
+        loaded_paths.append(path)
+        return loaded_semantic_layer
+
+    def fake_build_openai_answer_path(
+        environ: collections.abc.Mapping[str, str],
+        *,
+        semantic_layer: schema.SemanticLayer | None = None,
+    ) -> slack_boundary.AnswerPath:
+        del environ
+        assert semantic_layer is loaded_semantic_layer
+        built_answer_paths.append(sentinel_answer_path)
+        return sentinel_answer_path
+
+    def fake_run_socket_mode_from_env(
+        environ: collections.abc.Mapping[str, str] = {},
+        *,
+        app_factory: slack_runtime.AppFactory | None = None,
+        socket_mode_handler_factory: (
+            slack_runtime.SocketModeHandlerFactory | None
+        ) = None,
+        connection_factory: slack_runtime.ConnectionFactory | None = None,
+        internal_identity_resolver: (
+            slack_boundary.InternalIdentityResolver | None
+        ) = None,
+        answer_path: slack_boundary.AnswerPath | None = None,
+    ) -> FakeSocketModeHandler:
+        del environ, app_factory, socket_mode_handler_factory
+        del internal_identity_resolver
+        assert answer_path is sentinel_answer_path
+        assert connection_factory is not None
+        received_connection_factories.append(connection_factory)
+        with connection_factory() as connection:
+            row = connection.execute("select value from demo_value").fetchone()
+        assert row == (7,)
+        return FakeSocketModeHandler(app_token="xapp-test-token", app=object())
+
+    monkeypatch.setattr(
+        slack_runtime.semantic_layer_loader,
+        "load_semantic_layer",
+        fake_load_semantic_layer,
+    )
+    monkeypatch.setattr(
+        slack_runtime,
+        "build_openai_answer_path",
+        fake_build_openai_answer_path,
+    )
+    monkeypatch.setattr(
+        slack_runtime,
+        "run_socket_mode_from_env",
+        fake_run_socket_mode_from_env,
+    )
+
+    exit_code = slack_runtime.main(
+        [
+            "--semantic-layer-path",
+            str(semantic_layer_path),
+            "--duckdb-path",
+            ":memory:",
+            "--seed-sql-path",
+            str(seed_sql_path),
+        ],
+        env_file=tmp_path / ".env",
+    )
+
+    assert exit_code == 0
+    assert loaded_paths == [semantic_layer_path]
+    assert built_answer_paths == [sentinel_answer_path]
+    assert len(received_connection_factories) == 1
 
 
 def test_main_starts_socket_mode_with_dev_connection_factory(

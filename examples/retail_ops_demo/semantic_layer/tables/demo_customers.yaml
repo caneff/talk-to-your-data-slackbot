@@ -1,0 +1,68 @@
+table_id: demo_customers
+dataset_id: retail_ops
+description: Synthetic retail customer profiles with segment, loyalty, and acquisition attributes.
+columns:
+  - column_id: customer_id
+    data_type: string
+    semantic_role: identifier
+  - column_id: created_date
+    data_type: date
+  - column_id: customer_segment
+    data_type: string
+    semantic_role: dimension
+  - column_id: customer_region
+    data_type: string
+    semantic_role: dimension
+  - column_id: loyalty_tier
+    data_type: string
+    semantic_role: dimension
+  - column_id: acquisition_channel
+    data_type: string
+    semantic_role: dimension
+metrics:
+  - metric_id: customer_count
+    label: customer count
+    expression: count(customer_id)
+    source_column: customer_id
+    kind: count
+fields:
+  - field_id: created_date
+    label: customer created date
+    source_column: created_date
+    data_type: date
+    operations:
+      - include_filter
+      - exclude_filter
+      - range_filter
+  - field_id: customer_segment
+    label: customer segment
+    source_column: customer_segment
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter
+  - field_id: customer_region
+    label: customer region
+    source_column: customer_region
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter
+  - field_id: loyalty_tier
+    label: loyalty tier
+    source_column: loyalty_tier
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter
+  - field_id: acquisition_channel
+    label: acquisition channel
+    source_column: acquisition_channel
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter

@@ -1,0 +1,111 @@
+table_id: demo_order_lines
+dataset_id: retail_ops
+description: Synthetic retail order line facts with product, quantity, revenue, cost, and return fields.
+columns:
+  - column_id: line_id
+    data_type: string
+    semantic_role: identifier
+  - column_id: order_id
+    data_type: string
+    semantic_role: identifier
+  - column_id: product_id
+    data_type: string
+    semantic_role: identifier
+  - column_id: order_date
+    data_type: date
+  - column_id: product_category
+    data_type: string
+    semantic_role: dimension
+  - column_id: product_subcategory
+    data_type: string
+    semantic_role: dimension
+  - column_id: brand
+    data_type: string
+    semantic_role: dimension
+  - column_id: quantity
+    data_type: decimal
+    semantic_role: measure
+  - column_id: unit_price
+    data_type: decimal
+    semantic_role: measure
+  - column_id: unit_cost
+    data_type: decimal
+    semantic_role: measure
+  - column_id: line_revenue
+    data_type: decimal
+    semantic_role: measure
+  - column_id: line_cost
+    data_type: decimal
+    semantic_role: measure
+  - column_id: returned_quantity
+    data_type: decimal
+    semantic_role: measure
+metrics:
+  - metric_id: total_line_revenue
+    label: total line revenue
+    expression: sum(line_revenue)
+    source_column: line_revenue
+    kind: money
+  - metric_id: gross_margin
+    label: gross margin
+    expression: sum(line_revenue - line_cost)
+    source_column: line_revenue
+    kind: money
+  - metric_id: units_sold
+    label: units sold
+    expression: sum(quantity)
+    source_column: quantity
+    kind: count
+  - metric_id: units_returned
+    label: units returned
+    expression: sum(returned_quantity)
+    source_column: returned_quantity
+    kind: count
+fields:
+  - field_id: product_id
+    label: product
+    source_column: product_id
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter
+  - field_id: order_id
+    label: order
+    source_column: order_id
+    data_type: string
+    operations:
+      - include_filter
+      - exclude_filter
+  - field_id: order_date
+    label: order date
+    source_column: order_date
+    data_type: date
+    operations:
+      - include_filter
+      - exclude_filter
+      - range_filter
+  - field_id: product_category
+    label: product category
+    source_column: product_category
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter
+  - field_id: product_subcategory
+    label: product subcategory
+    source_column: product_subcategory
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter
+  - field_id: brand
+    label: brand
+    source_column: brand
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import collections.abc as collections_abc
 import contextlib
 import dataclasses
@@ -16,6 +17,8 @@ import duckdb
 import data_assistant.access_controller as access_controller
 import data_assistant.local_duckdb_fixture as local_duckdb_fixture
 import data_assistant.question_interpreter as question_interpreter
+import data_assistant.semantic_layer.loader as semantic_layer_loader
+import data_assistant.semantic_layer.schema as schema
 import data_assistant.slack_boundary as slack_boundary
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
@@ -106,6 +109,8 @@ class _SocketModeSlackGateway:
 
 def build_openai_answer_path(
     environ: collections_abc.Mapping[str, str],
+    *,
+    semantic_layer: schema.SemanticLayer | None = None,
 ) -> slack_boundary.AnswerPath:
     """Build the Slack answer path using the live OpenAI Question Interpreter."""
     provider = question_interpreter.build_openai_question_interpreter_provider(environ)
@@ -120,6 +125,7 @@ def build_openai_answer_path(
             question,
             question_interpreter_provider=provider,
             internal_identity=internal_identity,
+            semantic_layer=semantic_layer,
         )
 
     return answer_path
@@ -275,6 +281,32 @@ def _dev_connection_factory() -> contextlib.AbstractContextManager[
     )
 
 
+def build_duckdb_connection_factory(
+    duckdb_path: str | pathlib.Path,
+    *,
+    seed_sql_path: str | pathlib.Path | None = None,
+) -> ConnectionFactory:
+    """Build a runtime connection factory for a configured DuckDB database."""
+    duckdb_location = str(duckdb_path)
+    seed_sql = (
+        pathlib.Path(seed_sql_path).read_text(encoding="utf-8")
+        if seed_sql_path is not None
+        else None
+    )
+
+    @contextlib.contextmanager
+    def connect() -> collections_abc.Generator[duckdb.DuckDBPyConnection]:
+        connection = duckdb.connect(duckdb_location)
+        try:
+            if seed_sql is not None:
+                connection.execute(seed_sql)
+            yield connection
+        finally:
+            connection.close()
+
+    return connect
+
+
 def run_socket_mode_from_env(
     environ: collections_abc.Mapping[str, str] = os.environ,
     *,
@@ -309,17 +341,25 @@ def run_socket_mode_from_env(
 
 
 def main(
+    argv: collections_abc.Sequence[str] = (),
     *,
     env_file: str | pathlib.Path = ".env",
 ) -> int:
     """Run the local Socket Mode entrypoint."""
     try:
-        _load_env_file(env_file)
+        args = _parse_args(argv)
+        active_env_file = args.env_file or env_file
+        _load_env_file(active_env_file)
+        connection_factory = _configured_connection_factory(args)
+        answer_path = _configured_answer_path(os.environ, args)
         run_socket_mode_from_env(
-            connection_factory=_dev_connection_factory,
+            connection_factory=connection_factory,
             internal_identity_resolver=_dev_internal_identity_resolver,
+            answer_path=answer_path,
         )
     except (
+        OSError,
+        ValueError,
         SlackRuntimeConfigError,
         question_interpreter.OpenAIQuestionInterpreterConfigError,
     ) as error:
@@ -328,5 +368,56 @@ def main(
     return 0
 
 
+def _parse_args(argv: collections_abc.Sequence[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run the local Slack adapter.")
+    parser.add_argument(
+        "--env-file",
+        type=pathlib.Path,
+        default=None,
+        help="dotenv file to load before startup. Defaults to .env.",
+    )
+    parser.add_argument(
+        "--semantic-layer-path",
+        type=pathlib.Path,
+        default=None,
+        help="Semantic Layer directory to load instead of semantic_layer/.",
+    )
+    parser.add_argument(
+        "--duckdb-path",
+        type=str,
+        default=None,
+        help="DuckDB database location to use instead of the tiny dev fixture.",
+    )
+    parser.add_argument(
+        "--seed-sql-path",
+        type=pathlib.Path,
+        default=None,
+        help="Optional SQL file to run whenever the DuckDB connection opens.",
+    )
+    args = parser.parse_args(argv)
+    if args.seed_sql_path is not None and args.duckdb_path is None:
+        parser.error("--seed-sql-path requires --duckdb-path")
+    return args
+
+
+def _configured_connection_factory(args: argparse.Namespace) -> ConnectionFactory:
+    if args.duckdb_path is None:
+        return _dev_connection_factory
+    return build_duckdb_connection_factory(
+        args.duckdb_path,
+        seed_sql_path=args.seed_sql_path,
+    )
+
+
+def _configured_answer_path(
+    environ: collections_abc.Mapping[str, str],
+    args: argparse.Namespace,
+) -> slack_boundary.AnswerPath | None:
+    if args.semantic_layer_path is None:
+        return None
+    semantic_layer = semantic_layer_loader.load_semantic_layer(args.semantic_layer_path)
+    return build_openai_answer_path(environ, semantic_layer=semantic_layer)
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

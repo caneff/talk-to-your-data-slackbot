@@ -1,0 +1,120 @@
+table_id: demo_orders
+dataset_id: retail_ops
+description: Synthetic retail order headers with channel, fulfillment, promotion, and revenue fields.
+columns:
+  - column_id: order_id
+    data_type: string
+    semantic_role: identifier
+  - column_id: order_date
+    data_type: date
+  - column_id: customer_id
+    data_type: string
+    semantic_role: identifier
+  - column_id: store_id
+    data_type: string
+    semantic_role: identifier
+  - column_id: order_channel
+    data_type: string
+    semantic_role: dimension
+  - column_id: fulfillment_status
+    data_type: string
+    semantic_role: dimension
+  - column_id: promo_code
+    data_type: string
+    semantic_role: dimension
+  - column_id: shipping_region
+    data_type: string
+    semantic_role: dimension
+  - column_id: store_region
+    data_type: string
+    semantic_role: dimension
+  - column_id: customer_segment
+    data_type: string
+    semantic_role: dimension
+  - column_id: gross_revenue
+    data_type: decimal
+    semantic_role: measure
+  - column_id: discount_amount
+    data_type: decimal
+    semantic_role: measure
+  - column_id: net_revenue
+    data_type: decimal
+    semantic_role: measure
+metrics:
+  - metric_id: total_net_revenue
+    label: total net revenue
+    expression: sum(net_revenue)
+    source_column: net_revenue
+    kind: money
+  - metric_id: total_gross_revenue
+    label: total gross revenue
+    expression: sum(gross_revenue)
+    source_column: gross_revenue
+    kind: money
+  - metric_id: order_count
+    label: order count
+    expression: count(order_id)
+    source_column: order_id
+    kind: count
+  - metric_id: total_discount_amount
+    label: total discount amount
+    expression: sum(discount_amount)
+    source_column: discount_amount
+    kind: money
+fields:
+  - field_id: order_date
+    label: order date
+    source_column: order_date
+    data_type: date
+    operations:
+      - include_filter
+      - exclude_filter
+      - range_filter
+  - field_id: order_channel
+    label: order channel
+    source_column: order_channel
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter
+  - field_id: fulfillment_status
+    label: fulfillment status
+    source_column: fulfillment_status
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter
+  - field_id: promo_code
+    label: promotion code
+    source_column: promo_code
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter
+  - field_id: shipping_region
+    label: shipping region
+    source_column: shipping_region
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter
+  - field_id: store_region
+    label: store region
+    source_column: store_region
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter
+  - field_id: customer_segment
+    label: customer segment
+    source_column: customer_segment
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter

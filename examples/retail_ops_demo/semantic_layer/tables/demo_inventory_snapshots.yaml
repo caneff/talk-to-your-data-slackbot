@@ -1,0 +1,76 @@
+table_id: demo_inventory_snapshots
+dataset_id: retail_ops
+description: Synthetic monthly inventory snapshots by store and product.
+columns:
+  - column_id: snapshot_date
+    data_type: date
+  - column_id: store_id
+    data_type: string
+    semantic_role: identifier
+  - column_id: product_id
+    data_type: string
+    semantic_role: identifier
+  - column_id: product_category
+    data_type: string
+    semantic_role: dimension
+  - column_id: product_subcategory
+    data_type: string
+    semantic_role: dimension
+  - column_id: on_hand_units
+    data_type: decimal
+    semantic_role: measure
+  - column_id: stockout_days
+    data_type: decimal
+    semantic_role: measure
+metrics:
+  - metric_id: on_hand_units
+    label: on hand units
+    expression: sum(on_hand_units)
+    source_column: on_hand_units
+    kind: count
+  - metric_id: stockout_days
+    label: stockout days
+    expression: sum(stockout_days)
+    source_column: stockout_days
+    kind: count
+fields:
+  - field_id: snapshot_date
+    label: inventory snapshot date
+    source_column: snapshot_date
+    data_type: date
+    operations:
+      - include_filter
+      - exclude_filter
+      - range_filter
+  - field_id: store_id
+    label: store
+    source_column: store_id
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter
+  - field_id: product_id
+    label: inventory product
+    source_column: product_id
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter
+  - field_id: product_category
+    label: product category
+    source_column: product_category
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter
+  - field_id: product_subcategory
+    label: product subcategory
+    source_column: product_subcategory
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter

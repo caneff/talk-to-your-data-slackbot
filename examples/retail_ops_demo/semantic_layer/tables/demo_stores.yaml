@@ -1,0 +1,49 @@
+table_id: demo_stores
+dataset_id: retail_ops
+description: Synthetic store directory with region, channel, and open-date attributes.
+columns:
+  - column_id: store_id
+    data_type: string
+    semantic_role: identifier
+  - column_id: store_name
+    data_type: string
+    semantic_role: dimension
+  - column_id: store_region
+    data_type: string
+    semantic_role: dimension
+  - column_id: store_channel
+    data_type: string
+    semantic_role: dimension
+  - column_id: opened_date
+    data_type: date
+metrics:
+  - metric_id: store_count
+    label: store count
+    expression: count(store_id)
+    source_column: store_id
+    kind: count
+fields:
+  - field_id: store_region
+    label: store region
+    source_column: store_region
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter
+  - field_id: store_channel
+    label: store channel
+    source_column: store_channel
+    data_type: string
+    operations:
+      - group_by
+      - include_filter
+      - exclude_filter
+  - field_id: opened_date
+    label: store opened date
+    source_column: opened_date
+    data_type: date
+    operations:
+      - include_filter
+      - exclude_filter
+      - range_filter
