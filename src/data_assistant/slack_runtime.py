@@ -17,6 +17,7 @@ import duckdb
 import data_assistant.access_controller as access_controller
 import data_assistant.local_duckdb_fixture as local_duckdb_fixture
 import data_assistant.question_interpreter as question_interpreter
+import data_assistant.reasoning_layer as reasoning_layer
 import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.slack_boundary as slack_boundary
@@ -114,6 +115,7 @@ def build_openai_answer_path(
 ) -> slack_boundary.AnswerPath:
     """Build the Slack answer path using the live OpenAI Question Interpreter."""
     provider = question_interpreter.build_openai_question_interpreter_provider(environ)
+    reasoning_provider = reasoning_layer.build_openai_reasoning_provider(environ)
 
     def answer_path(
         connection: duckdb.DuckDBPyConnection,
@@ -124,6 +126,7 @@ def build_openai_answer_path(
             connection,
             question,
             question_interpreter_provider=provider,
+            reasoning_provider=reasoning_provider,
             internal_identity=internal_identity,
             semantic_layer=semantic_layer,
         )
