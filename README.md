@@ -104,9 +104,10 @@ Install dependencies and start the adapter:
 uv run python -m data_assistant.slack_runtime
 ```
 
-Startup requires `OPENAI_API_KEY`. Live provider failures, refusals, or invalid
-structured output return the existing typed Non-Answer path; the runtime does
-not fall back to a deterministic interpreter.
+Startup requires `OPENAI_API_KEY`. Invalid structured output is retried once by
+the Question Interpreter provider before falling through to the existing typed
+Non-Answer path. Live provider failures and refusals also use that Non-Answer
+path; the runtime does not fall back to a deterministic interpreter.
 
 For local development, the runtime uses a tiny in-memory DuckDB `orders` table. It is only there to support a manual Slack smoke test. No dataset files are committed.
 

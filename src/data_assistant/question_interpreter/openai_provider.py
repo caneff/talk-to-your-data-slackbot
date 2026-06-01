@@ -17,6 +17,7 @@ from data_assistant.question_interpreter.proposals import (
 # provider tests cast injected fakes to this same-module name.
 _OpenAIClient = openai_support.OpenAIClient
 
+_STRUCTURED_OUTPUT_ATTEMPTS = 2
 _QUESTION_INTERPRETER_DEVELOPER_PROMPT = "question_interpreter_developer.md"
 
 
@@ -81,6 +82,7 @@ class OpenAIQuestionInterpreterProvider:
             text_format=QuestionFrameProposal,
             failure_factory=lambda reason: ProviderFailure(reason=reason),
             extra_parse_kwargs={"temperature": 0},
+            structured_output_attempts=_STRUCTURED_OUTPUT_ATTEMPTS,
         )
 
 

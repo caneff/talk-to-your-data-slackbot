@@ -17,6 +17,7 @@ Reasoning Layer passes none).
 from __future__ import annotations
 
 import collections.abc
+import dataclasses
 import functools
 import importlib.resources
 import typing
@@ -33,6 +34,12 @@ OpenAIInputMessage: typing.TypeAlias = dict[str, str]
 
 ProposalT = typing.TypeVar("ProposalT")
 FailureT = typing.TypeVar("FailureT")
+
+
+@dataclasses.dataclass(frozen=True)
+class _ParseFailure:
+    reason: str
+    retryable: bool
 
 
 class OpenAIResponsesClient(typing.Protocol):
@@ -122,14 +129,53 @@ def run_parse(
     text_format: type[ProposalT],
     failure_factory: collections.abc.Callable[[str], FailureT],
     extra_parse_kwargs: dict[str, object] | None = None,
+    structured_output_attempts: int = 1,
 ) -> ProposalT | FailureT:
-    """Run one structured ``responses.parse`` and normalize the outcome.
+    """Run structured ``responses.parse`` and normalize the outcome.
 
     Centralizes the parse → exception → refusal → missing-output flow shared by
     both providers. ``extra_parse_kwargs`` lets a caller forward additional
     keyword arguments to ``parse`` (the Question Interpreter passes
-    ``temperature=0``; the Reasoning Layer passes none).
+    ``temperature=0``; the Reasoning Layer passes none). Callers may opt into
+    an extra structured-output attempt for retryable parse failures while
+    refusals still return immediately.
     """
+    if structured_output_attempts < 1:
+        raise ValueError("structured_output_attempts must be at least 1")
+    last_failure: _ParseFailure | None = None
+    for _ in range(structured_output_attempts):
+        result = _run_parse_once(
+            client=client,
+            model=model,
+            input_messages=input_messages,
+            text_format=text_format,
+            extra_parse_kwargs=extra_parse_kwargs,
+        )
+        if not isinstance(result, _ParseFailure):
+            return result
+        if not result.retryable:
+            return failure_factory(result.reason)
+        last_failure = result
+
+    if last_failure is None:
+        raise AssertionError("structured output attempt loop must run at least once")
+    if structured_output_attempts == 1:
+        return failure_factory(last_failure.reason)
+    return failure_factory(
+        "OpenAI provider failed after "
+        f"{structured_output_attempts} structured output attempts: "
+        f"{last_failure.reason}"
+    )
+
+
+def _run_parse_once(
+    *,
+    client: OpenAIClient,
+    model: str,
+    input_messages: list[OpenAIInputMessage],
+    text_format: type[ProposalT],
+    extra_parse_kwargs: dict[str, object] | None,
+) -> ProposalT | _ParseFailure:
     try:
         response = client.responses.parse(
             model=model,
@@ -138,15 +184,21 @@ def run_parse(
             **(extra_parse_kwargs or {}),
         )
     except Exception as error:
-        return failure_factory(str(error) or "OpenAI provider failed")
+        return _ParseFailure(
+            reason=str(error) or "OpenAI provider failed",
+            retryable=True,
+        )
 
     refusal = extract_response_refusal(response)
     if refusal:
-        return failure_factory(refusal)
+        return _ParseFailure(reason=refusal, retryable=False)
 
     parsed_output = getattr(response, "output_parsed", None)
     if not isinstance(parsed_output, text_format):
-        return failure_factory("OpenAI provider returned no parsed output")
+        return _ParseFailure(
+            reason="OpenAI provider returned no parsed output",
+            retryable=True,
+        )
     return parsed_output
 
 

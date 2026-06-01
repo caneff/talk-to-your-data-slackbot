@@ -1,3 +1,4 @@
+import collections.abc
 import json
 import typing
 
@@ -131,6 +132,39 @@ def _openai_provider_returning(
             if parse_calls is not None:
                 parse_calls.append(kwargs)
             return response
+
+    class FakeOpenAIClient:
+        responses = FakeResponsesClient()
+
+    return question_interpreter.OpenAIQuestionInterpreterProvider(
+        config=question_interpreter.OpenAIQuestionInterpreterConfig(
+            api_key="test-key",
+            model="gpt-test-mini",
+        ),
+        client=typing.cast(
+            openai_provider._OpenAIClient,  # pyright: ignore[reportPrivateUsage]
+            FakeOpenAIClient(),
+        ),
+    )
+
+
+def _openai_provider_returning_results(
+    results: collections.abc.Sequence[object | Exception],
+    *,
+    parse_calls: list[dict[str, object]] | None = None,
+) -> question_interpreter.OpenAIQuestionInterpreterProvider:
+    call_index = 0
+
+    class FakeResponsesClient:
+        def parse(self, **kwargs: object) -> object:
+            nonlocal call_index
+            if parse_calls is not None:
+                parse_calls.append(kwargs)
+            result = results[call_index]
+            call_index += 1
+            if isinstance(result, Exception):
+                raise result
+            return result
 
     class FakeOpenAIClient:
         responses = FakeResponsesClient()
@@ -445,6 +479,8 @@ def test_openai_provider_prompt_describes_dimension_value_filters() -> None:
 
 
 def test_openai_provider_maps_refusal_to_provider_failure() -> None:
+    parse_calls: list[dict[str, object]] = []
+
     class FakeRefusalContent:
         type = "refusal"
         refusal = "cannot comply"
@@ -457,7 +493,10 @@ def test_openai_provider_maps_refusal_to_provider_failure() -> None:
         output_parsed = None
         output = [FakeMessageOutput()]
 
-    provider = _openai_provider_returning(FakeRefusalResponse())
+    provider = _openai_provider_returning(
+        FakeRefusalResponse(),
+        parse_calls=parse_calls,
+    )
 
     result = provider.propose_question_frame(
         question=test_support.CANONICAL_DATA_QUESTION,
@@ -465,13 +504,65 @@ def test_openai_provider_maps_refusal_to_provider_failure() -> None:
     )
 
     assert result == question_interpreter.ProviderFailure(reason="cannot comply")
+    assert len(parse_calls) == 1
 
 
-def test_openai_provider_maps_missing_parsed_output_to_provider_failure() -> None:
+def test_openai_provider_retries_parse_exception_once() -> None:
+    parse_calls: list[dict[str, object]] = []
+
+    class FakeParsedResponse:
+        output_parsed = test_support.question_frame_proposal()
+
+    provider = _openai_provider_returning_results(
+        (
+            ValueError("Invalid JSON: EOF while parsing a value"),
+            FakeParsedResponse(),
+        ),
+        parse_calls=parse_calls,
+    )
+
+    result = provider.propose_question_frame(
+        question=test_support.CANONICAL_DATA_QUESTION,
+        semantic_layer_context={"datasets": []},
+    )
+
+    assert result == FakeParsedResponse.output_parsed
+    assert len(parse_calls) == 2
+
+
+def test_openai_provider_retries_missing_parsed_output_once() -> None:
+    parse_calls: list[dict[str, object]] = []
+
     class FakeMissingParsedResponse:
         output_parsed = None
 
-    provider = _openai_provider_returning(FakeMissingParsedResponse())
+    class FakeParsedResponse:
+        output_parsed = test_support.question_frame_proposal()
+
+    provider = _openai_provider_returning_results(
+        (FakeMissingParsedResponse(), FakeParsedResponse()),
+        parse_calls=parse_calls,
+    )
+
+    result = provider.propose_question_frame(
+        question=test_support.CANONICAL_DATA_QUESTION,
+        semantic_layer_context={"datasets": []},
+    )
+
+    assert result == FakeParsedResponse.output_parsed
+    assert len(parse_calls) == 2
+
+
+def test_openai_provider_maps_exhausted_structured_output_attempts_to_failure() -> None:
+    parse_calls: list[dict[str, object]] = []
+
+    class FakeMissingParsedResponse:
+        output_parsed = None
+
+    provider = _openai_provider_returning_results(
+        (FakeMissingParsedResponse(), FakeMissingParsedResponse()),
+        parse_calls=parse_calls,
+    )
 
     result = provider.propose_question_frame(
         question=test_support.CANONICAL_DATA_QUESTION,
@@ -479,5 +570,9 @@ def test_openai_provider_maps_missing_parsed_output_to_provider_failure() -> Non
     )
 
     assert result == question_interpreter.ProviderFailure(
-        reason="OpenAI provider returned no parsed output"
+        reason=(
+            "OpenAI provider failed after 2 structured output attempts: "
+            "OpenAI provider returned no parsed output"
+        )
     )
+    assert len(parse_calls) == 2

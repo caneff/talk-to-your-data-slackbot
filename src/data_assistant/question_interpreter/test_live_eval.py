@@ -264,6 +264,63 @@ def test_run_eval_suite_requires_all_samples_to_match_for_case_pass() -> None:
     assert provider.calls == ["flaky", "flaky", "flaky"]
 
 
+def test_run_eval_suite_counts_provider_failure_as_sample_failure() -> None:
+    class FakeProvider:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+            self.results: list[live_eval.ProviderResult] = [
+                question_interpreter.ProviderFailure(
+                    reason=(
+                        "1 validation error for QuestionFrameProposal\n"
+                        "  Invalid JSON: EOF while parsing a value at line 1 "
+                        "column 0"
+                    )
+                ),
+                test_support.question_frame_proposal(),
+                test_support.question_frame_proposal(),
+                test_support.question_frame_proposal(),
+            ]
+
+        def propose_question_frame(
+            self,
+            *,
+            question: str,
+            semantic_layer_context: dict[str, object],
+        ) -> live_eval.ProviderResult:
+            del semantic_layer_context
+            self.calls.append(question)
+            return self.results[len(self.calls) - 1]
+
+    provider = FakeProvider()
+    cases = (
+        live_eval.LiveEvalCase(
+            name="transient_parse_failure_case",
+            question="flaky provider",
+            expected=test_support.question_frame_proposal(),
+        ),
+    )
+
+    report = live_eval.run_live_question_interpreter_eval(
+        provider=provider,
+        semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
+        cases=cases,
+        sample_count=3,
+    )
+
+    assert report.total == 1
+    assert report.passed == 0
+    assert report.failed == 1
+    assert report.failures[0].case_name == "transient_parse_failure_case"
+    assert report.failures[0].pass_count == 2
+    assert report.failures[0].sample_count == 3
+    assert report.failures[0].reasons == (
+        "sample 1: provider failure: "
+        "1 validation error for QuestionFrameProposal\n"
+        "  Invalid JSON: EOF while parsing a value at line 1 column 0",
+    )
+    assert provider.calls == ["flaky provider", "flaky provider", "flaky provider"]
+
+
 def test_main_returns_one_and_prints_missing_api_key_error() -> None:
     stdout = io.StringIO()
     stderr = io.StringIO()
