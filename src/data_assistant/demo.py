@@ -13,7 +13,7 @@ import data_assistant.access_controller as access_controller
 import data_assistant.local_duckdb_fixture as local_duckdb_fixture
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.question_interpreter.question_frame_cases as question_frame_cases
-import data_assistant.slack_boundary as slack_boundary
+import data_assistant.slack_assistant as slack_assistant
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
 
@@ -28,18 +28,6 @@ class DemoScenarioResult:
     acknowledged: bool
     response_text: str
     response_thread_ts: str
-
-
-@dataclasses.dataclass
-class _RecordingSlackGateway:
-    acknowledged: bool = False
-    delivery: slack_boundary.SlackDelivery | None = None
-
-    def acknowledge(self) -> None:
-        self.acknowledged = True
-
-    def deliver_response(self, delivery: slack_boundary.SlackDelivery) -> None:
-        self.delivery = delivery
 
 
 class _DemoQuestionInterpreterProvider:
@@ -111,47 +99,32 @@ def _run_one_demo_scenario(
     request_ts: str,
     connection: duckdb.DuckDBPyConnection,
 ) -> DemoScenarioResult:
-    gateway = _RecordingSlackGateway()
-    payload: slack_boundary.SlackEventPayload = {
-        "event_id": f"Ev-{name}",
-        "event": {
-            "type": "message",
-            "channel": "DDEMO",
-            "user": "UDEMO",
-            "text": request_text,
-            "ts": request_ts,
-        },
-    }
-    result = slack_boundary.handle_slack_event(
-        payload=payload,
-        connection=connection,
-        gateway=gateway,
-        answer_path=_run_demo_answer_path,
-        internal_identity_resolver=_resolve_local_demo_identity,
+    # The demo drives the same render path as the Slack Assistant edge: run the
+    # workflow, then render the Final Response (answers and Non-Answers alike)
+    # via slack_assistant.final_response_from_workflow_result. The Slack
+    # Acknowledgement and threading are simulated (the Assistant container owns
+    # them live), so acknowledged is True and the response thread is the request.
+    result = _run_demo_answer_path(
+        connection,
+        request_text,
+        access_controller.DEFAULT_LOCAL_ALLOWED_IDENTITY,
     )
-    if gateway.delivery is None:
-        raise AssertionError("Demo scenario did not produce a Slack delivery.")
+    final_response = slack_assistant.final_response_from_workflow_result(result)
     return DemoScenarioResult(
         name=name,
         request_text=request_text,
         request_ts=request_ts,
-        acknowledged=result.acknowledged,
-        response_text=gateway.delivery.text,
-        response_thread_ts=gateway.delivery.thread_ts,
+        acknowledged=True,
+        response_text=final_response.text,
+        response_thread_ts=request_ts,
     )
-
-
-def _resolve_local_demo_identity(
-    _event: slack_boundary.SlackInnerEvent,
-) -> contracts.InternalIdentity:
-    return access_controller.DEFAULT_LOCAL_ALLOWED_IDENTITY
 
 
 def _run_demo_answer_path(
     connection: duckdb.DuckDBPyConnection,
     question: str,
     internal_identity: contracts.InternalIdentity,
-) -> slack_boundary.SlackWorkflowResult:
+) -> slack_assistant.SlackWorkflowResult:
     return workflow_runner.run_data_assistant(
         connection,
         question,

@@ -1,19 +1,23 @@
-"""Tests for the local Slack Runtime Adapter startup and DM event adapter."""
+"""Tests for the local Slack Runtime Adapter startup wiring.
+
+The Slack edge behavior (greeting, status, pipeline, fallback) lives in
+``slack_assistant`` and is tested in ``test_slack_assistant``. These tests cover
+runtime startup: config loading, the OpenAI answer path, the DuckDB connection
+factory, Assistant-handler registration before startup, and the ``main`` CLI.
+"""
 
 from __future__ import annotations
 
 import collections.abc
 import contextlib
-import logging
 import pathlib
 import typing
 
 import duckdb
 import pytest
 
-import data_assistant.local_duckdb_fixture as local_duckdb_fixture
 import data_assistant.semantic_layer.schema as schema
-import data_assistant.slack_boundary as slack_boundary
+import data_assistant.slack_assistant as slack_assistant
 import data_assistant.slack_runtime as slack_runtime
 import data_assistant.workflow.contracts as contracts
 
@@ -21,32 +25,6 @@ VALID_SLACK_ENV = {
     "SLACK_BOT_TOKEN": "xoxb-live-token",
     "SLACK_APP_TOKEN": "xapp-live-token",
 }
-
-
-def bolt_message_event(
-    *,
-    event_type: str = "message",
-    channel: str = "D123",
-    channel_type: str = "im",
-    user: str = "U123",
-    text: str = "hello",
-    ts: str = "1710000000.000000",
-    bot_id: str | None = None,
-    subtype: str | None = None,
-) -> slack_runtime.SlackBoltMessageEvent:
-    event: slack_runtime.SlackBoltMessageEvent = {
-        "type": event_type,
-        "channel": channel,
-        "channel_type": channel_type,
-        "user": user,
-        "text": text,
-        "ts": ts,
-    }
-    if bot_id is not None:
-        event["bot_id"] = bot_id
-    if subtype is not None:
-        event["subtype"] = subtype
-    return event
 
 
 def _connection_factory_should_not_run() -> contextlib.AbstractContextManager[
@@ -241,58 +219,6 @@ class RecordingRuntimeFactories:
         return handler
 
 
-class RecordedSlackCall(typing.TypedDict):
-    channel: str
-    thread_ts: str
-    text: str
-    blocks: typing.NotRequired[collections.abc.Sequence[contracts.SlackBlock]]
-
-
-class RecordingSlackClient:
-    """Capture Slack DM replies without calling Slack APIs."""
-
-    def __init__(self) -> None:
-        self.calls: list[RecordedSlackCall] = []
-
-    def chat_postMessage(
-        self,
-        *,
-        channel: str,
-        thread_ts: str,
-        text: str,
-        blocks: collections.abc.Sequence[contracts.SlackBlock] | None = None,
-    ) -> None:
-        call: RecordedSlackCall = {
-            "channel": channel,
-            "thread_ts": thread_ts,
-            "text": text,
-        }
-        if blocks is not None:
-            call["blocks"] = blocks
-        self.calls.append(call)
-
-
-class RecordingBoltApp:
-    """Capture registered Bolt event handlers without importing Slack Bolt."""
-
-    def __init__(self) -> None:
-        self.registered_handlers: dict[str, collections.abc.Callable[..., object]] = {}
-
-    def event(
-        self, event_name: str
-    ) -> collections.abc.Callable[
-        [collections.abc.Callable[..., object]],
-        collections.abc.Callable[..., object],
-    ]:
-        def register(
-            handler: collections.abc.Callable[..., object],
-        ) -> collections.abc.Callable[..., object]:
-            self.registered_handlers[event_name] = handler
-            return handler
-
-        return register
-
-
 def sentinel_answer_path(
     connection: duckdb.DuckDBPyConnection,
     question: str,
@@ -306,313 +232,26 @@ def sentinel_answer_path(
     )
 
 
-def test_handle_socket_mode_event_routes_human_dm_through_existing_boundary(
-    canonical_question: str,
-    connect_orders: local_duckdb_fixture.OrdersConnector,
+def test_run_socket_mode_from_env_registers_assistant_before_startup(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    ack_calls: list[str] = []
-    calls: list[str] = []
-    client = RecordingSlackClient()
-    seen_questions: list[str] = []
-    seen_identity_ids: list[str] = []
-    event = bolt_message_event(
-        user="U123",
-        text=canonical_question,
-        ts="1710000000.654321",
-    )
-    final_response = contracts.FinalResponse(
-        text="Final answer text.",
-        trust_summary=contracts.TrustSummary(datasets=("Commerce",)),
-        response_kind=contracts.ResponseKind.ANSWER,
-        blocks=(
-            {
-                "type": "table",
-                "rows": [
-                    [
-                        {"type": "raw_text", "text": "Group"},
-                        {"type": "raw_text", "text": "Value"},
-                    ],
-                ],
-            },
-        ),
-    )
-
-    def acknowledge() -> None:
-        ack_calls.append("ack")
-        calls.append("ack")
-
-    def connection_factory() -> contextlib.AbstractContextManager[
-        duckdb.DuckDBPyConnection
-    ]:
-        calls.append("connection_factory")
-        return connect_orders((("2026-01-03", "North", "1200.00"),))
-
-    def answer_path(
-        _connection: object,
-        question: str,
-        internal_identity: contracts.InternalIdentity,
-    ) -> slack_boundary.SlackWorkflowResult:
-        calls.append("answer_path")
-        seen_questions.append(question)
-        seen_identity_ids.append(internal_identity.identity_id)
-        return final_response
-
-    result = slack_runtime.handle_socket_mode_event(
-        event=event,
-        ack=acknowledge,
-        client=client,
-        connection_factory=connection_factory,
-        answer_path=answer_path,
-    )
-
-    assert result is not None
-    assert ack_calls == ["ack"]
-    assert calls == ["ack", "connection_factory", "answer_path"]
-    assert seen_questions == [canonical_question]
-    assert seen_identity_ids == ["slack_user:U123"]
-    assert client.calls == [
-        {
-            "channel": "D123",
-            "thread_ts": "1710000000.654321",
-            "text": "Final answer text.",
-            "blocks": final_response.blocks,
-        }
-    ]
-
-
-def test_handle_socket_mode_event_posts_runtime_fallback_on_connection_failure() -> (
-    None
-):
-    """A crash setting up the data connection still gets a generic in-thread reply.
-
-    The Slack Acknowledgement already happened, so the only way the human learns
-    anything went wrong is the Runtime Fallback Message. The user-facing text must
-    be exactly the constant: no exception details, stack traces, or question text.
-    """
-    ack_calls: list[str] = []
-    client = RecordingSlackClient()
-    boom = RuntimeError("connection blew up: secret-host=db.internal")
-    event = bolt_message_event(
-        user="U123",
-        text="What was total revenue last quarter?",
-        ts="1710000000.654321",
-    )
-
-    def acknowledge() -> None:
-        ack_calls.append("ack")
-
-    def connection_factory() -> contextlib.AbstractContextManager[
-        duckdb.DuckDBPyConnection
-    ]:
-        raise boom
-
-    result = slack_runtime.handle_socket_mode_event(
-        event=event,
-        ack=acknowledge,
-        client=client,
-        connection_factory=connection_factory,
-        answer_path=sentinel_answer_path,
-    )
-
-    assert ack_calls == ["ack"]
-    assert client.calls == [
-        {
-            "channel": "D123",
-            "thread_ts": "1710000000.654321",
-            "text": slack_runtime.RUNTIME_FALLBACK_MESSAGE,
-        }
-    ]
-    fallback_text = client.calls[0]["text"]
-    assert "secret-host" not in fallback_text
-    assert "RuntimeError" not in fallback_text
-    assert "total revenue last quarter" not in fallback_text
-    assert result == slack_boundary.SlackRequestResult(
-        acknowledged=True,
-        delivery=slack_boundary.SlackDelivery(
-            channel="D123",
-            thread_ts="1710000000.654321",
-            text=slack_runtime.RUNTIME_FALLBACK_MESSAGE,
-        ),
-    )
-
-
-def test_handle_socket_mode_event_posts_runtime_fallback_on_answer_path_failure(
-    connect_orders: local_duckdb_fixture.OrdersConnector,
-) -> None:
-    """A crash inside the answer path also yields the Runtime Fallback Message."""
-    ack_calls: list[str] = []
-    client = RecordingSlackClient()
-    event = bolt_message_event(
-        user="U123",
-        text="What was total revenue last quarter?",
-        ts="1710000000.654321",
-    )
-
-    def acknowledge() -> None:
-        ack_calls.append("ack")
-
-    def connection_factory() -> contextlib.AbstractContextManager[
-        duckdb.DuckDBPyConnection
-    ]:
-        return connect_orders((("2026-01-03", "North", "1200.00"),))
-
-    def answer_path(
-        _connection: object,
-        _question: str,
-        _internal_identity: contracts.InternalIdentity,
-    ) -> slack_boundary.SlackWorkflowResult:
-        raise RuntimeError("answer path blew up: secret-value=9999")
-
-    result = slack_runtime.handle_socket_mode_event(
-        event=event,
-        ack=acknowledge,
-        client=client,
-        connection_factory=connection_factory,
-        answer_path=answer_path,
-    )
-
-    assert ack_calls == ["ack"]
-    assert client.calls == [
-        {
-            "channel": "D123",
-            "thread_ts": "1710000000.654321",
-            "text": slack_runtime.RUNTIME_FALLBACK_MESSAGE,
-        }
-    ]
-    fallback_text = client.calls[0]["text"]
-    assert "secret-value" not in fallback_text
-    assert "RuntimeError" not in fallback_text
-    assert "total revenue last quarter" not in fallback_text
-    assert result == slack_boundary.SlackRequestResult(
-        acknowledged=True,
-        delivery=slack_boundary.SlackDelivery(
-            channel="D123",
-            thread_ts="1710000000.654321",
-            text=slack_runtime.RUNTIME_FALLBACK_MESSAGE,
-        ),
-    )
-
-
-def test_handle_socket_mode_event_logs_failure_metadata_for_maintainers(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Maintainers get one ERROR log with routing metadata and exception type.
-
-    The stack trace and metadata go to LOGS only; none of it reaches the Slack
-    user. Per the bootcamp deviation the question text is logged too (a real
-    production bot would not log user-provided free text).
-    """
-    client = RecordingSlackClient()
-    event = bolt_message_event(
-        user="U123",
-        text="What was total revenue last quarter?",
-        ts="1710000000.654321",
-    )
-
-    def acknowledge() -> None:
-        return None
-
-    def connection_factory() -> contextlib.AbstractContextManager[
-        duckdb.DuckDBPyConnection
-    ]:
-        raise RuntimeError("connection blew up")
-
-    with caplog.at_level(logging.ERROR, logger=slack_runtime.logger.name):
-        slack_runtime.handle_socket_mode_event(
-            event=event,
-            ack=acknowledge,
-            client=client,
-            connection_factory=connection_factory,
-            answer_path=sentinel_answer_path,
-        )
-
-    records = [
-        record for record in caplog.records if record.name == slack_runtime.logger.name
-    ]
-    assert len(records) == 1
-    record = records[0]
-    assert record.levelno == logging.ERROR
-    message = record.getMessage()
-    assert "D123" in message
-    assert "1710000000.654321" in message
-    assert "U123" in message
-    assert "RuntimeError" in message
-    assert "What was total revenue last quarter?" in message
-    assert record.exc_info is not None
-
-
-@pytest.mark.parametrize(
-    "event",
-    [
-        pytest.param(
-            bolt_message_event(
-                ts="1710000000.111111",
-                bot_id="B123",
-            ),
-            id="bot message",
-        ),
-        pytest.param(
-            bolt_message_event(
-                channel="C123",
-                channel_type="channel",
-                ts="1710000000.222222",
-            ),
-            id="non-DM message",
-        ),
-        pytest.param(
-            bolt_message_event(
-                event_type="app_mention",
-                channel="C123",
-                channel_type="channel",
-                ts="1710000000.333333",
-            ),
-            id="unsupported event type",
-        ),
-    ],
-)
-def test_handle_socket_mode_event_acknowledges_and_ignores_unsupported_events(
-    event: slack_runtime.SlackBoltMessageEvent,
-) -> None:
-    ack_calls: list[str] = []
-    client = RecordingSlackClient()
-    connection_factory_calls: list[str] = []
-    answer_path_calls: list[str] = []
-
-    def acknowledge() -> None:
-        ack_calls.append("ack")
-
-    def connection_factory() -> contextlib.AbstractContextManager[
-        duckdb.DuckDBPyConnection
-    ]:
-        connection_factory_calls.append("connection_factory")
-        raise AssertionError("ignored events must not open a data connection")
-
-    def answer_path(
-        _connection: object,
-        _question: str,
-        _internal_identity: contracts.InternalIdentity,
-    ) -> slack_boundary.SlackWorkflowResult:
-        answer_path_calls.append("answer_path")
-        raise AssertionError("ignored events must not run the answer path")
-
-    result = slack_runtime.handle_socket_mode_event(
-        event=event,
-        ack=acknowledge,
-        client=client,
-        connection_factory=connection_factory,
-        answer_path=answer_path,
-    )
-
-    assert result is None
-    assert ack_calls == ["ack"]
-    assert connection_factory_calls == []
-    assert answer_path_calls == []
-    assert client.calls == []
-
-
-def test_run_socket_mode_from_env_registers_message_handler_before_startup() -> None:
-    app = RecordingBoltApp()
+    """Startup builds the Assistant adapter and mounts it before listening."""
+    app = object()
     runtime_factories = RecordingRuntimeFactories(app=app)
+    registered: list[tuple[object, slack_assistant.AssistantAdapter]] = []
+
+    def fake_register_assistant_handlers(
+        *,
+        app: object,
+        adapter: slack_assistant.AssistantAdapter,
+    ) -> None:
+        registered.append((app, adapter))
+
+    monkeypatch.setattr(
+        slack_assistant,
+        "register_assistant_handlers",
+        fake_register_assistant_handlers,
+    )
 
     def connection_factory() -> contextlib.AbstractContextManager[
         duckdb.DuckDBPyConnection
@@ -631,7 +270,11 @@ def test_run_socket_mode_from_env_registers_message_handler_before_startup() -> 
     )
 
     assert runtime_factories.app_tokens == ["xoxb-live-token"]
-    assert "message" in app.registered_handlers
+    assert len(registered) == 1
+    registered_app, registered_adapter = registered[0]
+    assert registered_app is app
+    assert registered_adapter.connection_factory is connection_factory
+    assert registered_adapter.answer_path is sentinel_answer_path
     assert len(runtime_factories.created_handlers) == 1
     assert handler is runtime_factories.created_handlers[0]
     assert handler.app is app
@@ -668,7 +311,7 @@ def test_main_uses_configured_semantic_layer_and_duckdb_paths(
     )
     loaded_semantic_layer = typing.cast(schema.SemanticLayer, object())
     loaded_paths: list[pathlib.Path] = []
-    built_answer_paths: list[slack_boundary.AnswerPath] = []
+    built_answer_paths: list[slack_assistant.AnswerPath] = []
     received_connection_factories: list[slack_runtime.ConnectionFactory | None] = []
 
     def fake_load_semantic_layer(path: pathlib.Path) -> schema.SemanticLayer:
@@ -679,7 +322,7 @@ def test_main_uses_configured_semantic_layer_and_duckdb_paths(
         environ: collections.abc.Mapping[str, str],
         *,
         semantic_layer: schema.SemanticLayer | None = None,
-    ) -> slack_boundary.AnswerPath:
+    ) -> slack_assistant.AnswerPath:
         del environ
         assert semantic_layer is loaded_semantic_layer
         built_answer_paths.append(sentinel_answer_path)
@@ -694,9 +337,9 @@ def test_main_uses_configured_semantic_layer_and_duckdb_paths(
         ) = None,
         connection_factory: slack_runtime.ConnectionFactory | None = None,
         internal_identity_resolver: (
-            slack_boundary.InternalIdentityResolver | None
+            slack_assistant.AssistantIdentityResolver | None
         ) = None,
-        answer_path: slack_boundary.AnswerPath | None = None,
+        answer_path: slack_assistant.AnswerPath | None = None,
     ) -> FakeSocketModeHandler:
         del environ, app_factory, socket_mode_handler_factory
         del internal_identity_resolver
@@ -747,13 +390,13 @@ def test_main_starts_socket_mode_with_dev_connection_factory(
     tmp_path: pathlib.Path,
 ) -> None:
     dev_connection_factory = slack_runtime._dev_connection_factory  # pyright: ignore[reportPrivateUsage]
-    dev_internal_identity_resolver = typing.cast(
-        slack_boundary.InternalIdentityResolver,
-        slack_runtime._dev_internal_identity_resolver,  # pyright: ignore[reportPrivateUsage]
+    dev_identity_resolver = typing.cast(
+        slack_assistant.AssistantIdentityResolver,
+        slack_assistant._dev_identity,  # pyright: ignore[reportPrivateUsage]
     )
     received_connection_factory: list[slack_runtime.ConnectionFactory | None] = []
     received_identity_resolver: list[
-        slack_boundary.InternalIdentityResolver | None
+        slack_assistant.AssistantIdentityResolver | None
     ] = []
 
     def fake_run_socket_mode_from_env(
@@ -765,9 +408,9 @@ def test_main_starts_socket_mode_with_dev_connection_factory(
         ) = None,
         connection_factory: slack_runtime.ConnectionFactory | None = None,
         internal_identity_resolver: (
-            slack_boundary.InternalIdentityResolver | None
+            slack_assistant.AssistantIdentityResolver | None
         ) = None,
-        answer_path: slack_boundary.AnswerPath | None = None,
+        answer_path: slack_assistant.AnswerPath | None = None,
     ) -> FakeSocketModeHandler:
         del environ, app_factory, socket_mode_handler_factory, answer_path
         received_connection_factory.append(connection_factory)
@@ -784,4 +427,4 @@ def test_main_starts_socket_mode_with_dev_connection_factory(
 
     assert exit_code == 0
     assert received_connection_factory == [dev_connection_factory]
-    assert received_identity_resolver == [dev_internal_identity_resolver]
+    assert received_identity_resolver == [dev_identity_resolver]
