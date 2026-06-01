@@ -254,6 +254,39 @@ def test_openai_provider_prompt_chooses_one_relevant_date_field() -> None:
     assert 'operation "range_filter", field "created date"' in developer_prompt
 
 
+def test_openai_provider_prompt_forbids_implicit_empty_filters() -> None:
+    parse_calls: list[dict[str, object]] = []
+
+    class FakeParsedResponse:
+        output_parsed = test_support.question_frame_proposal()
+
+    provider = _openai_provider_returning(
+        FakeParsedResponse(),
+        parse_calls=parse_calls,
+    )
+
+    provider.propose_question_frame(
+        question="What was total revenue by region?",
+        semantic_layer_context={"datasets": []},
+    )
+
+    input_messages = typing.cast(
+        list[dict[str, str]],
+        parse_calls[0]["input"],
+    )
+    developer_prompt = input_messages[0]["content"]
+    assert "field_operations must be minimal and exhaustive" in developer_prompt
+    assert "if a field operation is not" in developer_prompt
+    assert "directly supported by words in the Data Question" in developer_prompt
+    assert "Do not use include_filter or exclude_filter" in developer_prompt
+    assert "included or excluded\nvalue" in developer_prompt
+    assert "return no include_filter or exclude_filter" in developer_prompt
+    assert "do not invent a\n  range_filter" in developer_prompt
+    assert 'For "What was total revenue by region?"' in developer_prompt
+    assert "exactly one field_operation" in developer_prompt
+    assert 'operation "group_by", field "region"' in developer_prompt
+
+
 def test_openai_provider_maps_refusal_to_provider_failure() -> None:
     class FakeRefusalContent:
         type = "refusal"

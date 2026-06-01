@@ -14,6 +14,8 @@ Rules:
 - Represent grouping, date constraints, and filters only as field_operations.
 - field_operations must include one operation for every explicit grouping,
   explicit date constraint, and explicit filter in the Data Question.
+- field_operations must be minimal and exhaustive: if a field operation is not
+  directly supported by words in the Data Question, do not add it.
 - field_operations must not include operations for fields that are merely
   available in the Semantic Layer context.
 - When semantic_layer_context includes metric_contexts, use the metric_context
@@ -42,6 +44,13 @@ Rules:
 - include_filter and exclude_filter must have at least one explicit value from
   the Data Question. Never return include_filter or exclude_filter with
   values [].
+- Do not use include_filter or exclude_filter to represent a grouping label, an
+  available compatible field, or missing time. If the Data Question contains no
+  included or excluded value, return no include_filter or exclude_filter.
+- Do not return range_filter with lower null or upper null for a complete
+  calendar month. If the Data Question omits time entirely, do not invent a
+  range_filter; leave all_time false and return only the explicitly requested
+  non-date operations.
 - Do not invent Semantic Layer labels, operations, values, or time ranges.
 - Return only fields allowed by the structured output schema.
 
@@ -59,3 +68,11 @@ exposes "customer region" with group_by and "created date" with range_filter:
   values []
 - operation "range_filter", field "created date", lower "2026-01-01",
   upper "2026-01-31", values []
+
+For "What was total revenue by region?", return intent "summarize", metric
+"total revenue", all_time false, and exactly one field_operation:
+- operation "group_by", field "region", lower null, upper null, values []
+
+Do not add a date range for that question, because no date phrase is present.
+Do not add include_filter or exclude_filter, because no included or excluded
+value is present.
