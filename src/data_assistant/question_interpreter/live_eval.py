@@ -43,6 +43,8 @@ class LiveEvalFailure:
     expected: question_interpreter.QuestionFrameProposal
     actual: ProviderResult
     reasons: tuple[str, ...]
+    pass_count: int = 0
+    sample_count: int = 1
 
 
 @dataclasses.dataclass(frozen=True)
@@ -53,6 +55,8 @@ class LiveEvalPass:
     question: str
     expected: question_interpreter.QuestionFrameProposal
     actual: question_interpreter.QuestionFrameProposal
+    pass_count: int = 1
+    sample_count: int = 1
 
 
 @dataclasses.dataclass(frozen=True)
@@ -81,6 +85,7 @@ DEFAULT_CASES: tuple[LiveEvalCase, ...] = tuple(
     )
     for case in question_frame_cases.SHARED_QUESTION_FRAME_CASES
 )
+DEFAULT_SAMPLE_COUNT = 3
 
 
 def compare_question_frame_meaning(
@@ -121,8 +126,11 @@ def run_live_question_interpreter_eval(
     provider: question_interpreter.QuestionInterpreterProvider,
     semantic_layer: schema.SemanticLayer,
     cases: collections.abc.Iterable[LiveEvalCase] = DEFAULT_CASES,
+    sample_count: int = DEFAULT_SAMPLE_COUNT,
 ) -> LiveEvalReport:
     """Run all enabled live eval cases and aggregate failures."""
+    if sample_count < 1:
+        raise ValueError("sample_count must be at least 1")
     semantic_layer_context = question_interpreter.build_semantic_layer_context(
         semantic_layer
     )
@@ -130,34 +138,38 @@ def run_live_question_interpreter_eval(
     passes: list[LiveEvalPass] = []
     failures: list[LiveEvalFailure] = []
     for case in enabled_cases:
-        actual = provider.propose_question_frame(
-            question=case.question,
-            semantic_layer_context=semantic_layer_context,
-        )
-        if isinstance(actual, question_interpreter.ProviderFailure):
-            failures.append(
-                LiveEvalFailure(
-                    case_name=case.name,
-                    question=case.question,
-                    expected=case.expected,
-                    actual=actual,
-                    reasons=_case_failure_reasons(
-                        expected=case.expected,
-                        actual=actual,
-                    ),
-                )
+        pass_count = 0
+        sample_failures: list[str] = []
+        last_actual: ProviderResult | None = None
+        for sample_index in range(sample_count):
+            actual = provider.propose_question_frame(
+                question=case.question,
+                semantic_layer_context=semantic_layer_context,
             )
-            continue
+            last_actual = actual
+            reasons = _case_failure_reasons(
+                expected=case.expected,
+                actual=actual,
+            )
+            if reasons:
+                sample_failures.extend(
+                    f"sample {sample_index + 1}: {reason}" for reason in reasons
+                )
+                continue
+            pass_count += 1
 
-        reasons = compare_question_frame_meaning(expected=case.expected, actual=actual)
-        if reasons:
+        if last_actual is None:
+            raise AssertionError("live eval must record at least one sample result")
+        if sample_failures:
             failures.append(
                 LiveEvalFailure(
                     case_name=case.name,
                     question=case.question,
                     expected=case.expected,
-                    actual=actual,
-                    reasons=reasons,
+                    actual=last_actual,
+                    reasons=tuple(sample_failures),
+                    pass_count=pass_count,
+                    sample_count=sample_count,
                 )
             )
             continue
@@ -166,7 +178,12 @@ def run_live_question_interpreter_eval(
                 case_name=case.name,
                 question=case.question,
                 expected=case.expected,
-                actual=actual,
+                actual=typing.cast(
+                    question_interpreter.QuestionFrameProposal,
+                    last_actual,
+                ),
+                pass_count=pass_count,
+                sample_count=sample_count,
             )
         )
     return LiveEvalReport(
@@ -196,16 +213,23 @@ def write_live_eval_report(
     stdout.write(f"Total cases: {report.total}\n")
     stdout.write(f"Passed: {report.passed}\n")
     stdout.write(f"Failed: {report.failed}\n")
-    if verbose:
-        for passed_case in report.passes:
+    for passed_case in report.passes:
+        stdout.write(_passed_case_summary_line(passed_case))
+        if verbose:
             stdout.write(_passed_case_report(passed_case))
     for failure in report.failures:
         stdout.write(_failure_report(failure))
 
 
+def _passed_case_summary_line(passed_case: LiveEvalPass) -> str:
+    return (
+        f"[PASS] {passed_case.case_name} "
+        f"(pass rate: {passed_case.pass_count}/{passed_case.sample_count})\n"
+    )
+
+
 def _passed_case_report(passed_case: LiveEvalPass) -> str:
     return textwrap.dedent(f"""
-        [PASS] {passed_case.case_name}
         Question: {passed_case.question}
         Expected: {_proposal_debug_string(passed_case.expected)}
         Actual: {_proposal_debug_string(passed_case.actual)}
@@ -214,9 +238,10 @@ def _passed_case_report(passed_case: LiveEvalPass) -> str:
 
 def _failure_report(failure: LiveEvalFailure) -> str:
     reasons = "".join(f"Reason: {reason}\n" for reason in failure.reasons)
+    pass_rate = f"{failure.pass_count}/{failure.sample_count}"
     return (
         textwrap.dedent(f"""
-            [FAIL] {failure.case_name}
+            [FAIL] {failure.case_name} (pass rate: {pass_rate})
             Question: {failure.question}
             Expected: {_proposal_debug_string(failure.expected)}
             Actual: {_provider_result_debug_string(failure.actual)}

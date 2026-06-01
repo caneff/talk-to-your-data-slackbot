@@ -178,14 +178,80 @@ def test_run_eval_suite_reports_all_failures_without_fail_fast() -> None:
     assert report.total == 3
     assert report.passed == 1
     assert report.passes[0].case_name == "passing_case"
+    assert report.passes[0].pass_count == 3
+    assert report.passes[0].sample_count == 3
     assert len(report.failures) == 2
     assert report.failures[0].case_name == "mismatch_case"
     assert report.failures[0].reasons == (
-        "metric: expected 'total revenue', got 'gross margin'",
+        "sample 1: metric: expected 'total revenue', got 'gross margin'",
+        "sample 2: metric: expected 'total revenue', got 'gross margin'",
+        "sample 3: metric: expected 'total revenue', got 'gross margin'",
     )
     assert report.failures[1].case_name == "provider_failure_case"
-    assert report.failures[1].reasons == ("provider failure: provider offline",)
-    assert provider.calls == ["passing", "bad metric", "provider failure"]
+    assert report.failures[1].reasons == (
+        "sample 1: provider failure: provider offline",
+        "sample 2: provider failure: provider offline",
+        "sample 3: provider failure: provider offline",
+    )
+    assert provider.calls == [
+        "passing",
+        "passing",
+        "passing",
+        "bad metric",
+        "bad metric",
+        "bad metric",
+        "provider failure",
+        "provider failure",
+        "provider failure",
+    ]
+
+
+def test_run_eval_suite_requires_all_samples_to_match_for_case_pass() -> None:
+    class FakeProvider:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+            self.results = [
+                test_support.question_frame_proposal(),
+                test_support.question_frame_proposal(metric="gross margin"),
+                test_support.question_frame_proposal(),
+            ]
+
+        def propose_question_frame(
+            self,
+            *,
+            question: str,
+            semantic_layer_context: dict[str, object],
+        ) -> live_eval.ProviderResult:
+            del semantic_layer_context
+            self.calls.append(question)
+            return self.results[len(self.calls) - 1]
+
+    provider = FakeProvider()
+    cases = (
+        live_eval.LiveEvalCase(
+            name="flaky_case",
+            question="flaky",
+            expected=test_support.question_frame_proposal(),
+        ),
+    )
+
+    report = live_eval.run_live_question_interpreter_eval(
+        provider=provider,
+        semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
+        cases=cases,
+        sample_count=3,
+    )
+
+    assert report.total == 1
+    assert report.passed == 0
+    assert report.failed == 1
+    assert report.failures[0].case_name == "flaky_case"
+    assert report.failures[0].pass_count == 2
+    assert report.failures[0].sample_count == 3
+    assert report.failures[0].reasons == (
+        "sample 2: metric: expected 'total revenue', got 'gross margin'",
+    )
+    assert provider.calls == ["flaky", "flaky", "flaky"]
 
 
 def test_main_returns_one_and_prints_missing_api_key_error() -> None:
@@ -218,7 +284,9 @@ def test_write_report_hides_passed_case_details_by_default() -> None:
 
     live_eval.write_live_eval_report(stdout=stdout, report=report)
 
-    assert stdout.getvalue() == "Total cases: 1\nPassed: 1\nFailed: 0\n"
+    assert stdout.getvalue() == (
+        "Total cases: 1\nPassed: 1\nFailed: 0\n[PASS] passing_case (pass rate: 1/1)\n"
+    )
 
 
 def test_write_report_verbose_prints_passed_case_details() -> None:
@@ -239,11 +307,39 @@ def test_write_report_verbose_prints_passed_case_details() -> None:
     live_eval.write_live_eval_report(stdout=stdout, report=report, verbose=True)
 
     output = stdout.getvalue()
-    assert "Total cases: 1\nPassed: 1\nFailed: 0\n" in output
-    assert "[PASS] passing_case" in output
+    assert (
+        "Total cases: 1\nPassed: 1\nFailed: 0\n[PASS] passing_case (pass rate: 1/1)\n"
+    ) in output
     assert "Question: passing" in output
     assert 'Expected: {"intent":"summarize"' in output
     assert 'Actual: {"intent":"summarize"' in output
+
+
+def test_write_report_includes_failure_pass_rate() -> None:
+    stdout = io.StringIO()
+    report = live_eval.LiveEvalReport(
+        total=1,
+        passes=(),
+        failures=(
+            live_eval.LiveEvalFailure(
+                case_name="flaky_case",
+                question="flaky",
+                expected=test_support.question_frame_proposal(),
+                actual=test_support.question_frame_proposal(metric="gross margin"),
+                reasons=(
+                    "sample 2: metric: expected 'total revenue', got 'gross margin'",
+                ),
+                pass_count=2,
+                sample_count=3,
+            ),
+        ),
+    )
+
+    live_eval.write_live_eval_report(stdout=stdout, report=report)
+
+    output = stdout.getvalue()
+    assert "Total cases: 1\nPassed: 0\nFailed: 1\n" in output
+    assert "[FAIL] flaky_case (pass rate: 2/3)" in output
 
 
 def test_main_loads_openai_config_from_dotenv(
@@ -367,6 +463,79 @@ def test_main_passes_verbose_flag_to_report_writer(
 
     assert exit_code == 0
     assert captured_verbose == [True]
+
+
+def test_main_returns_one_when_live_eval_report_has_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    class FakeProvider:
+        def propose_question_frame(
+            self,
+            *,
+            question: str,
+            semantic_layer_context: dict[str, object],
+        ) -> live_eval.ProviderResult:
+            del question, semantic_layer_context
+            raise AssertionError("live eval runner is stubbed")
+
+    def fake_build_openai_provider(
+        environ: collections.abc.Mapping[str, str],
+    ) -> question_interpreter.QuestionInterpreterProvider:
+        assert environ["OPENAI_API_KEY"] == "dotenv-key"
+        return FakeProvider()
+
+    def fake_run_live_eval(
+        *,
+        provider: question_interpreter.QuestionInterpreterProvider,
+        semantic_layer: schema.SemanticLayer,
+        cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
+            live_eval.DEFAULT_CASES
+        ),
+        sample_count: int = live_eval.DEFAULT_SAMPLE_COUNT,
+    ) -> live_eval.LiveEvalReport:
+        del provider, semantic_layer, cases, sample_count
+        return live_eval.LiveEvalReport(
+            total=1,
+            passes=(),
+            failures=(
+                live_eval.LiveEvalFailure(
+                    case_name="flaky_case",
+                    question="flaky",
+                    expected=test_support.question_frame_proposal(),
+                    actual=test_support.question_frame_proposal(metric="gross margin"),
+                    reasons=(
+                        "sample 2: metric: expected 'total revenue', got "
+                        "'gross margin'",
+                    ),
+                    pass_count=2,
+                    sample_count=3,
+                ),
+            ),
+        )
+
+    monkeypatch.setattr(
+        live_eval.question_interpreter,
+        "build_openai_question_interpreter_provider",
+        fake_build_openai_provider,
+    )
+    monkeypatch.setattr(
+        live_eval,
+        "run_live_question_interpreter_eval",
+        fake_run_live_eval,
+    )
+
+    exit_code = live_eval.main(
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+        env_file=env_file,
+    )
+
+    assert exit_code == 1
 
 
 def test_default_live_eval_cases_come_from_shared_question_frame_cases() -> None:
