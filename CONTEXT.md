@@ -275,6 +275,14 @@ and can name the relevant **Curated Dataset** while avoiding restricted details
 such as sensitive fields, rows, or derived results.
 _Avoid_: Permission error, security failure, forbidden response
 
+**Runtime Fallback Message**:
+A generic, last-resort reply the **Slack Runtime Adapter** posts in-thread when
+an unexpected exception prevents the **Data Assistant** from producing any
+**Final Response** at all. Unlike a **Non-Answer Response**, it is not a
+classified workflow outcome and carries no reason or next step; it never exposes
+exception details, secrets, or the question text.
+_Avoid_: Non-Answer, error message, progress update
+
 **Visual Payload**:
 A chart-ready or table-ready result included with an **Answer Draft** for the
 **Response Composer** to present when useful.

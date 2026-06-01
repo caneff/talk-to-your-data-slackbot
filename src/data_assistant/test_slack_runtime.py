@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import collections.abc
 import contextlib
+import logging
 import pathlib
 import typing
 
@@ -350,6 +351,167 @@ def test_handle_socket_mode_event_routes_human_dm_through_existing_boundary(
             "text": "Final answer text.",
         }
     ]
+
+
+def test_handle_socket_mode_event_posts_runtime_fallback_on_connection_failure() -> (
+    None
+):
+    """A crash setting up the data connection still gets a generic in-thread reply.
+
+    The Slack Acknowledgement already happened, so the only way the human learns
+    anything went wrong is the Runtime Fallback Message. The user-facing text must
+    be exactly the constant: no exception details, stack traces, or question text.
+    """
+    ack_calls: list[str] = []
+    client = RecordingSlackClient()
+    boom = RuntimeError("connection blew up: secret-host=db.internal")
+    event = bolt_message_event(
+        user="U123",
+        text="What was total revenue last quarter?",
+        ts="1710000000.654321",
+    )
+
+    def acknowledge() -> None:
+        ack_calls.append("ack")
+
+    def connection_factory() -> contextlib.AbstractContextManager[
+        duckdb.DuckDBPyConnection
+    ]:
+        raise boom
+
+    result = slack_runtime.handle_socket_mode_event(
+        event=event,
+        ack=acknowledge,
+        client=client,
+        connection_factory=connection_factory,
+        answer_path=sentinel_answer_path,
+    )
+
+    assert ack_calls == ["ack"]
+    assert client.calls == [
+        {
+            "channel": "D123",
+            "thread_ts": "1710000000.654321",
+            "text": slack_runtime.RUNTIME_FALLBACK_MESSAGE,
+        }
+    ]
+    fallback_text = client.calls[0]["text"]
+    assert "secret-host" not in fallback_text
+    assert "RuntimeError" not in fallback_text
+    assert "total revenue last quarter" not in fallback_text
+    assert result == slack_boundary.SlackRequestResult(
+        acknowledged=True,
+        delivery=slack_boundary.SlackDelivery(
+            channel="D123",
+            thread_ts="1710000000.654321",
+            text=slack_runtime.RUNTIME_FALLBACK_MESSAGE,
+        ),
+    )
+
+
+def test_handle_socket_mode_event_posts_runtime_fallback_on_answer_path_failure(
+    connect_orders: local_duckdb_fixture.OrdersConnector,
+) -> None:
+    """A crash inside the answer path also yields the Runtime Fallback Message."""
+    ack_calls: list[str] = []
+    client = RecordingSlackClient()
+    event = bolt_message_event(
+        user="U123",
+        text="What was total revenue last quarter?",
+        ts="1710000000.654321",
+    )
+
+    def acknowledge() -> None:
+        ack_calls.append("ack")
+
+    def connection_factory() -> contextlib.AbstractContextManager[
+        duckdb.DuckDBPyConnection
+    ]:
+        return connect_orders((("2026-01-03", "North", "1200.00"),))
+
+    def answer_path(
+        _connection: object,
+        _question: str,
+        _internal_identity: contracts.InternalIdentity,
+    ) -> slack_boundary.SlackWorkflowResult:
+        raise RuntimeError("answer path blew up: secret-value=9999")
+
+    result = slack_runtime.handle_socket_mode_event(
+        event=event,
+        ack=acknowledge,
+        client=client,
+        connection_factory=connection_factory,
+        answer_path=answer_path,
+    )
+
+    assert ack_calls == ["ack"]
+    assert client.calls == [
+        {
+            "channel": "D123",
+            "thread_ts": "1710000000.654321",
+            "text": slack_runtime.RUNTIME_FALLBACK_MESSAGE,
+        }
+    ]
+    fallback_text = client.calls[0]["text"]
+    assert "secret-value" not in fallback_text
+    assert "RuntimeError" not in fallback_text
+    assert "total revenue last quarter" not in fallback_text
+    assert result == slack_boundary.SlackRequestResult(
+        acknowledged=True,
+        delivery=slack_boundary.SlackDelivery(
+            channel="D123",
+            thread_ts="1710000000.654321",
+            text=slack_runtime.RUNTIME_FALLBACK_MESSAGE,
+        ),
+    )
+
+
+def test_handle_socket_mode_event_logs_failure_metadata_for_maintainers(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Maintainers get one ERROR log with routing metadata and exception type.
+
+    The stack trace and metadata go to LOGS only; none of it reaches the Slack
+    user. Per the bootcamp deviation the question text is logged too (a real
+    production bot would not log user-provided free text).
+    """
+    client = RecordingSlackClient()
+    event = bolt_message_event(
+        user="U123",
+        text="What was total revenue last quarter?",
+        ts="1710000000.654321",
+    )
+
+    def acknowledge() -> None:
+        return None
+
+    def connection_factory() -> contextlib.AbstractContextManager[
+        duckdb.DuckDBPyConnection
+    ]:
+        raise RuntimeError("connection blew up")
+
+    with caplog.at_level(logging.ERROR, logger=slack_runtime.logger.name):
+        slack_runtime.handle_socket_mode_event(
+            event=event,
+            ack=acknowledge,
+            client=client,
+            connection_factory=connection_factory,
+            answer_path=sentinel_answer_path,
+        )
+
+    records = [
+        record for record in caplog.records if record.name == slack_runtime.logger.name
+    ]
+    assert len(records) == 1
+    record = records[0]
+    assert record.levelno == logging.ERROR
+    message = record.getMessage()
+    assert "D123" in message
+    assert "1710000000.654321" in message
+    assert "U123" in message
+    assert "RuntimeError" in message
+    assert "What was total revenue last quarter?" in message
+    assert record.exc_info is not None
 
 
 @pytest.mark.parametrize(

@@ -6,6 +6,7 @@ import argparse
 import collections.abc as collections_abc
 import contextlib
 import dataclasses
+import logging
 import os
 import pathlib
 import sys
@@ -26,6 +27,16 @@ import data_assistant.workflow.runner as workflow_runner
 
 if typing.TYPE_CHECKING:
     from slack_bolt import App as SlackBoltApp
+
+logger = logging.getLogger(__name__)
+
+RUNTIME_FALLBACK_MESSAGE = (
+    "Something went wrong while answering your question. Please try again in a bit."
+)
+"""Adapter-level last-resort reply posted when an unexpected exception crashes
+the answer path after the Slack Acknowledgement. This is a Runtime Fallback
+Message, NOT a Non-Answer Response: it never routes through the Non-Answer
+Catalog and carries no reason or next step."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -202,13 +213,42 @@ def handle_socket_mode_event(
             "ts": event["ts"],
         },
     }
-    with connection_factory() as connection:
-        return slack_boundary.handle_slack_event(
-            payload=payload,
-            connection=connection,
-            gateway=gateway,
-            answer_path=answer_path,
-            internal_identity_resolver=internal_identity_resolver,
+    try:
+        with connection_factory() as connection:
+            return slack_boundary.handle_slack_event(
+                payload=payload,
+                connection=connection,
+                gateway=gateway,
+                answer_path=answer_path,
+                internal_identity_resolver=internal_identity_resolver,
+            )
+    except Exception as error:
+        # Bootcamp deviation: we also log the raw question text (event["text"]).
+        # A real production Slack bot would NOT log the question text because it
+        # is user-provided free text that may contain sensitive or business
+        # values (see CONTEXT.md: "Log the Decision Trail, not raw Prepared Data
+        # or sensitive values"). The stack trace stays in logs only and never
+        # reaches the Slack user.
+        logger.exception(
+            "Slack Runtime Adapter failed to answer "
+            "(channel=%s thread_ts=%s user=%s exception_type=%s question=%s)",
+            event["channel"],
+            event["ts"],
+            event["user"],
+            type(error).__name__,
+            event["text"],
+        )
+        # Log first, then deliver. If this delivery itself raises we let it
+        # propagate: the maintainer log above already exists.
+        fallback_delivery = slack_boundary.SlackDelivery(
+            channel=event["channel"],
+            thread_ts=event["ts"],
+            text=RUNTIME_FALLBACK_MESSAGE,
+        )
+        gateway.deliver_response(fallback_delivery)
+        return slack_boundary.SlackRequestResult(
+            acknowledged=True,
+            delivery=fallback_delivery,
         )
 
 
