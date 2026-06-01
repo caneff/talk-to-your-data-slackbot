@@ -86,24 +86,33 @@ def _orders_table() -> schema.DatasetTable:
     )
 
 
-def prepared_revenue_by_region() -> contracts.PreparedData:
-    """Grouped revenue-by-region fixture (West/North/East/South/Unknown)."""
+def prepared_revenue_by_region(*, all_time: bool = False) -> contracts.PreparedData:
+    """Grouped revenue-by-region fixture (West/North/East/South/Unknown).
+
+    With ``all_time=True`` the date range filter is dropped (everything else
+    identical), exercising the "all available data" labelling path.
+    """
     dataset = _commerce_revenue_dataset()
     table = _orders_table()
+    filter_operations: tuple[contracts.ResolvedSemanticFieldOperation, ...] = (
+        ()
+        if all_time
+        else (
+            contracts.ResolvedSemanticFieldOperation(
+                operation=schema.FieldOperation.RANGE_FILTER,
+                field=table.fields[1],
+                lower=datetime.date(2026, 1, 1),
+                upper=datetime.date(2026, 1, 31),
+            ),
+        )
+    )
     return contracts.PreparedData(
         request=contracts.DataRequest(
             dataset=dataset,
             table=table,
             metric=table.metrics[0],
             group_by_fields=(table.fields[0],),
-            filter_operations=(
-                contracts.ResolvedSemanticFieldOperation(
-                    operation=schema.FieldOperation.RANGE_FILTER,
-                    field=table.fields[1],
-                    lower=datetime.date(2026, 1, 1),
-                    upper=datetime.date(2026, 1, 31),
-                ),
-            ),
+            filter_operations=filter_operations,
             output_shape="grouped_metric",
             result_limit=10,
         ),
@@ -184,24 +193,6 @@ def prepared_customer_count() -> contracts.PreparedData:
     )
 
 
-def prepared_all_time_revenue_by_region() -> contracts.PreparedData:
-    """Grouped revenue-by-region fixture with no date filter (all available)."""
-    grouped = prepared_revenue_by_region()
-    return contracts.PreparedData(
-        request=contracts.DataRequest(
-            dataset=grouped.request.dataset,
-            table=grouped.request.table,
-            metric=grouped.request.metric,
-            group_by_fields=grouped.request.group_by_fields,
-            filter_operations=(),
-            output_shape=grouped.request.output_shape,
-            result_limit=grouped.request.result_limit,
-        ),
-        data=grouped.data,
-        quality_notes=grouped.quality_notes,
-    )
-
-
 SHARED_NARRATIVE_CASES: tuple[SharedNarrativeCase, ...] = (
     SharedNarrativeCase(
         name="grouped_revenue_by_region",
@@ -219,7 +210,7 @@ SHARED_NARRATIVE_CASES: tuple[SharedNarrativeCase, ...] = (
     ),
     SharedNarrativeCase(
         name="all_time_revenue_by_region",
-        prepared_data=prepared_all_time_revenue_by_region(),
+        prepared_data=prepared_revenue_by_region(all_time=True),
         expectation=GroundingExpectation(
             required_slots=("{top_dimension}",),
         ),

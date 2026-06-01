@@ -39,7 +39,7 @@ def test_reasoning_layer_formats_count_summary_and_carries_metric_kind() -> None
 
 
 def test_reasoning_layer_labels_all_time_when_no_date_filter_exists() -> None:
-    prepared_data = narrative_cases.prepared_all_time_revenue_by_region()
+    prepared_data = narrative_cases.prepared_revenue_by_region(all_time=True)
 
     answer_draft = reasoning_layer.draft_answer(prepared_data)
 
