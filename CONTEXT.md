@@ -115,6 +115,16 @@ measures, **Semantic Fields** used for grouping, filters, and unresolved
 ambiguities, without selecting a **Curated Dataset** or **Dataset Table**.
 _Avoid_: Query, prompt, plan
 
+**Time Scope**:
+The period a **Data Question** asks about, which is one of three: _bounded_ (a
+named period such as a month, a date range, or a single date), _all-time_ (the
+team member explicitly asks across every date, such as "for all time" or "across
+any date"), or _unspecified_ (no period is given). An _unspecified_ **Time
+Scope** is a **Material Ambiguity**: the **Data Assistant** asks the team member
+to narrow the period rather than guessing an unbounded answer. _All-time_ is a
+deliberate choice the team member states, not the default for silence.
+_Avoid_: Date filter, time range, default range
+
 **Material Ambiguity**:
 An unresolved ambiguity that would require meaningfully different data access or
 analysis plans and has no safe default in the **Semantic Layer**.
