@@ -159,6 +159,106 @@ def test_data_assistant_runs_customer_count_by_customer_region_end_to_end(
     )
 
 
+def test_data_assistant_runs_all_time_grouped_revenue_end_to_end(
+    allowed_internal_identity: contracts.InternalIdentity,
+) -> None:
+    provider = _static_provider(
+        question_interpreter.QuestionFrameProposal(
+            intent="summarize",
+            metric="total revenue",
+            field_operations=(
+                question_interpreter.GroupByOperationProposal(
+                    operation="group_by",
+                    field="region",
+                ),
+            ),
+            all_time=True,
+        )
+    )
+    order_rows = (
+        ("2026-01-03", "North", "1200.00"),
+        ("2026-01-08", "South", "850.00"),
+        ("2026-01-15", "West", "1600.00"),
+        ("2026-01-22", "North", "300.00"),
+        ("2026-02-01", "West", "9999.00"),
+    )
+
+    with local_duckdb_fixture.connect_orders(order_rows) as connection:
+        run = workflow_runner.run_data_assistant(
+            connection,
+            "What was total revenue by region for all time?",
+            question_interpreter_provider=provider,
+            internal_identity=allowed_internal_identity,
+        )
+
+    assert isinstance(run, contracts.DataAssistantRun)
+    assert run.question_frame.time_scope == contracts.TimeScope.ALL_TIME
+    assert run.data_request.filter_operations == ()
+    assert run.prepared_data.data.loc[0, "dimension_value"] == "West"
+    assert run.prepared_data.data.loc[0, "metric_value"] == 11599.0
+    assert run.final_response.response_kind == contracts.ResponseKind.ANSWER
+    assert "Total revenue in all available data was $13,949.00" in (
+        run.final_response.text
+    )
+    assert "Time range: all available data." in run.final_response.text
+    assert (
+        run.final_response.trust_summary.freshness
+        == "Commerce order data refreshed through 2026-01-31."
+    )
+    assert (
+        "Freshness: Commerce order data refreshed through 2026-01-31."
+        in run.final_response.text
+    )
+    assert "Filters:" not in run.final_response.text
+
+
+def test_data_assistant_runs_all_time_scalar_revenue_end_to_end(
+    allowed_internal_identity: contracts.InternalIdentity,
+) -> None:
+    provider = _static_provider(
+        question_interpreter.QuestionFrameProposal(
+            intent="summarize",
+            metric="total revenue",
+            field_operations=(),
+            all_time=True,
+        )
+    )
+    order_rows = (
+        ("2026-01-03", "North", "1200.00"),
+        ("2026-01-08", "South", "850.00"),
+        ("2026-01-22", "North", "300.00"),
+        ("2026-02-01", "West", "9999.00"),
+    )
+
+    with local_duckdb_fixture.connect_orders(order_rows) as connection:
+        run = workflow_runner.run_data_assistant(
+            connection,
+            "What was total revenue for all time?",
+            question_interpreter_provider=provider,
+            internal_identity=allowed_internal_identity,
+        )
+
+    assert isinstance(run, contracts.DataAssistantRun)
+    assert run.question_frame.time_scope == contracts.TimeScope.ALL_TIME
+    assert run.data_request.filter_operations == ()
+    assert run.prepared_data.data.loc[0, "dimension_value"] == "All"
+    assert run.prepared_data.data.loc[0, "metric_value"] == 12349.0
+    assert run.final_response.response_kind == contracts.ResponseKind.ANSWER
+    assert "Total revenue in all available data was $12,349.00." in (
+        run.final_response.text
+    )
+    assert "Time range: all available data." in run.final_response.text
+    assert (
+        run.final_response.trust_summary.freshness
+        == "Commerce order data refreshed through 2026-01-31."
+    )
+    assert (
+        "Freshness: Commerce order data refreshed through 2026-01-31."
+        in run.final_response.text
+    )
+    assert "Filters:" not in run.final_response.text
+
+
 def test_data_assistant_short_circuits_question_ambiguity(
     monkeypatch: pytest.MonkeyPatch,
     connect_orders: local_duckdb_fixture.OrdersConnector,
