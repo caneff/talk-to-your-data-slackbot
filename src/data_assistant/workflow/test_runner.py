@@ -338,6 +338,7 @@ def test_data_assistant_uses_required_question_interpreter_provider(
     assert run.question_frame == contracts.QuestionFrame(
         intent="summarize",
         metric="total revenue",
+        time_scope=contracts.TimeScope.BOUNDED,
         field_operations=(
             contracts.SemanticFieldOperation(
                 operation=schema.FieldOperation.GROUP_BY,

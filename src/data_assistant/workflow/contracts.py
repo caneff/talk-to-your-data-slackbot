@@ -101,9 +101,9 @@ class QuestionFrame:
 
     intent: str
     metric: str
+    time_scope: TimeScope
     field_operations: tuple[SemanticFieldOperation, ...]
     unresolved_ambiguities: tuple[str, ...]
-    time_scope: TimeScope = TimeScope.BOUNDED
 
     @property
     def filter_labels(self) -> tuple[str, ...]:

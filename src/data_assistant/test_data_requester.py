@@ -36,6 +36,7 @@ def test_data_requester_returns_non_answer_for_unknown_filter_field(
     question_frame = contracts.QuestionFrame(
         intent=question_frame.intent,
         metric=question_frame.metric,
+        time_scope=question_frame.time_scope,
         field_operations=question_frame.field_operations
         + (
             contracts.SemanticFieldOperation(

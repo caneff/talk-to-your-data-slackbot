@@ -96,6 +96,7 @@ CONTRACT_SNAPSHOT_CASES = (
             contracts.QuestionFrame(
                 intent="summarize",
                 metric="total revenue",
+                time_scope=contracts.TimeScope.BOUNDED,
                 field_operations=(
                     contracts.SemanticFieldOperation(
                         operation=schema.FieldOperation.RANGE_FILTER,
@@ -156,6 +157,7 @@ CONTRACT_SNAPSHOT_CASES = (
             contracts.QuestionFrame(
                 intent="summarize",
                 metric="total revenue",
+                time_scope=contracts.TimeScope.BOUNDED,
                 field_operations=(
                     contracts.SemanticFieldOperation(
                         operation=schema.FieldOperation.GROUP_BY,

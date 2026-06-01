@@ -39,6 +39,7 @@ def test_semantic_router_returns_non_answer_when_no_dataset_matches(
     question_frame = contracts.QuestionFrame(
         intent="summarize",
         metric="gross bookings",
+        time_scope=contracts.TimeScope.BOUNDED,
         field_operations=(
             contracts.SemanticFieldOperation(
                 operation=schema.FieldOperation.GROUP_BY,
@@ -99,6 +100,7 @@ def test_semantic_router_returns_ambiguous_table_for_two_tables_in_one_dataset()
     question_frame = contracts.QuestionFrame(
         intent="summarize",
         metric="total revenue",
+        time_scope=contracts.TimeScope.BOUNDED,
         field_operations=(
             contracts.SemanticFieldOperation(
                 operation=schema.FieldOperation.GROUP_BY,

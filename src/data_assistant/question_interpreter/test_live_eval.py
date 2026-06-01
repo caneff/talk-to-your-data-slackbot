@@ -119,6 +119,18 @@ def test_compare_proposal_reports_extra_field_operation() -> None:
     )
 
 
+def test_compare_proposal_reports_all_time_mismatch() -> None:
+    expected = test_support.question_frame_proposal()
+    actual = test_support.question_frame_proposal(all_time=True)
+
+    mismatches = live_eval.compare_question_frame_meaning(
+        expected=expected,
+        actual=actual,
+    )
+
+    assert mismatches == ("all_time: expected False, got True",)
+
+
 def test_run_eval_suite_reports_all_failures_without_fail_fast() -> None:
     class FakeProvider:
         def __init__(self) -> None:

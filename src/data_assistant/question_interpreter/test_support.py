@@ -104,6 +104,7 @@ def question_frame_proposal(
     *,
     intent: str | None = "summarize",
     metric: str | None = "total revenue",
+    all_time: bool = False,
     field_operations: (
         tuple[question_interpreter.FieldOperationProposal, ...] | object
     ) = _DEFAULT_FIELD_OPERATIONS,
@@ -131,5 +132,6 @@ def question_frame_proposal(
     return question_interpreter.QuestionFrameProposal(
         intent=intent,
         metric=metric,
+        all_time=all_time,
         field_operations=active_field_operations,
     )

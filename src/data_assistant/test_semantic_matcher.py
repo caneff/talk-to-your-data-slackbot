@@ -51,6 +51,7 @@ def _question_frame(
     return contracts.QuestionFrame(
         intent="summarize",
         metric=metric,
+        time_scope=contracts.TimeScope.BOUNDED,
         field_operations=(
             contracts.SemanticFieldOperation(
                 operation=schema.FieldOperation.GROUP_BY,
