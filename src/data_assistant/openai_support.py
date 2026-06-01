@@ -1,0 +1,190 @@
+"""Shared OpenAI plumbing for the Question Interpreter + Reasoning Layer providers.
+
+Both ``question_interpreter.openai_provider`` and
+``reasoning_layer.openai_provider`` are thin shells over this module: they keep
+their own flat config dataclass, their own ``*ConfigError`` class, their own
+``ProviderFailure`` type, and their per-provider input shape / prompt filename /
+proposal ``text_format``. Everything else — env parsing, SDK client
+construction, refusal extraction, and the structured ``responses.parse`` flow —
+lives here so it is written and tested once.
+
+Composition, not inheritance: the reusable logic is parameterized by the
+caller's error class, proposal type, ``failure_factory``, and optional extra
+``parse(...)`` kwargs (the Question Interpreter passes ``temperature=0``; the
+Reasoning Layer passes none).
+"""
+
+from __future__ import annotations
+
+import collections.abc
+import functools
+import importlib.resources
+import typing
+
+from openai import OpenAI
+
+import data_assistant.prompts as prompts
+
+DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
+DEFAULT_OPENAI_TIMEOUT_SECONDS = 15.0
+DEFAULT_OPENAI_MAX_RETRIES = 1
+
+OpenAIInputMessage: typing.TypeAlias = dict[str, str]
+
+ProposalT = typing.TypeVar("ProposalT")
+FailureT = typing.TypeVar("FailureT")
+
+
+class OpenAIResponsesClient(typing.Protocol):
+    def parse(self, **kwargs: object) -> object:
+        """Return one structured Responses API result."""
+
+
+class OpenAIClient(typing.Protocol):
+    responses: OpenAIResponsesClient
+
+
+class OpenAIClientConfig(typing.Protocol):
+    """Structural config a component must satisfy to build an SDK client.
+
+    Both ``OpenAIQuestionInterpreterConfig`` and ``OpenAIReasoningConfig``
+    satisfy this with their own flat fields — no nested sub-config needed.
+    """
+
+    @property
+    def api_key(self) -> str: ...
+
+    @property
+    def timeout_seconds(self) -> float: ...
+
+    @property
+    def max_retries(self) -> int: ...
+
+
+def require_api_key(
+    environ: collections.abc.Mapping[str, str],
+    error_factory: collections.abc.Callable[[str], Exception],
+) -> str:
+    """Return the OpenAI API key or raise the component's config error."""
+    api_key = environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise error_factory(
+            "Missing required OpenAI environment variables: OPENAI_API_KEY"
+        )
+    return api_key
+
+
+def parse_timeout_seconds(
+    environ: collections.abc.Mapping[str, str],
+    error_factory: collections.abc.Callable[[str], Exception],
+) -> float:
+    """Parse ``OPENAI_TIMEOUT_SECONDS``, defaulting when unset."""
+    raw_value = environ.get("OPENAI_TIMEOUT_SECONDS")
+    if raw_value is None:
+        return DEFAULT_OPENAI_TIMEOUT_SECONDS
+    try:
+        return float(raw_value)
+    except ValueError as error:
+        raise error_factory(f"Invalid OPENAI_TIMEOUT_SECONDS: {raw_value!r}") from error
+
+
+def parse_max_retries(
+    environ: collections.abc.Mapping[str, str],
+    error_factory: collections.abc.Callable[[str], Exception],
+) -> int:
+    """Parse ``OPENAI_MAX_RETRIES``, defaulting when unset."""
+    raw_value = environ.get("OPENAI_MAX_RETRIES")
+    if raw_value is None:
+        return DEFAULT_OPENAI_MAX_RETRIES
+    try:
+        return int(raw_value)
+    except ValueError as error:
+        raise error_factory(f"Invalid OPENAI_MAX_RETRIES: {raw_value!r}") from error
+
+
+def build_openai_client(config: OpenAIClientConfig) -> OpenAIClient:
+    """Construct an OpenAI SDK client from any structural client config."""
+    return typing.cast(
+        OpenAIClient,
+        OpenAI(
+            api_key=config.api_key,
+            timeout=config.timeout_seconds,
+            max_retries=config.max_retries,
+        ),
+    )
+
+
+def run_parse(
+    *,
+    client: OpenAIClient,
+    model: str,
+    input_messages: list[OpenAIInputMessage],
+    text_format: type[ProposalT],
+    failure_factory: collections.abc.Callable[[str], FailureT],
+    extra_parse_kwargs: dict[str, object] | None = None,
+) -> ProposalT | FailureT:
+    """Run one structured ``responses.parse`` and normalize the outcome.
+
+    Centralizes the parse → exception → refusal → missing-output flow shared by
+    both providers. ``extra_parse_kwargs`` lets a caller forward additional
+    keyword arguments to ``parse`` (the Question Interpreter passes
+    ``temperature=0``; the Reasoning Layer passes none).
+    """
+    try:
+        response = client.responses.parse(
+            model=model,
+            input=input_messages,
+            text_format=text_format,
+            **(extra_parse_kwargs or {}),
+        )
+    except Exception as error:
+        return failure_factory(str(error) or "OpenAI provider failed")
+
+    refusal = extract_response_refusal(response)
+    if refusal:
+        return failure_factory(refusal)
+
+    parsed_output = getattr(response, "output_parsed", None)
+    if not isinstance(parsed_output, text_format):
+        return failure_factory("OpenAI provider returned no parsed output")
+    return parsed_output
+
+
+def extract_response_refusal(response: object) -> str | None:
+    """Return the first refusal string in a Responses result, if any."""
+    output_items = typing.cast(
+        collections.abc.Iterable[object],
+        getattr(response, "output", ()),
+    )
+    for output_item in output_items:
+        if getattr(output_item, "type", None) != "message":
+            continue
+        content_items = typing.cast(
+            collections.abc.Iterable[object],
+            getattr(output_item, "content", ()),
+        )
+        for content_item in content_items:
+            if getattr(content_item, "type", None) != "refusal":
+                continue
+            refusal = getattr(content_item, "refusal", None)
+            if isinstance(refusal, str) and refusal:
+                return refusal
+    return None
+
+
+def developer_message(prompt_filename: str) -> OpenAIInputMessage:
+    """Build the developer-role message for a component's prompt file."""
+    return {
+        "role": "developer",
+        "content": _developer_instructions(prompt_filename),
+    }
+
+
+@functools.cache
+def _developer_instructions(prompt_filename: str) -> str:
+    return (
+        importlib.resources.files(prompts)
+        .joinpath(prompt_filename)
+        .read_text(encoding="utf-8")
+        .strip()
+    )

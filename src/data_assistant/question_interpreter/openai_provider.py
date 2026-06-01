@@ -4,23 +4,19 @@ from __future__ import annotations
 
 import collections.abc
 import dataclasses
-import functools
-import importlib.resources
 import json
-import typing
 
-from openai import OpenAI
-
-import data_assistant.prompts as prompts
+import data_assistant.openai_support as openai_support
+from data_assistant.openai_support import OpenAIInputMessage
 from data_assistant.question_interpreter.proposals import (
     ProviderFailure,
     QuestionFrameProposal,
 )
 
-_DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
-_DEFAULT_OPENAI_TIMEOUT_SECONDS = 15.0
-_DEFAULT_OPENAI_MAX_RETRIES = 1
-OpenAIInputMessage: typing.TypeAlias = dict[str, str]
+# Module-local private alias for the shared client protocol; the deterministic
+# provider tests cast injected fakes to this same-module name.
+_OpenAIClient = openai_support.OpenAIClient
+
 _QUESTION_INTERPRETER_DEVELOPER_PROMPT = "question_interpreter_developer.md"
 
 
@@ -42,53 +38,19 @@ def load_openai_question_interpreter_config(
     environ: collections.abc.Mapping[str, str],
 ) -> OpenAIQuestionInterpreterConfig:
     """Load required OpenAI provider config from environment variables."""
-    if not environ.get("OPENAI_API_KEY"):
-        raise OpenAIQuestionInterpreterConfigError(
-            "Missing required OpenAI environment variables: OPENAI_API_KEY"
-        )
-    return OpenAIQuestionInterpreterConfig(
-        api_key=environ["OPENAI_API_KEY"],
-        model=environ.get("OPENAI_MODEL", _DEFAULT_OPENAI_MODEL),
-        timeout_seconds=_parse_timeout_seconds(environ),
-        max_retries=_parse_max_retries(environ),
+    api_key = openai_support.require_api_key(
+        environ, OpenAIQuestionInterpreterConfigError
     )
-
-
-def _parse_timeout_seconds(
-    environ: collections.abc.Mapping[str, str],
-) -> float:
-    raw_value = environ.get("OPENAI_TIMEOUT_SECONDS")
-    if raw_value is None:
-        return _DEFAULT_OPENAI_TIMEOUT_SECONDS
-    try:
-        return float(raw_value)
-    except ValueError as error:
-        raise OpenAIQuestionInterpreterConfigError(
-            f"Invalid OPENAI_TIMEOUT_SECONDS: {raw_value!r}"
-        ) from error
-
-
-def _parse_max_retries(
-    environ: collections.abc.Mapping[str, str],
-) -> int:
-    raw_value = environ.get("OPENAI_MAX_RETRIES")
-    if raw_value is None:
-        return _DEFAULT_OPENAI_MAX_RETRIES
-    try:
-        return int(raw_value)
-    except ValueError as error:
-        raise OpenAIQuestionInterpreterConfigError(
-            f"Invalid OPENAI_MAX_RETRIES: {raw_value!r}"
-        ) from error
-
-
-class _OpenAIResponsesClient(typing.Protocol):
-    def parse(self, **kwargs: object) -> object:
-        """Return one structured Responses API result."""
-
-
-class _OpenAIClient(typing.Protocol):
-    responses: _OpenAIResponsesClient
+    return OpenAIQuestionInterpreterConfig(
+        api_key=api_key,
+        model=environ.get("OPENAI_MODEL", openai_support.DEFAULT_OPENAI_MODEL),
+        timeout_seconds=openai_support.parse_timeout_seconds(
+            environ, OpenAIQuestionInterpreterConfigError
+        ),
+        max_retries=openai_support.parse_max_retries(
+            environ, OpenAIQuestionInterpreterConfigError
+        ),
+    )
 
 
 class OpenAIQuestionInterpreterProvider:
@@ -109,48 +71,17 @@ class OpenAIQuestionInterpreterProvider:
         question: str,
         semantic_layer_context: dict[str, object],
     ) -> QuestionFrameProposal | ProviderFailure:
-        try:
-            response = self._client.responses.parse(
-                model=self._config.model,
-                input=_build_openai_input(
-                    question=question,
-                    semantic_layer_context=semantic_layer_context,
-                ),
-                text_format=QuestionFrameProposal,
-                temperature=0,
-            )
-        except Exception as error:
-            return ProviderFailure(reason=str(error) or "OpenAI provider failed")
-
-        refusal = _extract_response_refusal(response)
-        if refusal:
-            return ProviderFailure(reason=refusal)
-
-        parsed_output = getattr(response, "output_parsed", None)
-        if not isinstance(parsed_output, QuestionFrameProposal):
-            return ProviderFailure(reason="OpenAI provider returned no parsed output")
-        return parsed_output
-
-
-def _extract_response_refusal(response: object) -> str | None:
-    output_items = typing.cast(
-        collections.abc.Iterable[object],
-        getattr(response, "output", ()),
-    )
-    for output_item in output_items:
-        if getattr(output_item, "type", None) != "message":
-            continue
-        content_items = typing.cast(
-            collections.abc.Iterable[object],
-            getattr(output_item, "content", ()),
+        return openai_support.run_parse(
+            client=self._client,
+            model=self._config.model,
+            input_messages=_build_openai_input(
+                question=question,
+                semantic_layer_context=semantic_layer_context,
+            ),
+            text_format=QuestionFrameProposal,
+            failure_factory=lambda reason: ProviderFailure(reason=reason),
+            extra_parse_kwargs={"temperature": 0},
         )
-        for content_item in content_items:
-            if getattr(content_item, "type", None) != "refusal":
-                continue
-            refusal = getattr(content_item, "refusal", None)
-            if isinstance(refusal, str) and refusal:
-                return refusal
-    return None
 
 
 def _build_openai_input(
@@ -159,29 +90,12 @@ def _build_openai_input(
     semantic_layer_context: dict[str, object],
 ) -> list[OpenAIInputMessage]:
     return [
-        _developer_message(),
+        openai_support.developer_message(_QUESTION_INTERPRETER_DEVELOPER_PROMPT),
         _user_message(
             question=question,
             semantic_layer_context=semantic_layer_context,
         ),
     ]
-
-
-def _developer_message() -> OpenAIInputMessage:
-    return {
-        "role": "developer",
-        "content": _developer_instructions(),
-    }
-
-
-@functools.cache
-def _developer_instructions() -> str:
-    return (
-        importlib.resources.files(prompts)
-        .joinpath(_QUESTION_INTERPRETER_DEVELOPER_PROMPT)
-        .read_text(encoding="utf-8")
-        .strip()
-    )
 
 
 def _user_message(
@@ -210,16 +124,5 @@ def build_openai_question_interpreter_provider(
     config = load_openai_question_interpreter_config(environ)
     return OpenAIQuestionInterpreterProvider(
         config=config,
-        client=client or _build_openai_client(config),
-    )
-
-
-def _build_openai_client(config: OpenAIQuestionInterpreterConfig) -> _OpenAIClient:
-    return typing.cast(
-        _OpenAIClient,
-        OpenAI(
-            api_key=config.api_key,
-            timeout=config.timeout_seconds,
-            max_retries=config.max_retries,
-        ),
+        client=client or openai_support.build_openai_client(config),
     )

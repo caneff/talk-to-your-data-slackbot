@@ -3,6 +3,7 @@ import typing
 
 import pytest
 
+import data_assistant.openai_support as openai_support
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.question_interpreter.openai_provider as openai_provider
 import data_assistant.question_interpreter.test_support as test_support
@@ -90,7 +91,7 @@ def test_build_openai_provider_passes_timeout_and_retries_to_client(
 
         responses = object()
 
-    monkeypatch.setattr(openai_provider, "OpenAI", FakeOpenAI)
+    monkeypatch.setattr(openai_support, "OpenAI", FakeOpenAI)
 
     question_interpreter.build_openai_question_interpreter_provider(
         {
