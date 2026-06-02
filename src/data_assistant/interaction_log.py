@@ -1,10 +1,10 @@
-"""Local Interaction Log: append-only JSONL of Data Questions and responses.
+"""Local Interaction Log: retention-bounded JSONL of Data Questions and responses.
 
 This flat module owns ALL file I/O and the on-disk record schema for the
 Interaction Log -- the local-dev consumer of the Decision Trail (see ADR-0016).
-Every Data Question handled by the Slack Assistant Adapter writes ONE structured
-JSON line here so a maintainer can paste any interaction into Claude Code when
-asking for an improvement.
+Every Data Question handled by the Slack Assistant Adapter append-first writes
+ONE structured JSON line here so a maintainer can paste retained interactions
+into Claude Code when asking for an improvement.
 
 The log lives at a gitignored ``logs/interactions.jsonl`` under the repo root.
 The path is injectable (``path`` argument) so tests write to ``tmp_path`` and
@@ -20,6 +20,7 @@ serializes whatever flat dict it is handed.
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import json
 import os
 import pathlib
@@ -40,22 +41,54 @@ FLAG_VOCABULARY: typing.Final[tuple[str, ...]] = ("correctness", "formatting")
 InteractionRecord: typing.TypeAlias = typing.Mapping[str, object]
 
 
+@dataclasses.dataclass(frozen=True)
+class RetentionPolicy:
+    """Byte-triggered retention settings for the local Interaction Log."""
+
+    trigger_bytes: int
+    target_bytes: int
+    recent_unflagged_answer_limit: int
+
+
+DEFAULT_RETENTION_POLICY: typing.Final[RetentionPolicy] = RetentionPolicy(
+    trigger_bytes=100 * 1024 * 1024,
+    target_bytes=50 * 1024 * 1024,
+    recent_unflagged_answer_limit=5_000,
+)
+
+
+@dataclasses.dataclass(frozen=True)
+class _LogLine:
+    index: int
+    text: str
+    record: dict[str, object] | None
+
+    @property
+    def byte_count(self) -> int:
+        return len(self.text.encode("utf-8")) + 1
+
+
 def append_interaction(
     record: InteractionRecord,
     *,
     path: pathlib.Path = DEFAULT_LOG_PATH,
+    retention_policy: RetentionPolicy = DEFAULT_RETENTION_POLICY,
 ) -> str:
     """Append one interaction ``record`` as a single JSON line; return its id.
 
     Opens the log in append mode and writes exactly one ``json.dumps(record)``
-    followed by a newline, so the file stays a greppable/diffable JSONL stream.
-    The parent directory is created if missing. The record's ``id`` field is
-    returned so callers can correlate the log line (Slice 2 will flag by id).
+    followed by a newline, so normal writes stay cheap and greppable. The parent
+    directory is created if missing. The record's ``id`` field is returned so
+    callers can correlate the log line.
+
+    Retention is checked after the append. If ``retention_policy`` is violated,
+    this module atomically compacts the log before returning.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     line = json.dumps(record)
     with path.open("a", encoding="utf-8") as log_file:
         log_file.write(line + "\n")
+    enforce_retention(path=path, policy=retention_policy)
     return str(record["id"])
 
 
@@ -64,6 +97,7 @@ def flag_interaction(
     category: str,
     *,
     path: pathlib.Path = DEFAULT_LOG_PATH,
+    retention_policy: RetentionPolicy = DEFAULT_RETENTION_POLICY,
 ) -> bool:
     """Append ``category`` to one record's ``flags`` via an atomic rewrite.
 
@@ -90,37 +124,151 @@ def flag_interaction(
     if not path.exists():
         return False
 
-    lines = path.read_text(encoding="utf-8").splitlines()
+    lines = _read_log_lines(path)
     changed = False
     rewritten: list[str] = []
     for line in lines:
-        if not line:
-            rewritten.append(line)
+        if line.record is None:
+            rewritten.append(line.text)
             continue
-        record = json.loads(line)
+        record = line.record
         if record.get("id") == interaction_id:
-            flags = list(record.get("flags") or [])
+            flags = _record_flags(record)
             if category not in flags:
                 flags.append(category)
             record["flags"] = flags
             changed = True
             rewritten.append(json.dumps(record))
         else:
-            rewritten.append(line)
+            rewritten.append(line.text)
 
     if not changed:
         return False
 
+    _write_lines_atomic(path, rewritten)
+    enforce_retention(path=path, policy=retention_policy)
+    return True
+
+
+def enforce_retention(
+    *,
+    path: pathlib.Path = DEFAULT_LOG_PATH,
+    policy: RetentionPolicy = DEFAULT_RETENTION_POLICY,
+) -> None:
+    """Apply ``policy`` when the log exceeds its trigger size.
+
+    Selection is priority-first, then newest-first inside each priority bucket;
+    retained lines are written back in original chronological order. Malformed
+    JSONL lines are retained as diagnosis signal when space allows.
+    """
+    if not path.exists() or path.stat().st_size <= policy.trigger_bytes:
+        return
+
+    lines = _read_log_lines(path)
+    keepable_lines = _keepable_lines(lines, policy)
+    retained: list[_LogLine] = []
+    retained_bytes = 0
+    for line in _priority_ordered(keepable_lines):
+        if retained_bytes + line.byte_count <= policy.target_bytes:
+            retained.append(line)
+            retained_bytes += line.byte_count
+        elif not retained:
+            retained.append(line)
+            break
+
+    retained_indices = {line.index for line in retained}
+    compacted = [line.text for line in lines if line.index in retained_indices]
+    _write_lines_atomic(path, compacted)
+
+
+def _read_log_lines(path: pathlib.Path) -> list[_LogLine]:
+    lines: list[_LogLine] = []
+    for index, text in enumerate(path.read_text(encoding="utf-8").splitlines()):
+        try:
+            parsed: object = json.loads(text)
+        except json.JSONDecodeError:
+            parsed = None
+        record = (
+            typing.cast(dict[str, object], parsed) if isinstance(parsed, dict) else None
+        )
+        lines.append(_LogLine(index=index, text=text, record=record))
+    return lines
+
+
+def _record_flags(record: dict[str, object]) -> list[object]:
+    flags = record.get("flags")
+    if not isinstance(flags, list):
+        return []
+    return list(typing.cast(list[object], flags))
+
+
+def _keepable_lines(
+    lines: list[_LogLine],
+    policy: RetentionPolicy,
+) -> list[_LogLine]:
+    recent_answer_indices = _recent_unflagged_answer_indices(
+        lines,
+        policy.recent_unflagged_answer_limit,
+    )
+    return [
+        line
+        for line in lines
+        if _line_priority(line) != _UNFLAGGED_ANSWER_PRIORITY
+        or line.index in recent_answer_indices
+    ]
+
+
+def _recent_unflagged_answer_indices(
+    lines: list[_LogLine],
+    limit: int,
+) -> set[int]:
+    if limit <= 0:
+        return set()
+    answer_indices = [
+        line.index
+        for line in lines
+        if _line_priority(line) == _UNFLAGGED_ANSWER_PRIORITY
+    ]
+    return set(answer_indices[-limit:])
+
+
+_FLAGGED_PRIORITY: typing.Final[int] = 0
+_ERROR_PRIORITY: typing.Final[int] = 1
+_MALFORMED_PRIORITY: typing.Final[int] = 2
+_NON_ANSWER_PRIORITY: typing.Final[int] = 3
+_UNFLAGGED_ANSWER_PRIORITY: typing.Final[int] = 4
+
+
+def _line_priority(line: _LogLine) -> int:
+    record = line.record
+    if record is None:
+        return _MALFORMED_PRIORITY
+    if record.get("flags"):
+        return _FLAGGED_PRIORITY
+    outcome = record.get("outcome")
+    if outcome == "error":
+        return _ERROR_PRIORITY
+    if outcome == "non_answer":
+        return _NON_ANSWER_PRIORITY
+    if outcome == "answer":
+        return _UNFLAGGED_ANSWER_PRIORITY
+    return _MALFORMED_PRIORITY
+
+
+def _priority_ordered(lines: list[_LogLine]) -> list[_LogLine]:
+    return sorted(lines, key=lambda line: (_line_priority(line), -line.index))
+
+
+def _write_lines_atomic(path: pathlib.Path, lines: list[str]) -> None:
     # Atomic in-place rewrite: temp file in the same directory, then rename.
     directory = path.parent
     fd, temp_name = tempfile.mkstemp(dir=directory, prefix=path.name, suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as temp_file:
-            for line in rewritten:
+            for line in lines:
                 temp_file.write(line + "\n")
         os.replace(temp_name, path)
     except BaseException:
         with contextlib.suppress(FileNotFoundError):
             os.unlink(temp_name)
         raise
-    return True

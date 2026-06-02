@@ -267,6 +267,11 @@ kept to improve the **Data Assistant**. It is the local-dev, richer counterpart
 to the (sanitized, shipped) **Decision Trail**.
 _Avoid_: Analytics log, transcript, audit dump
 
+**Interaction Log Retention Policy**:
+The rules that decide which **Interaction Log** records remain available for
+improvement work after the log grows beyond its configured limits.
+_Avoid_: Log rotation, sampling policy, archival policy
+
 **Flag**:
 A team member's mark on a logged interaction, categorized as **correctness** or
 **formatting**, signaling a response to improve.
