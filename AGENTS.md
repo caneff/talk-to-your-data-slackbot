@@ -18,8 +18,9 @@ This is a single-context repo. See `docs/agents/domain.md`.
 
 Before opening or updating a PR — and whenever a skill says "run validation" or
 "make sure it's green" — `uv run pytest`, `uv run pyright`, `uv run ruff check
-.`, and `uv run ruff format --check .` must all pass. `ruff format --check` is
-part of the gate, not optional. See `docs/agents/validation.md`.
+.`, `uv run ruff format --check .`, and `uv build --wheel` must all pass.
+`ruff format --check` and `uv build --wheel` are part of the gate, not
+optional. See `docs/agents/validation.md`.
 
 ## Paid OpenAI API guard
 
