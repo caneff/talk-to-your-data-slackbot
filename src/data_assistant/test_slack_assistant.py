@@ -736,3 +736,55 @@ def test_on_user_message_log_failure_does_not_break_user_reply(
 
     # The reply still went out even though the log write failed.
     assert say.calls == [("Answer text.", None)]
+
+
+def test_on_user_message_record_build_failure_does_not_break_user_reply(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+    connect_orders: collections.abc.Callable[
+        ..., contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
+    ],
+) -> None:
+    """A failure to BUILD the record must not suppress a good answer.
+
+    Record construction (``to_dict`` / ``.shape`` / field extraction) must run
+    inside the same swallow as the append, so a malformed trace logs an error
+    and is dropped -- the user still gets the real answer, not the fallback.
+    """
+    log_path = tmp_path / "interactions.jsonl"
+    say = RecordingSay()
+    run = _data_assistant_run()
+
+    def boom(**_kwargs: object) -> dict[str, object]:
+        raise ValueError("record construction blew up")
+
+    monkeypatch.setattr(slack_assistant, "_interaction_record", boom)
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        _question: str,
+        _identity: contracts.InternalIdentity,
+    ) -> slack_assistant.SlackWorkflowResult:
+        return run
+
+    adapter = slack_assistant.AssistantAdapter(
+        connection_factory=_connection_factory(connect_orders),
+        answer_path=answer_path,
+        model_label="gpt-4o-mini",
+        log_path=log_path,
+    )
+
+    adapter.on_user_message(
+        text="any question",
+        user="U123",
+        channel="D123",
+        thread_ts="1710000000.654321",
+        set_status=RecordingStatus(),
+        say=say,
+    )
+
+    # The user gets the REAL answer (not the Runtime Fallback), no exception
+    # escapes, and nothing was written.
+    assert say.calls == [(run.final_response.text, run.final_response.blocks or None)]
+    assert say.calls[0][0] != slack_assistant.RUNTIME_FALLBACK_MESSAGE
+    assert not log_path.exists()

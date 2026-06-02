@@ -332,7 +332,7 @@ class AssistantAdapter:
                 result = self.answer_path(connection, text, internal_identity)
             final_response = final_response_from_workflow_result(result)
             self._record_interaction(
-                _interaction_record(
+                lambda: _interaction_record(
                     interaction_id=interaction_id,
                     timestamp=timestamp,
                     latency_ms=_latency_ms(started_at),
@@ -344,6 +344,11 @@ class AssistantAdapter:
             )
             say(final_response.text, blocks=final_response.blocks or None)
         except Exception as error:
+            # Bind to a stable local: `except ... as error` clears `error` at
+            # the end of the block, so the record-building thunk closes over
+            # this name instead (the thunk runs synchronously, but this also
+            # keeps it lexically valid).
+            caught = error
             # Bootcamp deviation: we also log the raw question text (`text`).
             # A real production Slack bot would NOT log the question text because
             # it is user-provided free text that may contain sensitive or
@@ -356,20 +361,21 @@ class AssistantAdapter:
                 channel,
                 thread_ts,
                 user,
-                type(error).__name__,
+                type(caught).__name__,
                 text,
             )
-            # Append the error record before the fallback say. Wrapped so a
-            # logging failure can never block the user reply.
+            # Append the error record before the fallback say. Building and
+            # appending are both wrapped so a logging failure can never block
+            # the user reply.
             self._record_interaction(
-                _error_record(
+                lambda: _error_record(
                     interaction_id=interaction_id,
                     timestamp=timestamp,
                     latency_ms=_latency_ms(started_at),
                     user=user,
                     question=text,
                     model=self.model_label,
-                    error=error,
+                    error=caught,
                 ),
             )
             # Log first, then deliver the Runtime Fallback Message. If this `say`
@@ -377,17 +383,23 @@ class AssistantAdapter:
             # exists. The fallback is NOT a Non-Answer.
             say(RUNTIME_FALLBACK_MESSAGE)
 
-    def _record_interaction(self, record: dict[str, object]) -> None:
-        """Append one Interaction Log line; never let logging break the reply.
+    def _record_interaction(
+        self,
+        build_record: collections_abc.Callable[[], dict[str, object]],
+    ) -> None:
+        """Build then append one Interaction Log line; never break the reply.
 
-        The user-facing ``say`` is more important than the log line, so any
-        failure to persist the record is swallowed (and logged) here rather than
-        propagated.
+        The user-facing ``say`` is more important than the log line, so the
+        swallow covers BOTH record CONSTRUCTION (``to_dict`` / ``.shape`` / field
+        extraction on the trace, via the ``build_record`` thunk) AND the append.
+        Any failure in either is logged and dropped here rather than propagated
+        into the caller's ``except``, which would suppress a good answer.
         """
         try:
+            record = build_record()
             interaction_log.append_interaction(record, path=self.log_path)
         except Exception:
-            logger.exception("Failed to append Interaction Log record.")
+            logger.exception("Failed to record Interaction Log entry.")
 
 
 def register_assistant_handlers(
