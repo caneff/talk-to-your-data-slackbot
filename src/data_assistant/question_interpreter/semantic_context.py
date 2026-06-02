@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import typing
 
-import data_assistant.semantic_layer.loader as semantic_layer_loader
+import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.schema as schema
 
 _SUPPORTED_PROVIDER_INTENTS = frozenset({"summarize"})
 
 
 def build_semantic_layer_context(
-    semantic_layer: schema.SemanticLayer,
+    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> dict[str, object]:
     """Collect business-facing context from the Semantic Layer only.
 
@@ -20,10 +20,7 @@ def build_semantic_layer_context(
     """
     datasets: list[dict[str, object]] = []
     for dataset in semantic_layer.datasets:
-        dataset_tables = semantic_layer_loader.tables_for_dataset(
-            dataset,
-            semantic_layer,
-        )
+        dataset_tables = semantic_layer.tables_for_dataset_id(dataset.dataset_id)
         datasets.append(
             {
                 "name": dataset.name,
@@ -63,13 +60,17 @@ def build_semantic_layer_context(
     }
 
 
-def metric_labels(semantic_layer: schema.SemanticLayer) -> tuple[str, ...]:
+def metric_labels(
+    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
+) -> tuple[str, ...]:
     return tuple(
         metric.label for table in semantic_layer.tables for metric in table.metrics
     )
 
 
-def field_labels(semantic_layer: schema.SemanticLayer) -> tuple[str, ...]:
+def field_labels(
+    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
+) -> tuple[str, ...]:
     return tuple(
         field.label for table in semantic_layer.tables for field in table.fields
     )

@@ -8,6 +8,7 @@ import data_assistant.local_duckdb_fixture as local_duckdb_fixture
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.reasoning_layer as reasoning_layer
 import data_assistant.reasoning_layer.test_support as reasoning_test_support
+import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
@@ -824,7 +825,7 @@ def test_data_assistant_uses_required_question_interpreter_provider(
 def _ambiguous_table_semantic_layer(
     *,
     allowed_identity_ids: tuple[str, ...],
-) -> schema.SemanticLayer:
+) -> semantic_layer_catalog.SemanticLayerCatalog:
     freshness = schema.Freshness(
         as_of=datetime.date(2026, 1, 31),
         description="Clean fixture rows for January 2026.",
@@ -854,7 +855,7 @@ def _ambiguous_table_semantic_layer(
         data_type=schema.DataType.STRING,
         operations=(schema.FieldOperation.GROUP_BY,),
     )
-    return schema.SemanticLayer(
+    return semantic_layer_catalog.SemanticLayerCatalog(
         datasets=(dataset,),
         tables=(
             _table("orders", metric, field),

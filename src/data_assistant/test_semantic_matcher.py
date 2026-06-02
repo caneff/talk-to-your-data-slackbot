@@ -1,12 +1,13 @@
 import datetime
 
+import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_matcher as semantic_matcher
 import data_assistant.workflow.contracts as contracts
 
 
 def test_semantic_matcher_resolves_canonical_table_level_match(
-    active_semantic_layer: schema.SemanticLayer,
+    active_semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> None:
     matches = semantic_matcher.find_semantic_matches(
         _question_frame(metric="total revenue", field="region"),
@@ -22,7 +23,7 @@ def test_semantic_matcher_resolves_canonical_table_level_match(
 
 
 def test_semantic_matcher_requires_metric_and_dimension_on_same_table(
-    active_semantic_layer: schema.SemanticLayer,
+    active_semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> None:
     matches = semantic_matcher.find_semantic_matches(
         _question_frame(metric="customer count", field="region"),
@@ -33,7 +34,7 @@ def test_semantic_matcher_requires_metric_and_dimension_on_same_table(
 
 
 def test_semantic_matcher_uses_exact_labels_not_semantic_ids(
-    active_semantic_layer: schema.SemanticLayer,
+    active_semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> None:
     matches = semantic_matcher.find_semantic_matches(
         _question_frame(metric="total_revenue", field="region"),

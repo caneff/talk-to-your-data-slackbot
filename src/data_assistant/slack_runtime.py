@@ -19,8 +19,8 @@ import data_assistant.interaction_log as interaction_log
 import data_assistant.openai_support as openai_support
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.reasoning_layer as reasoning_layer
+import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.loader as semantic_layer_loader
-import data_assistant.semantic_layer.schema as schema
 import data_assistant.slack_assistant as slack_assistant
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
@@ -74,7 +74,7 @@ ConnectionFactory: typing.TypeAlias = slack_assistant.ConnectionFactory
 def build_openai_answer_path(
     environ: collections_abc.Mapping[str, str],
     *,
-    semantic_layer: schema.SemanticLayer | None = None,
+    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog | None = None,
 ) -> slack_assistant.AnswerPath:
     """Build the Slack answer path using the live OpenAI Question Interpreter."""
     provider = question_interpreter.build_openai_question_interpreter_provider(environ)

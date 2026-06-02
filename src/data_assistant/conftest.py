@@ -8,8 +8,8 @@ import data_assistant.access_controller as access_controller
 import data_assistant.data_requester as data_requester
 import data_assistant.local_duckdb_fixture as local_duckdb_fixture
 import data_assistant.question_interpreter as question_interpreter
+import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.loader as semantic_layer_loader
-import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_matcher as semantic_matcher
 import data_assistant.semantic_router as semantic_router
 import data_assistant.workflow.contracts as contracts
@@ -80,7 +80,7 @@ def missing_time_scope_proposal() -> question_interpreter.QuestionFrameProposal:
 
 
 @pytest.fixture
-def active_semantic_layer() -> schema.SemanticLayer:
+def active_semantic_layer() -> semantic_layer_catalog.SemanticLayerCatalog:
     """Load the configured Semantic Layer used by workflow tests."""
     return semantic_layer_loader.load_semantic_layer()
 
@@ -118,7 +118,7 @@ def missing_time_scope_provider() -> question_interpreter.QuestionInterpreterPro
 @pytest.fixture
 def question_frame(
     canonical_question: str,
-    active_semantic_layer: schema.SemanticLayer,
+    active_semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
     canonical_question_provider: question_interpreter.QuestionInterpreterProvider,
 ) -> contracts.QuestionFrame:
     """Build a valid Question Frame through the interpreter boundary."""
@@ -134,7 +134,7 @@ def question_frame(
 @pytest.fixture
 def semantic_matches(
     question_frame: contracts.QuestionFrame,
-    active_semantic_layer: schema.SemanticLayer,
+    active_semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> tuple[contracts.SemanticMatch, ...]:
     """Build canonical Semantic Layer matches through the matcher boundary."""
     return semantic_matcher.find_semantic_matches(
@@ -154,7 +154,7 @@ def dataset_selection(
 @pytest.fixture
 def available_data_resolution(
     question_frame: contracts.QuestionFrame,
-    active_semantic_layer: schema.SemanticLayer,
+    active_semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> contracts.AvailableDataResolution:
     """Build canonical Available Data through the semantic router."""
     return unwrap_stage_result(

@@ -6,6 +6,7 @@ import pathlib
 
 import yaml
 
+import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.schema as schema
 
 DEFAULT_SEMANTIC_LAYER_PATH = pathlib.Path("examples/commerce_smoke/semantic_layer")
@@ -13,7 +14,7 @@ DEFAULT_SEMANTIC_LAYER_PATH = pathlib.Path("examples/commerce_smoke/semantic_lay
 
 def load_semantic_layer(
     path: pathlib.Path = DEFAULT_SEMANTIC_LAYER_PATH,
-) -> schema.SemanticLayer:
+) -> semantic_layer_catalog.SemanticLayerCatalog:
     """Load Semantic Layer dataset and table definitions from YAML files."""
     datasets_path = path / "datasets"
     tables_path = path / "tables"
@@ -32,45 +33,34 @@ def load_semantic_layer(
         msg = f"No Dataset Table YAML files found in {tables_path}"
         raise ValueError(msg)
 
-    return schema.SemanticLayer(datasets=datasets, tables=tables)
+    return semantic_layer_catalog.SemanticLayerCatalog(
+        datasets=datasets,
+        tables=tables,
+    )
 
 
 def find_dataset(
     dataset_id: str,
-    semantic_layer: schema.SemanticLayer,
+    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> schema.CuratedDataset:
     """Find a Curated Dataset by id."""
-    for dataset in semantic_layer.datasets:
-        if dataset.dataset_id == dataset_id:
-            return dataset
-
-    msg = f"Curated Dataset not found: {dataset_id}"
-    raise ValueError(msg)
+    return semantic_layer.find_dataset(dataset_id)
 
 
 def find_table(
     table_id: str,
-    semantic_layer: schema.SemanticLayer,
+    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> schema.DatasetTable:
     """Find a Dataset Table by id."""
-    for table in semantic_layer.tables:
-        if table.table_id == table_id:
-            return table
-
-    msg = f"Dataset Table not found: {table_id}"
-    raise ValueError(msg)
+    return semantic_layer.find_table(table_id)
 
 
 def tables_for_dataset(
     dataset: schema.CuratedDataset,
-    semantic_layer: schema.SemanticLayer,
+    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> tuple[schema.DatasetTable, ...]:
     """Return Dataset Tables listed by a Curated Dataset."""
-    return tuple(
-        table
-        for table in semantic_layer.tables
-        if table.table_id in dataset.tables and table.dataset_id == dataset.dataset_id
-    )
+    return semantic_layer.tables_for_dataset_id(dataset.dataset_id)
 
 
 def _load_dataset(path: pathlib.Path) -> schema.CuratedDataset:

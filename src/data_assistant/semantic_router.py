@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import data_assistant.non_answer_catalog as non_answer_catalog
-import data_assistant.semantic_layer.schema as schema
+import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_matcher as semantic_matcher
 import data_assistant.workflow.contracts as contracts
 
 
 def resolve_available_data(
     question_frame: contracts.QuestionFrame,
-    semantic_layer: schema.SemanticLayer,
+    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> contracts.StageResult[contracts.AvailableDataResolution]:
     """Resolve Available Data evidence to one dataset-backed semantic match."""
     semantic_matches = semantic_matcher.find_semantic_matches(

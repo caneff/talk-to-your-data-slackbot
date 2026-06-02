@@ -8,12 +8,13 @@ reported `metric_ambiguity` with no reflecting label must Non-Answer.
 from __future__ import annotations
 
 import data_assistant.question_interpreter as question_interpreter
+import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_layer.testing_support as semantic_layer_testing
 import data_assistant.workflow.contracts as contracts
 
 
-def _retail_style_semantic_layer() -> schema.SemanticLayer:
+def _retail_style_semantic_layer() -> semantic_layer_catalog.SemanticLayerCatalog:
     """Build a layer exposing both 'total revenue' and 'total net revenue'."""
     return semantic_layer_testing.semantic_layer_with_table(
         columns={

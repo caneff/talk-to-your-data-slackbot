@@ -1,6 +1,7 @@
 import datetime
 
 import data_assistant.non_answer_catalog as non_answer_catalog
+import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_matcher as semantic_matcher
 import data_assistant.semantic_router as semantic_router
@@ -9,7 +10,7 @@ import data_assistant.workflow.contracts as contracts
 
 def test_semantic_router_resolves_available_data(
     question_frame: contracts.QuestionFrame,
-    active_semantic_layer: schema.SemanticLayer,
+    active_semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> None:
     result = semantic_router.resolve_available_data(
         question_frame,
@@ -34,7 +35,7 @@ def test_dataset_selection_chooses_one_curated_dataset_with_rationale(
 
 
 def test_semantic_router_returns_non_answer_when_no_dataset_matches(
-    active_semantic_layer: schema.SemanticLayer,
+    active_semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> None:
     question_frame = contracts.QuestionFrame(
         intent="summarize",
@@ -90,7 +91,7 @@ def test_semantic_router_returns_ambiguous_table_for_two_tables_in_one_dataset()
         data_type=schema.DataType.STRING,
         operations=(schema.FieldOperation.GROUP_BY,),
     )
-    semantic_layer = schema.SemanticLayer(
+    semantic_layer = semantic_layer_catalog.SemanticLayerCatalog(
         datasets=(dataset,),
         tables=(
             _table("orders", metric, field),
