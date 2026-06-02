@@ -86,21 +86,22 @@ gh issue create --label "priority:low" --label bug --title "..." --body "..."
 ```
 If the user explicitly says a particular flag is urgent, omit the label for that one and say so.
 
-### 6. Offer to clear the handled flags (only on explicit confirmation)
-After the user confirms and you actually file the issue(s) or complete the fix(es), a flag is *handled* — it should drop out of the flagged set so the next triage starts clean. Offer to clear it:
+### 6. Clear the handled flags (default)
+Once you file the issue(s), map an `id` to an already-tracked issue, complete the fix(es), or determine no action is needed (working-as-intended), that flag is *handled* — it should drop out of the flagged set so the next triage starts clean. **Clear handled flags by default**:
 
-- List the exact `id`s you handled this session and the issue/fix each maps to.
-- **Ask** the user whether to clear those flags. Default to **not** clearing. Never clear without an explicit yes.
-- On yes, clear each confirmed `id` with `interaction_log.clear_flags(id)` — this **empties the record's `flags` list but keeps the interaction line** (still useful as an improvement corpus; it is not a delete). Run it via the project env, e.g.:
+- Clearing is the **default**. Do **not** ask first — clear every `id` you handled this session, then report exactly what you cleared.
+- **The only exception is a preemptive opt-out.** If the user said earlier in this session not to clear flags (or not to clear a particular `id`), honor that and keep those flagged. A preemptive "don't clear" overrides the default; absent it, clear.
+- List the exact `id`s you cleared and the issue / fix / WAI determination each maps to.
+- Clear each handled `id` with `interaction_log.clear_flags(id)` — this **empties the record's `flags` list but keeps the interaction line** (still useful as an improvement corpus; it is not a delete). Run it via the project env, e.g.:
   ```bash
   uv run python -c "from data_assistant import interaction_log; print(interaction_log.clear_flags('<id>'))"
   ```
   It returns `True` when a still-flagged record was found and emptied, `False` on an unknown id or an already-unflagged record.
-- Clear **only** the `id`s you actually handled and the user confirmed. Leave every other flagged record untouched. Never delete a record or rewrite anything other than the `flags` of confirmed ids.
+- Clear **only** the `id`s you actually handled this session. Leave untouched any flag you did not triage to a resolution. Never delete a record or rewrite anything other than the `flags` of handled ids.
 
 ## Guardrails
-- Triage is read-only until the user explicitly confirms a mutation in the current turn. Do not create issues, comment on issues, clear flags, rewrite logs, or mutate external systems during default triage.
-- The log is read-only during analysis. The **only** permitted log write is `clear_flags` on confirmed-handled ids, and **only** after the user explicitly approves it (step 6). Never delete a record, never rewrite anything but the `flags` of confirmed ids, never clear a flag you did not handle.
+- Triage analysis is read-only, and **issue/external mutations** (create issues, comment on issues, rewrite logs, mutate external systems) still require the user's explicit confirmation in the current turn. **Clearing handled flags is the exception**: it is the default closeout (step 6) and needs no separate approval — unless the user preemptively opted out.
+- The log is read-only during analysis. The **only** permitted log write is `clear_flags` on ids you handled this session (step 6) — done by default, skipped only on a preemptive user opt-out. Never delete a record, never rewrite anything but the `flags` of handled ids, never clear a flag you did not handle.
 - Never fabricate questions, numbers, or rows not present in the record. Cite `id`s.
 - Respect the sanitization boundary — reproduce locally instead of inferring hidden cell values.
 - Flagged ≠ confirmed bug. A flag is a maintainer's signal; verify the root cause before proposing a fix.
