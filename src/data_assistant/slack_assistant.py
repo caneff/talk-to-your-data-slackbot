@@ -79,11 +79,19 @@ ACTION_ID_TO_CATEGORY: typing.Final[dict[str, str]] = {
     FLAG_FORMATTING_ACTION_ID: "formatting",
 }
 
-# Seam types for the pure block_actions core. ``FlagStore`` binds to
+# Seam type for the pure block_actions core. ``FlagStore`` binds to
 # ``interaction_log.flag_interaction(.., path=log_path)`` (returns False on an
-# unknown id); ``Confirm`` posts the ephemeral confirmation text.
+# unknown id).
 FlagStore: typing.TypeAlias = collections_abc.Callable[[str, str], bool]
-Confirm: typing.TypeAlias = collections_abc.Callable[[str], None]
+
+# block_id of the context block that shows which categories a reply has been
+# flagged with. We RE-RENDER the Assistant reply in place on each click (Slack's
+# Assistant surface does not show ``response_url`` ephemerals inline -- they leak
+# into the History pane as unread items), so the confirmation lives as a status
+# line appended to the same message. A stable block_id lets a second click find
+# and replace the prior status block instead of stacking duplicates.
+FLAG_STATUS_BLOCK_ID: typing.Final[str] = "flag_status"
+_FLAG_STATUS_PREFIX: typing.Final[str] = "✓ Flagged: "
 
 
 def flag_action_blocks(interaction_id: str) -> tuple[contracts.SlackBlock, ...]:
@@ -117,30 +125,95 @@ def flag_action_blocks(interaction_id: str) -> tuple[contracts.SlackBlock, ...]:
     )
 
 
+def _flag_status_block(categories: tuple[str, ...]) -> contracts.SlackBlock:
+    """Build the context block summarizing which categories were flagged."""
+    return {
+        "type": "context",
+        "block_id": FLAG_STATUS_BLOCK_ID,
+        "elements": [
+            {
+                "type": "mrkdwn",
+                "text": _FLAG_STATUS_PREFIX + ", ".join(categories),
+            }
+        ],
+    }
+
+
+def _parse_flag_status(block: contracts.SlackBlock) -> tuple[str, ...]:
+    """Recover the categories from a status block we previously rendered.
+
+    Reads our own ``"✓ Flagged: a, b"`` text back into a category tuple so a
+    second click can MERGE its category with the ones already shown rather than
+    overwrite them. Only categories in :data:`interaction_log.FLAG_VOCABULARY`
+    survive -- anything unexpected in the text is ignored defensively.
+    """
+    elements = block.get("elements")
+    if not isinstance(elements, list) or not elements:
+        return ()
+    first = typing.cast("list[object]", elements)[0]
+    if not isinstance(first, dict):
+        return ()
+    text = typing.cast("dict[str, object]", first).get("text", "")
+    if not isinstance(text, str) or not text.startswith(_FLAG_STATUS_PREFIX):
+        return ()
+    body = text[len(_FLAG_STATUS_PREFIX) :]
+    found = {part.strip() for part in body.split(",")}
+    return tuple(c for c in interaction_log.FLAG_VOCABULARY if c in found)
+
+
+def render_flagged_message_blocks(
+    *,
+    blocks: collections_abc.Sequence[contracts.SlackBlock],
+    category: str,
+    found: bool,
+) -> list[contracts.SlackBlock]:
+    """Re-render an Assistant reply's blocks with ``category`` marked flagged.
+
+    Keeps every original block (answer body AND the flag buttons, so the other
+    category stays clickable) and appends -- or refreshes -- a single status
+    context block listing the cumulative flagged categories in vocabulary order.
+    A second click on a different button merges, so the line reads
+    ``"✓ Flagged: correctness, formatting"``; a duplicate click is a no-op.
+
+    ``found is False`` (id not in the log -- e.g. a rotated record) leaves the
+    blocks untouched: re-rendering the message as-is is a benign no-op, far
+    better than crashing or leaking a stray notification on a dead click.
+    """
+    kept = [b for b in blocks if b.get("block_id") != FLAG_STATUS_BLOCK_ID]
+    if not found:
+        return kept
+    prior: tuple[str, ...] = ()
+    for block in blocks:
+        if block.get("block_id") == FLAG_STATUS_BLOCK_ID:
+            prior = _parse_flag_status(block)
+            break
+    merged = {*prior, category}
+    ordered = tuple(c for c in interaction_log.FLAG_VOCABULARY if c in merged)
+    return [*kept, _flag_status_block(ordered)]
+
+
 def apply_flag(
     *,
     action_id: str,
     interaction_id: str,
+    blocks: collections_abc.Sequence[contracts.SlackBlock],
     flag_store: FlagStore,
-    confirm: Confirm,
-) -> None:
-    """Pure block_actions core: flag the record, then confirm ephemerally.
+) -> list[contracts.SlackBlock] | None:
+    """Pure block_actions core: flag the record, return the re-rendered blocks.
 
     Maps ``action_id`` to its flag category, calls ``flag_store`` to persist the
-    flag, and posts a confirmation via ``confirm``. An unmapped ``action_id`` is
-    a defensive no-op (never flags, never crashes). When ``flag_store`` reports
-    the id was not found (``False``) we confirm a benign "couldn't find that
-    interaction" message instead of the success text -- a crash is never the
-    right response to a stray button click.
+    flag, and returns the message's blocks re-rendered with the new flag status
+    (the caller hands these to ``respond(.., replace_original=True)``). An
+    unmapped ``action_id`` returns ``None`` -- a defensive no-op that updates
+    nothing and never crashes on a stray click.
     """
     category = ACTION_ID_TO_CATEGORY.get(action_id)
     if category is None:
-        return
+        return None
     found = flag_store(interaction_id, category)
-    if found:
-        confirm(f"Flagged: {category} ✓")
-    else:
-        confirm("Sorry, I couldn't find that interaction to flag.")
+    return render_flagged_message_blocks(
+        blocks=blocks, category=category, found=found
+    )
 
 
 RUNTIME_FALLBACK_MESSAGE = (
@@ -565,20 +638,20 @@ def _register_flag_actions(
 
     For each flag ``action_id`` we register a Bolt action listener that, over
     Socket Mode: ``ack()``s first, reads the embedded ``interaction_id`` from
-    the button ``value`` in ``body``, binds the ``flag_store`` seam to
-    ``interaction_log.flag_interaction`` (with the adapter's ``log_path``) and
-    the ``confirm`` seam to an ephemeral ``respond``, then delegates to the pure
-    ``apply_flag``. All behavior lives in ``apply_flag``; this shim is the only
-    live-API-shaped code here and is intentionally untested.
+    the button ``value`` and the clicked message's ``blocks`` from ``body``,
+    binds the ``flag_store`` seam to ``interaction_log.flag_interaction`` (with
+    the adapter's ``log_path``), then delegates to the pure ``apply_flag`` for
+    the re-rendered blocks. All behavior lives in ``apply_flag``; this shim is
+    the only live-API-shaped code here and is intentionally untested.
 
     Bolt's ``respond`` is bound to the action's ``response_url``; calling
-    ``respond(text=..., response_type="ephemeral", replace_original=False)``
-    posts a SEPARATE ephemeral message visible only to the clicking maintainer
-    and LEAVES THE ORIGINAL ANSWER in place. ``replace_original=False`` is
-    load-bearing: omitting it makes Slack replace the answer message the buttons
-    are attached to (verified against the ``slack_bolt`` 1.28.0
-    ``Respond.__call__`` signature: ``text`` then keyword ``response_type`` /
-    ``replace_original``).
+    ``respond(blocks=..., replace_original=True)`` RE-RENDERS the same Assistant
+    reply in place -- the answer + buttons stay and a "✓ Flagged" status line is
+    appended. ``replace_original=True`` is deliberate: the Assistant surface does
+    NOT show ``response_url`` ephemerals inline (they leak into the History pane
+    as unread items), so editing the message is the only non-spammy way to
+    confirm. Verified against the ``slack_bolt`` 1.28.0 ``Respond.__call__``
+    signature (``blocks`` / ``replace_original`` keywords).
     """
 
     def _flag_action(
@@ -591,29 +664,37 @@ def _register_flag_actions(
         action = actions[0]
         action_id = str(action.get("action_id", ""))
         interaction_id = str(action.get("value", ""))
+        message = body.get("message")
+        raw_blocks: object = (
+            typing.cast("dict[str, object]", message).get("blocks")
+            if isinstance(message, dict)
+            else None
+        )
+        original_blocks: collections_abc.Sequence[contracts.SlackBlock] = (
+            typing.cast("list[contracts.SlackBlock]", raw_blocks)
+            if isinstance(raw_blocks, list)
+            else []
+        )
 
         def flag_store(target_id: str, category: str) -> bool:
             return interaction_log.flag_interaction(
                 target_id, category, path=adapter.log_path
             )
 
-        def confirm(text: str) -> None:
-            # replace_original=False is REQUIRED: for block_actions, omitting it
-            # makes Slack REPLACE the original message (the answer the buttons
-            # are attached to) with this confirmation. We want the answer to
-            # stay; post the confirmation as a separate ephemeral message.
-            respond(
-                text=text,
-                response_type="ephemeral",
-                replace_original=False,
-            )
-
-        apply_flag(
+        new_blocks = apply_flag(
             action_id=action_id,
             interaction_id=interaction_id,
+            blocks=original_blocks,
             flag_store=flag_store,
-            confirm=confirm,
         )
+        if new_blocks is None:
+            return
+        # replace_original=True RE-RENDERS the same Assistant reply in place: the
+        # answer + buttons stay and a "✓ Flagged" status line is appended. The
+        # Assistant surface does not show response_url ephemerals inline (they
+        # leak into the History pane as unread items), so editing the message is
+        # the only way to confirm without spamming a separate notification.
+        respond(blocks=new_blocks, replace_original=True)
 
     # Register one listener per flag action_id (the single source of truth).
     for flag_action_id in ACTION_ID_TO_CATEGORY:

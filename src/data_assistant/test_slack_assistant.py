@@ -33,7 +33,9 @@ EXPECTED_PROGRESS_STATUSES = [
 ]
 
 
-def _action_ids_in(blocks: tuple[contracts.SlackBlock, ...]) -> set[str]:
+def _action_ids_in(
+    blocks: collections.abc.Sequence[contracts.SlackBlock],
+) -> set[str]:
     """Collect every button ``action_id`` across all ``actions`` blocks."""
     action_ids: set[str] = set()
     for block in blocks:
@@ -957,76 +959,128 @@ class _RecordingFlagStore:
         return self._result
 
 
-class _RecordingConfirm:
-    """Fake ephemeral confirm: captures the text."""
-
-    def __init__(self) -> None:
-        self.texts: list[str] = []
-
-    def __call__(self, text: str) -> None:
-        self.texts.append(text)
+def _answer_blocks() -> list[dict[str, object]]:
+    """A minimal Assistant reply: a section + the flag buttons."""
+    return [
+        {"type": "section", "text": {"type": "mrkdwn", "text": "the answer"}},
+        *slack_assistant.flag_action_blocks("abc123"),
+    ]
 
 
-def test_apply_flag_correctness_button_flags_and_confirms() -> None:
+def _status_text(
+    blocks: collections.abc.Sequence[contracts.SlackBlock],
+) -> str | None:
+    for block in blocks:
+        if block.get("block_id") == slack_assistant.FLAG_STATUS_BLOCK_ID:
+            elements = block["elements"]
+            assert isinstance(elements, list)
+            first = typing.cast("list[dict[str, object]]", elements)[0]
+            return str(first["text"])
+    return None
+
+
+def test_apply_flag_appends_status_line_and_keeps_answer_and_buttons() -> None:
     store = _RecordingFlagStore()
-    confirm = _RecordingConfirm()
+    original = _answer_blocks()
 
-    slack_assistant.apply_flag(
+    new_blocks = slack_assistant.apply_flag(
         action_id=slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
         interaction_id="abc123",
+        blocks=original,
         flag_store=store,
-        confirm=confirm,
     )
 
     assert store.calls == [("abc123", "correctness")]
-    assert len(confirm.texts) == 1
-    assert "correctness" in confirm.texts[0]
+    assert new_blocks is not None
+    # The answer body and the flag buttons survive (buttons stay clickable).
+    assert new_blocks[0] == original[0]
+    assert _action_ids_in(new_blocks) == {
+        slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
+        slack_assistant.FLAG_FORMATTING_ACTION_ID,
+    }
+    assert _status_text(new_blocks) == "✓ Flagged: correctness"
 
 
-def test_apply_flag_formatting_button_flags_and_confirms() -> None:
+def test_apply_flag_second_category_merges_in_vocabulary_order() -> None:
     store = _RecordingFlagStore()
-    confirm = _RecordingConfirm()
-
-    slack_assistant.apply_flag(
+    after_first = slack_assistant.apply_flag(
         action_id=slack_assistant.FLAG_FORMATTING_ACTION_ID,
         interaction_id="abc123",
+        blocks=_answer_blocks(),
         flag_store=store,
-        confirm=confirm,
+    )
+    assert after_first is not None
+    assert _status_text(after_first) == "✓ Flagged: formatting"
+
+    after_second = slack_assistant.apply_flag(
+        action_id=slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
+        interaction_id="abc123",
+        blocks=after_first,
+        flag_store=store,
     )
 
-    assert store.calls == [("abc123", "formatting")]
-    assert len(confirm.texts) == 1
-    assert "formatting" in confirm.texts[0]
+    assert after_second is not None
+    # Merged, deduped, ordered by FLAG_VOCABULARY -- not stacked, not overwritten.
+    assert _status_text(after_second) == "✓ Flagged: correctness, formatting"
+    status_blocks = [
+        b
+        for b in after_second
+        if b.get("block_id") == slack_assistant.FLAG_STATUS_BLOCK_ID
+    ]
+    assert len(status_blocks) == 1
 
 
-def test_apply_flag_unknown_id_confirms_benignly_without_crash() -> None:
+def test_apply_flag_duplicate_click_is_idempotent() -> None:
+    store = _RecordingFlagStore()
+    first = slack_assistant.apply_flag(
+        action_id=slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
+        interaction_id="abc123",
+        blocks=_answer_blocks(),
+        flag_store=store,
+    )
+    assert first is not None
+    second = slack_assistant.apply_flag(
+        action_id=slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
+        interaction_id="abc123",
+        blocks=first,
+        flag_store=store,
+    )
+
+    assert second is not None
+    assert _status_text(second) == "✓ Flagged: correctness"
+
+
+def test_apply_flag_unknown_id_leaves_blocks_unchanged() -> None:
     store = _RecordingFlagStore(result=False)
-    confirm = _RecordingConfirm()
+    original = _answer_blocks()
 
-    slack_assistant.apply_flag(
+    new_blocks = slack_assistant.apply_flag(
         action_id=slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
         interaction_id="missing",
+        blocks=original,
         flag_store=store,
-        confirm=confirm,
     )
 
-    # Store was consulted, but the benign confirm acknowledges nothing was found.
+    # Store was consulted, but an unknown id adds no status line (benign no-op).
     assert store.calls == [("missing", "correctness")]
-    assert len(confirm.texts) == 1
-    assert "correctness" not in confirm.texts[0]
-    assert confirm.texts[0]
+    assert new_blocks is not None
+    assert _status_text(new_blocks) is None
+    assert _action_ids_in(new_blocks) == {
+        slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
+        slack_assistant.FLAG_FORMATTING_ACTION_ID,
+    }
 
 
 def test_apply_flag_unknown_action_id_is_defensive_noop() -> None:
     store = _RecordingFlagStore()
-    confirm = _RecordingConfirm()
 
-    slack_assistant.apply_flag(
+    new_blocks = slack_assistant.apply_flag(
         action_id="not_a_flag_button",
         interaction_id="abc123",
+        blocks=_answer_blocks(),
         flag_store=store,
-        confirm=confirm,
     )
 
-    # Defensive: an unmapped action_id never flags and never crashes.
+    # Defensive: an unmapped action_id never flags, returns None (nothing to do).
     assert store.calls == []
+    assert new_blocks is None
