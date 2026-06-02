@@ -96,6 +96,15 @@ def _promote_provider_result(
             contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT,
             stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         )
+    # The interpreter self-reports metric-qualifier ambiguity (ADR-0017).
+    # Promotion is the trust boundary that acts on it: a reported ambiguity
+    # wins over both missing-metric and label-match so we never silently
+    # conflate a dropped qualifier (e.g. "net revenue") with the nearest label.
+    if proposal.metric_ambiguity:
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.AMBIGUOUS_METRIC,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
     if not metric_value:
         return non_answer_catalog.missing_required_field_non_answer(
             "metric",

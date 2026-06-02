@@ -136,6 +136,8 @@ class NonAnswerReasonCode(enum.StrEnum):
     ACCESS_DENIED = "access_denied"
     # More than one Curated Dataset matches or was selected.
     AMBIGUOUS_DATASET = "ambiguous_dataset"
+    # Metric wording carries a qualifier ambiguous against available metrics.
+    AMBIGUOUS_METRIC = "ambiguous_metric"
     # More than one Dataset Table can satisfy the Data Request.
     AMBIGUOUS_TABLE = "ambiguous_table"
     # Provider returned output that violates the required schema.

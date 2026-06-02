@@ -18,6 +18,7 @@ class _NonAnswerDefinition:
 
 _StaticReasonCode: typing.TypeAlias = typing.Literal[
     contracts.NonAnswerReasonCode.AMBIGUOUS_DATASET,
+    contracts.NonAnswerReasonCode.AMBIGUOUS_METRIC,
     contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE,
     contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
     contracts.NonAnswerReasonCode.MISSING_TIME_SCOPE,
@@ -47,6 +48,15 @@ _DEFINITIONS: dict[contracts.NonAnswerReasonCode, _NonAnswerDefinition] = {
         reason="Multiple Curated Datasets match the Question Frame.",
         context=("curated dataset",),
         next_step="Ask which Curated Dataset should be used.",
+    ),
+    contracts.NonAnswerReasonCode.AMBIGUOUS_METRIC: _NonAnswerDefinition(
+        response_kind=contracts.ResponseKind.CLARIFICATION_NEEDED,
+        reason="The Data Question's metric wording is ambiguous against the "
+        "available metrics.",
+        context=("semantic metric",),
+        next_step=(
+            "Ask which metric was meant, naming an available Semantic Layer metric."
+        ),
     ),
     contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.CLARIFICATION_NEEDED,
