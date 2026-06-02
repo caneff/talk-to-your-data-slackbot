@@ -359,6 +359,63 @@ either grounds and fills with only legitimate pipeline values, or degrades
 visibly to the deterministic template. It never asserts the live model always
 degrades.
 
+## Manual Slack QA driver
+
+A maintainer tool that replays the curated QA battery
+(`docs/qa-commerce-questions.md`) through the **real** Slack Assistant answer
+path one question at a time, posting each Final Response **as the bot** into an
+assistant thread so you read it and press the existing flag buttons. Flags land
+in the shared Interaction Log and feed the `triage-flagged-interactions` skill.
+It is the recurring generator that refills the triage pipeline with observed
+failures. See `src/data_assistant/slack_qa_driver.py` and **ADR-0016**.
+
+The same agent guard applies: it runs the live OpenAI answer path and costs API
+money, so run it only when you explicitly want a live QA pass — never during
+normal development, validation, or PR checks.
+
+Step by step:
+
+1. Put `SLACK_BOT_TOKEN` and `OPENAI_API_KEY` (and optional `OPENAI_MODEL`) in
+   `.env`.
+2. **Start the bot and leave it running:**
+
+   ```bash
+   uv run python -m data_assistant.slack_runtime
+   ```
+
+   The driver posts the answers, but the running bot owns the flag-button
+   (`block_actions`) listeners and must share the same `logs/interactions.jsonl`
+   file — so a flag you click attaches to the record the driver wrote. Run both
+   from the same working directory.
+3. In Slack, open the app under **Agents & AI Apps** and start a thread (the bot
+   greets and shows suggested prompts).
+4. Get that thread's `channel` id and `thread_ts`: send any one message in the
+   thread, then **Copy link** on a message in it. The link looks like
+   `…/archives/<CHANNEL>/p1748880000123456` — `<CHANNEL>` is the channel id, and
+   the `thread_ts` is that `p…` number with a dot inserted before the last six
+   digits (`1748880000.123456`).
+5. Run the driver (defaults the battery to `docs/qa-commerce-questions.md`):
+
+   ```bash
+   uv run python -m data_assistant.slack_qa_driver --channel <CHANNEL> --thread-ts <THREAD_TS>
+   ```
+
+   Use `--battery PATH` to replay a different battery file (same markdown shape:
+   top-level `- ` bullets are sent; headings, prose, and indented sub-bullets are
+   skipped).
+6. For each question the driver prints `[i/N]`, posts the answer + flag buttons
+   into the thread, and waits. Read the reply in Slack; if it is wrong press a
+   flag button (**correctness** / **formatting** / **investigate**). Press
+   **Enter** in the terminal to send the next question.
+7. When the battery is done, triage the flags with the
+   `triage-flagged-interactions` skill (reads the same `logs/interactions.jsonl`).
+
+Optional model override in `.env`:
+
+```dotenv
+OPENAI_MODEL=gpt-4o
+```
+
 ## Development
 
 Run checks with `uv`:
