@@ -110,6 +110,12 @@ def compare_question_frame_meaning(
     )
     _append_scalar_mismatch(
         mismatches=mismatches,
+        field="metric_ambiguity",
+        expected=expected.metric_ambiguity,
+        actual=actual.metric_ambiguity,
+    )
+    _append_scalar_mismatch(
+        mismatches=mismatches,
         field="all_time",
         expected=expected.all_time,
         actual=actual.all_time,

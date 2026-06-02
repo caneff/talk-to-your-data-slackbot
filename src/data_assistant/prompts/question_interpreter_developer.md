@@ -15,7 +15,15 @@ Rules:
   a deferred intent, such as "compare", "trend", "forecast", "explain",
   "prescribe", or "diagnose".
 - Use null for intent only when no Data Question intent applies.
-- Use null for metric only when missing or ambiguous.
+- Use null for metric only when the Data Question names no metric at all.
+- If the Data Question's metric wording carries a qualifier (for example net,
+  gross, recurring, or organic) that is NOT reflected in any available metric
+  label — such that matching a label would drop or alter a word that changes
+  which measure is computed — set metric_ambiguity to that verbatim wording and
+  leave metric null. Do not pick the nearest label. If the difference is
+  immaterial phrasing you are confident is synonymous with an available label,
+  match that label normally and leave metric_ambiguity null.
+- When metric_ambiguity is set, also set metric to null; do not guess.
 - Unsupported intent names do not change metric extraction. If an unsupported
   Data Question names a known metric, still return that metric label rather
   than null.
@@ -93,6 +101,12 @@ intent "rank" and exactly these field_operations when the Semantic Layer exposes
 Do not collapse that question into intent "summarize"; rank is unsupported by
 the current workflow and must be rejected deterministically after promotion. Do
 still return metric "total revenue", because the metric is explicitly present.
+
+For "What was total net revenue in January 2026?" when the Semantic Layer
+exposes only "total revenue" (no net-revenue metric), the qualifier "net"
+changes which measure is computed and is not reflected in any available label.
+Set metric_ambiguity to "net revenue", leave metric null, and intent
+"summarize". Do not match "total revenue" by dropping "net".
 
 For "What was customer count by customer region in January 2026?", return
 intent "summarize" and exactly these field_operations when the Semantic Layer

@@ -88,6 +88,18 @@ class QuestionFrameProposal(pydantic.BaseModel):
             "still set this when the Data Question names a known metric."
         ),
     )
+    metric_ambiguity: str | None = pydantic.Field(
+        default=None,
+        description=(
+            "Set to the verbatim ambiguous metric wording from the Data Question "
+            "when its metric carries a qualifier (e.g. net, gross, recurring, "
+            "organic) that no available metric label reflects, such that matching "
+            "a label would drop or alter a word that changes which measure is "
+            "computed. When set, leave metric null and do not guess a label. "
+            "Leave null when the metric is unambiguous or genuinely synonymous "
+            "with an available label."
+        ),
+    )
     field_operations: tuple[FieldOperationProposal, ...] = pydantic.Field(
         description=(
             "Every explicit grouping, date constraint, and filter from the "

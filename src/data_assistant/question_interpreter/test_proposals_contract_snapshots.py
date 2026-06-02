@@ -275,6 +275,34 @@ CONTRACT_SNAPSHOT_CASES = (
             "metric", stage=_STAGE
         ),
     ),
+    # Regression for flagged interaction ed63e4ff: the interpreter self-reports
+    # that a metric qualifier (e.g. "net revenue") is ambiguous against the
+    # available metrics. Promotion must surface AMBIGUOUS_METRIC rather than
+    # silently conflating it with the nearest real label.
+    snapshot_case(
+        name="metric_ambiguity_reported",
+        proposal=interpreter_support.question_frame_proposal(
+            metric=None,
+            metric_ambiguity="net revenue",
+        ),
+        expected=non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.AMBIGUOUS_METRIC, stage=_STAGE
+        ),
+        question="What was total net revenue in January 2026?",
+    ),
+    # Precedence: a reported metric ambiguity wins even when the provider also
+    # supplied a valid metric label (the silent-conflation failure mode).
+    snapshot_case(
+        name="metric_ambiguity_wins_over_valid_metric",
+        proposal=interpreter_support.question_frame_proposal(
+            metric="total revenue",
+            metric_ambiguity="net revenue",
+        ),
+        expected=non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.AMBIGUOUS_METRIC, stage=_STAGE
+        ),
+        question="What was total net revenue in January 2026?",
+    ),
     snapshot_case(
         name="unknown_field",
         proposal=interpreter_support.question_frame_proposal(

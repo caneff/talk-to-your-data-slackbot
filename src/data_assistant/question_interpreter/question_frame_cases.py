@@ -23,10 +23,12 @@ def _proposal(
     metric: str | None,
     field_operations: tuple[question_interpreter.FieldOperationProposal, ...],
     all_time: bool = False,
+    metric_ambiguity: str | None = None,
 ) -> question_interpreter.QuestionFrameProposal:
     return question_interpreter.QuestionFrameProposal(
         intent=intent,
         metric=metric,
+        metric_ambiguity=metric_ambiguity,
         field_operations=field_operations,
         all_time=all_time,
     )
@@ -123,6 +125,17 @@ def _missing_time_scope_revenue_by_region_proposal() -> (
     )
 
 
+def _net_revenue_metric_ambiguity_proposal() -> (
+    question_interpreter.QuestionFrameProposal
+):
+    return _proposal(
+        intent="summarize",
+        metric=None,
+        metric_ambiguity="net revenue",
+        field_operations=(_january_2026_order_date_filter(),),
+    )
+
+
 def _all_time_region_value_revenue_proposal(
     value: str,
 ) -> question_interpreter.QuestionFrameProposal:
@@ -164,6 +177,11 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
         name="safe_non_answer_question",
         question="What was total revenue by region?",
         expected=_missing_time_scope_revenue_by_region_proposal(),
+    ),
+    SharedQuestionFrameCase(
+        name="net_revenue_metric_ambiguity",
+        question="What was total net revenue in January 2026?",
+        expected=_net_revenue_metric_ambiguity_proposal(),
     ),
     SharedQuestionFrameCase(
         name="all_time_revenue_for_region_value",

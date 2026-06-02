@@ -133,6 +133,20 @@ _GOLDEN_WORDING: tuple[
     ),
     (
         non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.AMBIGUOUS_METRIC, stage=_STAGE
+        ),
+        non_answer_catalog.NonAnswerWording(
+            reason=(
+                "The Data Question's metric wording is ambiguous against the "
+                "available metrics."
+            ),
+            next_step=(
+                "Ask which metric was meant, naming an available Semantic Layer metric."
+            ),
+        ),
+    ),
+    (
+        non_answer_catalog.non_answer(
             contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE, stage=_STAGE
         ),
         non_answer_catalog.NonAnswerWording(
