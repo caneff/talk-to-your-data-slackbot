@@ -16,7 +16,6 @@ import dotenv
 import duckdb
 
 import data_assistant.interaction_log as interaction_log
-import data_assistant.local_duckdb_fixture as local_duckdb_fixture
 import data_assistant.openai_support as openai_support
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.reasoning_layer as reasoning_layer
@@ -32,6 +31,18 @@ if typing.TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 INTERACTION_LOG_PATH_ENV_VAR: typing.Final[str] = "DATA_ASSISTANT_INTERACTION_LOG_PATH"
+
+# App-run defaults (one source of truth shared with slack_qa_driver). A no-flag
+# app run loads the retail layer + retail seed in :memory: — the app-run tier of
+# the two-tier default contract (ADR-0001). The library/test default stays on
+# commerce_smoke via DEFAULT_SEMANTIC_LAYER_PATH in the loader; do not conflate.
+RETAIL_SEMANTIC_LAYER_PATH: typing.Final[pathlib.Path] = pathlib.Path(
+    "examples/retail_ops_demo/semantic_layer"
+)
+RETAIL_SEED_SQL_PATH: typing.Final[pathlib.Path] = pathlib.Path(
+    "examples/retail_ops_demo/seeds/retail_ops_seed.sql"
+)
+RETAIL_DUCKDB_PATH: typing.Final[str] = ":memory:"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -159,19 +170,6 @@ def _default_socket_mode_handler_factory(
     )
 
 
-def dev_connection_factory() -> contextlib.AbstractContextManager[
-    duckdb.DuckDBPyConnection
-]:
-    """Provide a tiny local DuckDB fixture for manual Slack smoke testing."""
-    return local_duckdb_fixture.connect_orders(
-        (
-            ("2026-01-03", "North", "1200.00"),
-            ("2026-01-10", "South", "800.00"),
-            ("2026-01-17", "North", "300.00"),
-        )
-    )
-
-
 def build_duckdb_connection_factory(
     duckdb_path: str | pathlib.Path,
     *,
@@ -279,21 +277,27 @@ def _parse_args(argv: collections_abc.Sequence[str]) -> argparse.Namespace:
         type=pathlib.Path,
         default=None,
         help=(
-            "Semantic Layer directory to load instead of "
-            "examples/commerce_smoke/semantic_layer/."
+            "Semantic Layer directory to load. Defaults to the retail app-run "
+            "layer (examples/retail_ops_demo/semantic_layer/)."
         ),
     )
     parser.add_argument(
         "--duckdb-path",
         type=str,
         default=None,
-        help="DuckDB database location to use instead of the tiny dev fixture.",
+        help=(
+            "DuckDB database location. Defaults to an in-memory database seeded "
+            "with the retail demo data."
+        ),
     )
     parser.add_argument(
         "--seed-sql-path",
         type=pathlib.Path,
         default=None,
-        help="Optional SQL file to run whenever the DuckDB connection opens.",
+        help=(
+            "SQL file to run whenever the DuckDB connection opens. Defaults to "
+            "the retail demo seed (only when --duckdb-path is also unset)."
+        ),
     )
     parser.add_argument(
         "--interaction-log-path",
@@ -311,8 +315,14 @@ def _parse_args(argv: collections_abc.Sequence[str]) -> argparse.Namespace:
 
 
 def _configured_connection_factory(args: argparse.Namespace) -> ConnectionFactory:
+    # No flags: build the retail app-run default (retail seed in :memory:). An
+    # explicit --duckdb-path opts out of the retail seed unless --seed-sql-path
+    # is also given (the parser guard enforces seed-requires-duckdb).
     if args.duckdb_path is None:
-        return dev_connection_factory
+        return build_duckdb_connection_factory(
+            RETAIL_DUCKDB_PATH,
+            seed_sql_path=RETAIL_SEED_SQL_PATH,
+        )
     return build_duckdb_connection_factory(
         args.duckdb_path,
         seed_sql_path=args.seed_sql_path,
@@ -323,9 +333,14 @@ def _configured_answer_path(
     environ: collections_abc.Mapping[str, str],
     args: argparse.Namespace,
 ) -> slack_assistant.AnswerPath | None:
-    if args.semantic_layer_path is None:
-        return None
-    semantic_layer = semantic_layer_loader.load_semantic_layer(args.semantic_layer_path)
+    # No flag: load the retail app-run layer (the app-run tier of the two-tier
+    # default; the library default stays commerce_smoke in the loader).
+    layer_path = (
+        args.semantic_layer_path
+        if args.semantic_layer_path is not None
+        else RETAIL_SEMANTIC_LAYER_PATH
+    )
+    semantic_layer = semantic_layer_loader.load_semantic_layer(layer_path)
     return build_openai_answer_path(environ, semantic_layer=semantic_layer)
 
 
