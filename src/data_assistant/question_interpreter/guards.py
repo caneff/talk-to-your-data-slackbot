@@ -59,6 +59,5 @@ def mentions_rank_intent(normalized_question: str) -> bool:
 def mentions_availability_intent(normalized_question: str) -> bool:
     """Return whether question text asks which data or periods exist."""
     return any(
-        pattern.search(normalized_question)
-        for pattern in _AVAILABILITY_INTENT_PATTERNS
+        pattern.search(normalized_question) for pattern in _AVAILABILITY_INTENT_PATTERNS
     )

@@ -625,9 +625,7 @@ def test_data_assistant_rejects_availability_question_before_provider_call(
             semantic_layer_context: dict[str, object],
         ) -> question_interpreter.QuestionFrameProposal:
             del question, semantic_layer_context
-            raise AssertionError(
-                "availability guard should short-circuit provider"
-            )
+            raise AssertionError("availability guard should short-circuit provider")
 
     with connect_orders((("2026-01-03", "North", "1200.00"),)) as connection:
         result = workflow_runner.run_data_assistant(
@@ -642,13 +640,11 @@ def test_data_assistant_rejects_availability_question_before_provider_call(
     non_answer = captured_non_answers[0]
     assert non_answer.stage == contracts.NonAnswerStage.QUESTION_INTERPRETER
     assert (
-        non_answer.reason_code
-        == contracts.NonAnswerReasonCode.UNSUPPORTED_AVAILABILITY
+        non_answer.reason_code == contracts.NonAnswerReasonCode.UNSUPPORTED_AVAILABILITY
     )
     # The honest availability reject must not masquerade as a clarification.
     assert (
-        non_answer.reason_code
-        != contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD
+        non_answer.reason_code != contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD
     )
 
 
