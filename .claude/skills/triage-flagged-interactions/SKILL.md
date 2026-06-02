@@ -67,6 +67,14 @@ Group cases by root-caused layer (several flags often share one cause). For each
 - Broader or fuzzy → suggest `/to-issues` to slice it.
 Reference flags by `id` so the user can trace each back to its log line.
 
+**Apply the `priority:low` label to every issue you file from a flag.** Flagged-interaction issues are demand-driven noise that should NOT jump ahead of roadmap work; the label tells `handle-next-issue` not to favor them (it picks default-priority issues first). Create the label if absent, then file with it:
+```bash
+gh label create "priority:low" --color c5def5 \
+  --description "Deprioritized: do not favor over default-priority work when picking the next issue" 2>/dev/null || true
+gh issue create --label "priority:low" --label bug --title "..." --body "..."
+```
+If the user explicitly says a particular flag is urgent, omit the label for that one and say so.
+
 ### 6. Offer to clear the handled flags (only on explicit confirmation)
 After filing the issues / fixes, a flag is *handled* — it should drop out of the flagged set so the next triage starts clean. Offer to clear it:
 
