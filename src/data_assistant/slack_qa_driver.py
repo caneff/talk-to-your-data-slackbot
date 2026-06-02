@@ -1,6 +1,7 @@
 """Manual Slack QA driver: replay the curated battery through the bot (#128).
 
-This is a throwaway operator tool, not part of the product surface. It drives
+This is a manual operator tool -- durable maintainer tooling run by hand, the
+same category as the ``live_eval`` mains (not the product surface). It drives
 the curated QA battery (``docs/qa-commerce-questions.md``) through the **real**
 Slack Assistant answer path one question at a time, posting each rendered Final
 Response **as the bot** into an assistant thread so a maintainer reads it and
@@ -62,7 +63,7 @@ def _quietly_set_status(status: str) -> None:
 
 def _build_web_client(token: str) -> typing.Any:
     # Typed as Any: slack_sdk's WebClient methods are loosely typed and would
-    # otherwise leak "partially unknown" through this throwaway driver, the same
+    # otherwise leak "partially unknown" through this manual driver, the same
     # rationale the Bolt wiring shim uses in slack_assistant.py.
     from slack_sdk import WebClient
 
