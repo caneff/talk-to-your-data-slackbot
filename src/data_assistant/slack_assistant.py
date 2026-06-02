@@ -295,6 +295,21 @@ def final_response_from_workflow_result(
     return result.final_response
 
 
+def _visible_response_blocks(
+    final_response: contracts.FinalResponse,
+) -> tuple[contracts.SlackBlock, ...]:
+    """Return blocks that visibly carry the response body in Slack."""
+    blocks = tuple(final_response.blocks)
+    if blocks:
+        return blocks
+    return (
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": final_response.text},
+        },
+    )
+
+
 def _latency_ms(started_at: float) -> int:
     return int((time.monotonic() - started_at) * 1000)
 
@@ -499,9 +514,9 @@ class AssistantAdapter:
                     result=result,
                 ),
             )
-            reply_blocks = tuple(final_response.blocks) + flag_action_blocks(
-                interaction_id
-            )
+            reply_blocks = _visible_response_blocks(
+                final_response
+            ) + flag_action_blocks(interaction_id)
             say(final_response.text, blocks=reply_blocks)
         except Exception as error:
             # Bind to a stable local: `except ... as error` clears `error` at

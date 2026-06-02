@@ -48,6 +48,23 @@ def _action_ids_in(
     return action_ids
 
 
+def _section_texts_in(
+    blocks: collections.abc.Sequence[contracts.SlackBlock],
+) -> list[str]:
+    """Collect visible text from Slack section blocks."""
+    texts: list[str] = []
+    for block in blocks:
+        if block.get("type") != "section":
+            continue
+        text = block.get("text")
+        assert isinstance(text, dict)
+        typed_text = typing.cast("dict[str, object]", text)
+        value = typed_text.get("text")
+        assert isinstance(value, str)
+        texts.append(value)
+    return texts
+
+
 def _button_elements(block: contracts.SlackBlock) -> list[dict[str, object]]:
     """Narrow an ``actions`` block's ``elements`` to a typed list of buttons."""
     elements = block.get("elements")
@@ -254,8 +271,10 @@ def test_on_user_message_uses_pipeline_progress_sink_for_staged_status(
     assert len(say.calls) == 1
     said_text, said_blocks = say.calls[0]
     assert said_text == "Final answer text."
-    # Even with no trust-summary blocks the reply carries the flag buttons.
+    # Slack does not display `text` when blocks are present, so a plain
+    # FinalResponse needs a synthesized text section before the flag buttons.
     assert said_blocks is not None
+    assert _section_texts_in(tuple(said_blocks)) == ["Final answer text."]
     assert _action_ids_in(tuple(said_blocks)) == {
         slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
         slack_assistant.FLAG_FORMATTING_ACTION_ID,
@@ -300,8 +319,9 @@ def test_on_user_message_says_non_answer_without_fallback(
     assert len(say.calls) == 1
     said_text, said_blocks = say.calls[0]
     assert said_text == non_answer.text
-    # A Non-Answer is also flaggable (e.g. flag a spurious refusal).
+    # A Non-Answer is visible and also flaggable (e.g. flag a spurious refusal).
     assert said_blocks is not None
+    assert _section_texts_in(tuple(said_blocks)) == [non_answer.text]
     assert _action_ids_in(tuple(said_blocks)) == {
         slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
         slack_assistant.FLAG_FORMATTING_ACTION_ID,
