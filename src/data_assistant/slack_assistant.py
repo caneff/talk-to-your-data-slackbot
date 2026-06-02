@@ -572,10 +572,13 @@ def _register_flag_actions(
     live-API-shaped code here and is intentionally untested.
 
     Bolt's ``respond`` is bound to the action's ``response_url``; calling
-    ``respond(text=..., response_type="ephemeral")`` posts an ephemeral message
-    visible only to the clicking maintainer (verified against the
-    ``slack_bolt`` 1.28.0 ``Respond.__call__`` signature: ``text`` then keyword
-    ``response_type``).
+    ``respond(text=..., response_type="ephemeral", replace_original=False)``
+    posts a SEPARATE ephemeral message visible only to the clicking maintainer
+    and LEAVES THE ORIGINAL ANSWER in place. ``replace_original=False`` is
+    load-bearing: omitting it makes Slack replace the answer message the buttons
+    are attached to (verified against the ``slack_bolt`` 1.28.0
+    ``Respond.__call__`` signature: ``text`` then keyword ``response_type`` /
+    ``replace_original``).
     """
 
     def _flag_action(
@@ -595,7 +598,15 @@ def _register_flag_actions(
             )
 
         def confirm(text: str) -> None:
-            respond(text=text, response_type="ephemeral")
+            # replace_original=False is REQUIRED: for block_actions, omitting it
+            # makes Slack REPLACE the original message (the answer the buttons
+            # are attached to) with this confirmation. We want the answer to
+            # stay; post the confirmation as a separate ephemeral message.
+            respond(
+                text=text,
+                response_type="ephemeral",
+                replace_original=False,
+            )
 
         apply_flag(
             action_id=action_id,
