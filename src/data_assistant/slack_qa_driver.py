@@ -2,7 +2,7 @@
 
 This is a manual operator tool -- durable maintainer tooling run by hand, the
 same category as the ``live_eval`` mains (not the product surface). It drives
-the curated QA battery (``docs/qa-commerce-questions.md``) through the **real**
+the curated QA battery (``docs/qa-retail-questions.md``) through the **real**
 Slack Assistant answer path one question at a time, posting each rendered Final
 Response **as the bot** into an assistant thread so a maintainer reads it and
 presses the existing flag buttons. Flags land in the shared Interaction Log and
@@ -37,10 +37,11 @@ import typing
 import dotenv
 
 import data_assistant.assistant_thread_pointer as assistant_thread_pointer
+import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.slack_assistant as slack_assistant
 import data_assistant.slack_runtime as slack_runtime
 
-DEFAULT_BATTERY_PATH: typing.Final[str] = "docs/qa-commerce-questions.md"
+DEFAULT_BATTERY_PATH: typing.Final[str] = "docs/qa-retail-questions.md"
 
 _NO_THREAD_MESSAGE: typing.Final[str] = (
     "No assistant thread found — open a thread with the bot first, "
@@ -139,9 +140,12 @@ def main(
         return 1
 
     client = _build_web_client(bot_token)
+    semantic_layer = semantic_layer_loader.load_semantic_layer(args.semantic_layer_path)
     adapter = slack_assistant.AssistantAdapter(
         connection_factory=_connection_factory(args),
-        answer_path=slack_runtime.build_openai_answer_path(environ),
+        answer_path=slack_runtime.build_openai_answer_path(
+            environ, semantic_layer=semantic_layer
+        ),
         internal_identity_resolver=slack_assistant.dev_identity,
         model_label=slack_runtime.resolve_model_label(environ),
         log_path=slack_runtime.resolve_interaction_log_path(environ),
@@ -171,8 +175,15 @@ def main(
 
 
 def _connection_factory(args: argparse.Namespace) -> slack_runtime.ConnectionFactory:
+    # No flags: build the retail app-run default (retail seed in :memory:),
+    # consuming the shared retail path constants from slack_runtime so there is
+    # exactly one source of truth for the retail paths. An explicit --duckdb-path
+    # opts out of the retail seed unless --seed-sql-path is also given.
     if args.duckdb_path is None:
-        return slack_runtime.dev_connection_factory
+        return slack_runtime.build_duckdb_connection_factory(
+            slack_runtime.RETAIL_DUCKDB_PATH,
+            seed_sql_path=slack_runtime.RETAIL_SEED_SQL_PATH,
+        )
     return slack_runtime.build_duckdb_connection_factory(
         args.duckdb_path,
         seed_sql_path=args.seed_sql_path,
@@ -217,16 +228,31 @@ def _parse_args(argv: collections_abc.Sequence[str]) -> argparse.Namespace:
         help="dotenv file to load before startup. Defaults to .env.",
     )
     parser.add_argument(
+        "--semantic-layer-path",
+        type=pathlib.Path,
+        default=slack_runtime.RETAIL_SEMANTIC_LAYER_PATH,
+        help=(
+            "Semantic Layer directory to load. Defaults to the retail app-run "
+            "layer (examples/retail_ops_demo/semantic_layer/)."
+        ),
+    )
+    parser.add_argument(
         "--duckdb-path",
         type=str,
         default=None,
-        help="DuckDB database location to use instead of the tiny dev fixture.",
+        help=(
+            "DuckDB database location. Defaults to an in-memory database seeded "
+            "with the retail demo data."
+        ),
     )
     parser.add_argument(
         "--seed-sql-path",
         type=pathlib.Path,
         default=None,
-        help="Optional SQL file to run whenever the DuckDB connection opens.",
+        help=(
+            "SQL file to run whenever the DuckDB connection opens. Defaults to "
+            "the retail demo seed (only when --duckdb-path is also unset)."
+        ),
     )
     args = parser.parse_args(argv)
     if args.seed_sql_path is not None and args.duckdb_path is None:

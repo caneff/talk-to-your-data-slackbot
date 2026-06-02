@@ -472,18 +472,36 @@ def test_main_uses_configured_semantic_layer_and_duckdb_paths(
     assert len(received_connection_factories) == 1
 
 
-def test_main_starts_socket_mode_with_dev_connection_factory(
+def test_main_no_flags_wires_retail_default(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: pathlib.Path,
 ) -> None:
-    dev_connection_factory = slack_runtime.dev_connection_factory
+    """A no-flag app run loads the retail layer and seeds retail in :memory:.
+
+    This is the app-run default (the old explicit Docker CMD): retail layer +
+    retail seed + ``:memory:``. The library/test default stays commerce_smoke.
+    """
     dev_identity_resolver: slack_assistant.AssistantIdentityResolver = (
         slack_assistant.dev_identity
     )
+    loaded_paths: list[pathlib.Path] = []
     received_connection_factory: list[slack_runtime.ConnectionFactory | None] = []
     received_identity_resolver: list[
         slack_assistant.AssistantIdentityResolver | None
     ] = []
+    sentinel_answer_path = typing.cast(slack_assistant.AnswerPath, object())
+
+    def fake_load_semantic_layer(path: pathlib.Path) -> schema.SemanticLayer:
+        loaded_paths.append(path)
+        return typing.cast(schema.SemanticLayer, object())
+
+    def fake_build_openai_answer_path(
+        environ: collections.abc.Mapping[str, str],
+        *,
+        semantic_layer: schema.SemanticLayer | None = None,
+    ) -> slack_assistant.AnswerPath:
+        del environ, semantic_layer
+        return sentinel_answer_path
 
     def fake_run_socket_mode_from_env(
         environ: collections.abc.Mapping[str, str] = {},
@@ -506,6 +524,16 @@ def test_main_starts_socket_mode_with_dev_connection_factory(
         return FakeSocketModeHandler(app_token="xapp-test-token", app=object())
 
     monkeypatch.setattr(
+        slack_runtime.semantic_layer_loader,
+        "load_semantic_layer",
+        fake_load_semantic_layer,
+    )
+    monkeypatch.setattr(
+        slack_runtime,
+        "build_openai_answer_path",
+        fake_build_openai_answer_path,
+    )
+    monkeypatch.setattr(
         slack_runtime,
         "run_socket_mode_from_env",
         fake_run_socket_mode_from_env,
@@ -514,8 +542,17 @@ def test_main_starts_socket_mode_with_dev_connection_factory(
     exit_code = slack_runtime.main(env_file=tmp_path / ".env")
 
     assert exit_code == 0
-    assert received_connection_factory == [dev_connection_factory]
+    # The no-flag app run resolves to the shared retail layer constant.
+    assert loaded_paths == [slack_runtime.RETAIL_SEMANTIC_LAYER_PATH]
     assert received_identity_resolver == [dev_identity_resolver]
+    # The wired connection factory seeds the retail schema into :memory:.
+    assert len(received_connection_factory) == 1
+    connection_factory = received_connection_factory[0]
+    assert connection_factory is not None
+    with connection_factory() as connection:
+        row = connection.execute("select count(*) from demo_orders").fetchone()
+    assert row is not None
+    assert row[0] > 0
 
 
 def test_main_threads_explicit_interaction_log_path(
@@ -544,6 +581,28 @@ def test_main_threads_explicit_interaction_log_path(
         received_log_paths.append(interaction_log_path)
         return FakeSocketModeHandler(app_token="xapp-test-token", app=object())
 
+    def fake_load_semantic_layer(path: pathlib.Path) -> schema.SemanticLayer:
+        del path
+        return typing.cast(schema.SemanticLayer, object())
+
+    def fake_build_openai_answer_path(
+        environ: collections.abc.Mapping[str, str],
+        *,
+        semantic_layer: schema.SemanticLayer | None = None,
+    ) -> slack_assistant.AnswerPath:
+        del environ, semantic_layer
+        return typing.cast(slack_assistant.AnswerPath, object())
+
+    monkeypatch.setattr(
+        slack_runtime.semantic_layer_loader,
+        "load_semantic_layer",
+        fake_load_semantic_layer,
+    )
+    monkeypatch.setattr(
+        slack_runtime,
+        "build_openai_answer_path",
+        fake_build_openai_answer_path,
+    )
     monkeypatch.setattr(
         slack_runtime,
         "run_socket_mode_from_env",

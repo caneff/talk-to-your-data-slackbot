@@ -244,19 +244,24 @@ standing-charge tradeoff is only accepted for the boxed demo window; see
 
 ## Manual Slack smoke test
 
+A no-flag app run loads the **Retail Operations** layer
+(`examples/retail_ops_demo/semantic_layer`) and seeds the retail demo data into
+an in-memory DuckDB. (The library/test default stays on the Commerce example;
+the retail default is an app-run concern only — see ADR-0001.)
+
 1. Start the adapter with `uv run python -m data_assistant.slack_runtime`.
 2. Open a DM with the app in Slack.
-3. Send a supported question. The local smoke-test data answers revenue
-   by region, so use:
-   `What was total revenue by region in January 2026?`
+3. Send a supported question. The retail demo data answers net revenue by store
+   region, so use:
+   `What was total net revenue by store region in Q1 2026?`
 4. Verify the bot replies in the same thread as the original message timestamp.
 5. Verify the reply is a Final Response with a Trust Summary.
-6. Verify the reply answers from the local development data:
-   `North: $1,500.00`
-   `South: $800.00`
+6. Verify the reply answers from the retail demo data, broken down by the four
+   store regions (Northeast, Southeast, Midwest, West) with money figures.
 7. Send the safe Non-Answer question:
-   `What was total revenue by region?`
-8. Verify the bot replies with a Non-Answer Response that asks for clarification and includes a Trust Summary.
+   `What was total net revenue?`
+8. Verify the bot replies with a Non-Answer Response that asks for the missing
+   time scope and includes a Trust Summary.
 
 ## Manual live Question Interpreter eval
 
@@ -362,7 +367,7 @@ degrades.
 ## Manual Slack QA driver
 
 A maintainer tool that replays the curated QA battery
-(`docs/qa-commerce-questions.md`) through the **real** Slack Assistant answer
+(`docs/qa-retail-questions.md`) through the **real** Slack Assistant answer
 path one question at a time, posting each Final Response **as the bot** into an
 assistant thread so you read it and press the existing flag buttons. Flags land
 in the shared Interaction Log and feed the `triage-flagged-interactions` skill.
@@ -406,7 +411,7 @@ Step by step:
    greets and shows suggested prompts). Opening the thread is enough — the bot
    records that thread as the driver's target (auto-discovery,
    last-writer-wins: the most recently opened thread).
-4. Run the driver (defaults the battery to `docs/qa-commerce-questions.md`, and
+4. Run the driver (defaults the battery to `docs/qa-retail-questions.md`, and
    posts into the thread you just opened — no ids needed):
 
    ```bash

@@ -18,3 +18,26 @@ no-arg `load_semantic_layer()` default still exists for zero-config library and
 test loads; it now resolves to the relocated path. A follow-up (#132) introduces a
 two-tier default in which the app run loads the retail layer while library/test
 loads keep the Commerce example.
+
+### Two-tier default (#132)
+
+There are now two distinct "default layer" tiers, and they intentionally differ:
+
+- **Library / test default** — `DEFAULT_SEMANTIC_LAYER_PATH` in
+  `semantic_layer/loader.py` stays `examples/commerce_smoke/semantic_layer`. It
+  backs zero-config library loads, `conftest`, the canonical question, the
+  `StaticQuestionInterpreterProvider`, `live_eval`, and the workflow runner
+  default — all of which assume the Commerce `orders(region, revenue,
+  order_date)` schema.
+- **App-run default** — a no-flag run of `slack_runtime` (and therefore the
+  Docker `CMD`) plus `slack_qa_driver` load the **retail** layer
+  (`examples/retail_ops_demo/semantic_layer`), seed the retail demo data, and
+  use an in-memory DuckDB. The retail paths live as shared constants in
+  `slack_runtime` (`RETAIL_SEMANTIC_LAYER_PATH`, `RETAIL_SEED_SQL_PATH`,
+  `RETAIL_DUCKDB_PATH`) — one source of truth that `slack_qa_driver` consumes.
+  Explicit `--semantic-layer-path` / `--duckdb-path` / `--seed-sql-path` flags
+  still override the retail default.
+
+Keeping the library default on Commerce avoids breaking the suite (the static
+provider and canonical question are Commerce-shaped); the retail default is an
+app-run concern only.

@@ -2,7 +2,7 @@
 
 The driver's ``main`` is near-untested by design (live Slack + live OpenAI,
 like the ``live_eval`` mains). Only the pure battery parser is covered here; it
-maps the ``qa-commerce-questions.md`` markdown shape to a flat list of
+maps the ``qa-retail-questions.md`` markdown shape to a flat list of
 top-level questions with no Slack and no OpenAI.
 """
 
