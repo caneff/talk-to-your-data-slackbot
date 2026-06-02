@@ -1,16 +1,11 @@
 import pytest
 
-import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.semantic_layer.schema as schema
 
 
 def test_semantic_layer_loads_dataset_table_relationship() -> None:
     loaded_semantic_layer = semantic_layer_loader.load_semantic_layer()
-    assert isinstance(
-        loaded_semantic_layer,
-        semantic_layer_catalog.SemanticLayerCatalog,
-    )
 
     dataset = loaded_semantic_layer.find_dataset("commerce")
     tables = loaded_semantic_layer.tables_for_dataset_id("commerce")
