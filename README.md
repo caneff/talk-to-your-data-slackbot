@@ -225,6 +225,14 @@ committed):
 The hosted Worker starts the Retail Operations demo by default, the same as the
 local image, and still requires the Slack app from `slack-app-manifest.yaml`.
 
+Render writes the Interaction Log to the attached persistent disk at
+`/var/data/interactions.jsonl` via `DATA_ASSISTANT_INTERACTION_LOG_PATH`. When a
+maintainer clicks a flag button, the Worker also mirrors that flagged,
+sanitized record to application logs with the prefix
+`data_assistant.flagged_interaction `. This keeps the full local JSONL durable
+across deploys and lets Codex fetch flagged Render cases through Render logs for
+triage.
+
 **Cost warning:** the `starter` plan bills for the whole time the Worker runs,
 and live OpenAI API cost is incurred per Data Question anyone asks while the
 hosted demo is up.

@@ -25,6 +25,7 @@ import collections.abc as collections_abc
 import contextlib
 import dataclasses
 import datetime
+import json
 import logging
 import pathlib
 import time
@@ -80,6 +81,9 @@ ACTION_ID_TO_CATEGORY: typing.Final[dict[str, str]] = {
     FLAG_FORMATTING_ACTION_ID: "formatting",
     FLAG_INVESTIGATE_ACTION_ID: "investigate",
 }
+FLAGGED_INTERACTION_LOG_PREFIX: typing.Final[str] = (
+    "data_assistant.flagged_interaction "
+)
 
 # Seam type for the pure block_actions core. ``FlagStore`` binds to
 # ``interaction_log.flag_interaction(.., path=log_path)`` (returns False on an
@@ -220,6 +224,51 @@ def apply_flag(
         return None
     found = flag_store(interaction_id, category)
     return render_flagged_message_blocks(blocks=blocks, category=category, found=found)
+
+
+def flag_interaction_for_triage(
+    *,
+    interaction_id: str,
+    category: str,
+    log_path: pathlib.Path,
+) -> bool:
+    """Flag one record and mirror its sanitized payload into app logs.
+
+    Render exposes application logs to our tooling, but not arbitrary files on a
+    worker. Emitting only maintainer-flagged records keeps normal interaction
+    logs local while making flagged cases remotely triageable.
+    """
+    changed = interaction_log.flag_interaction(
+        interaction_id,
+        category,
+        path=log_path,
+    )
+    if changed:
+        _log_flagged_interaction_for_triage(
+            interaction_id=interaction_id,
+            log_path=log_path,
+        )
+    return changed
+
+
+def _log_flagged_interaction_for_triage(
+    *,
+    interaction_id: str,
+    log_path: pathlib.Path,
+) -> None:
+    try:
+        record = interaction_log.find_interaction(interaction_id, path=log_path)
+        if record is None:
+            payload = {"id": interaction_id, "missing": True}
+        else:
+            payload = record
+        logger.warning(
+            "%s%s",
+            FLAGGED_INTERACTION_LOG_PREFIX,
+            json.dumps(payload, sort_keys=True),
+        )
+    except Exception:
+        logger.exception("Failed to mirror flagged Interaction Log record.")
 
 
 RUNTIME_FALLBACK_MESSAGE = (
@@ -698,8 +747,10 @@ def _register_flag_actions(
         )
 
         def flag_store(target_id: str, category: str) -> bool:
-            return interaction_log.flag_interaction(
-                target_id, category, path=adapter.log_path
+            return flag_interaction_for_triage(
+                interaction_id=target_id,
+                category=category,
+                log_path=adapter.log_path,
             )
 
         new_blocks = apply_flag(

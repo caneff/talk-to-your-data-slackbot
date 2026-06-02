@@ -1150,3 +1150,74 @@ def test_apply_flag_unknown_action_id_is_defensive_noop() -> None:
     # Defensive: an unmapped action_id never flags, returns None (nothing to do).
     assert store.calls == []
     assert new_blocks is None
+
+
+def test_flag_interaction_for_triage_logs_updated_record(
+    caplog: pytest.LogCaptureFixture,
+    tmp_path: pathlib.Path,
+) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+    record: dict[str, object] = {
+        "id": "abc123",
+        "timestamp": "2026-06-01T12:00:00+00:00",
+        "user": "U123",
+        "question": "What was revenue by region?",
+        "latency_ms": 42,
+        "outcome": "answer",
+        "response_text": "answer",
+        "model": "gpt-4o-mini",
+        "flags": [],
+    }
+    interaction_log.append_interaction(record, path=log_path)
+
+    with caplog.at_level(logging.WARNING, logger=slack_assistant.logger.name):
+        changed = slack_assistant.flag_interaction_for_triage(
+            interaction_id="abc123",
+            category="correctness",
+            log_path=log_path,
+        )
+
+    assert changed is True
+    messages = [
+        message
+        for message in caplog.messages
+        if message.startswith(slack_assistant.FLAGGED_INTERACTION_LOG_PREFIX)
+    ]
+    assert len(messages) == 1
+    payload = messages[0][len(slack_assistant.FLAGGED_INTERACTION_LOG_PREFIX) :]
+    mirrored_record = json.loads(payload)
+    assert mirrored_record == {**record, "flags": ["correctness"]}
+
+
+def test_flag_interaction_for_triage_unknown_id_logs_nothing(
+    caplog: pytest.LogCaptureFixture,
+    tmp_path: pathlib.Path,
+) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+    interaction_log.append_interaction(
+        {
+            "id": "abc123",
+            "timestamp": "2026-06-01T12:00:00+00:00",
+            "user": "U123",
+            "question": "What was revenue by region?",
+            "latency_ms": 42,
+            "outcome": "answer",
+            "response_text": "answer",
+            "model": "gpt-4o-mini",
+            "flags": [],
+        },
+        path=log_path,
+    )
+
+    with caplog.at_level(logging.WARNING, logger=slack_assistant.logger.name):
+        changed = slack_assistant.flag_interaction_for_triage(
+            interaction_id="missing",
+            category="correctness",
+            log_path=log_path,
+        )
+
+    assert changed is False
+    assert not any(
+        message.startswith(slack_assistant.FLAGGED_INTERACTION_LOG_PREFIX)
+        for message in caplog.messages
+    )

@@ -76,6 +76,32 @@ def test_append_interaction_appends_second_line(tmp_path: pathlib.Path) -> None:
     assert json.loads(lines[1])["id"] == "second"
 
 
+def test_find_interaction_returns_retained_record_by_id(tmp_path: pathlib.Path) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+    first = _record(id="first")
+    second = _record(id="second", flags=["correctness"])
+    interaction_log.append_interaction(first, path=log_path)
+    interaction_log.append_interaction(second, path=log_path)
+
+    found = interaction_log.find_interaction("second", path=log_path)
+
+    assert found == second
+
+
+def test_find_interaction_missing_id_returns_none(tmp_path: pathlib.Path) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+    interaction_log.append_interaction(_record(id="first"), path=log_path)
+
+    assert interaction_log.find_interaction("missing", path=log_path) is None
+
+
+def test_find_interaction_missing_file_returns_none(tmp_path: pathlib.Path) -> None:
+    assert (
+        interaction_log.find_interaction("abc123", path=tmp_path / "missing.jsonl")
+        is None
+    )
+
+
 def test_append_interaction_creates_parent_directory(tmp_path: pathlib.Path) -> None:
     log_path = tmp_path / "nested" / "logs" / "interactions.jsonl"
 

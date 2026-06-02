@@ -96,6 +96,21 @@ def append_interaction(
     return str(record["id"])
 
 
+def find_interaction(
+    interaction_id: str,
+    *,
+    path: pathlib.Path = DEFAULT_LOG_PATH,
+) -> dict[str, object] | None:
+    """Return one Interaction Log record by id, if it is still retained."""
+    if not path.exists():
+        return None
+
+    for line in _read_log_lines(path):
+        if line.record is not None and line.record.get("id") == interaction_id:
+            return dict(line.record)
+    return None
+
+
 def flag_interaction(
     interaction_id: str,
     category: str,

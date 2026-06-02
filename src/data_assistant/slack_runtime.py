@@ -15,6 +15,7 @@ import typing
 import dotenv
 import duckdb
 
+import data_assistant.interaction_log as interaction_log
 import data_assistant.local_duckdb_fixture as local_duckdb_fixture
 import data_assistant.openai_support as openai_support
 import data_assistant.question_interpreter as question_interpreter
@@ -29,6 +30,8 @@ if typing.TYPE_CHECKING:
     from slack_bolt import App as SlackBoltApp
 
 logger = logging.getLogger(__name__)
+
+INTERACTION_LOG_PATH_ENV_VAR: typing.Final[str] = "DATA_ASSISTANT_INTERACTION_LOG_PATH"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -95,6 +98,20 @@ def _resolve_model_label(environ: collections_abc.Mapping[str, str]) -> str:
     test-constructible without OpenAI configuration.
     """
     return environ.get("OPENAI_MODEL", openai_support.DEFAULT_OPENAI_MODEL)
+
+
+def _resolve_interaction_log_path(
+    environ: collections_abc.Mapping[str, str],
+    *,
+    explicit_path: pathlib.Path | None = None,
+) -> pathlib.Path:
+    """Resolve the Interaction Log path for local, Docker, and Render runs."""
+    if explicit_path is not None:
+        return explicit_path
+    configured_path = environ.get(INTERACTION_LOG_PATH_ENV_VAR)
+    if configured_path:
+        return pathlib.Path(configured_path)
+    return interaction_log.DEFAULT_LOG_PATH
 
 
 def _load_env_file(
@@ -193,6 +210,7 @@ def run_socket_mode_from_env(
         slack_assistant.default_identity
     ),
     answer_path: slack_assistant.AnswerPath | None = None,
+    interaction_log_path: pathlib.Path | None = None,
 ) -> SocketModeHandler:
     """Build and start the local Slack Runtime Adapter from environment config."""
     config = load_slack_runtime_config(environ)
@@ -208,6 +226,10 @@ def run_socket_mode_from_env(
             answer_path=active_answer_path,
             internal_identity_resolver=internal_identity_resolver,
             model_label=_resolve_model_label(environ),
+            log_path=_resolve_interaction_log_path(
+                environ,
+                explicit_path=interaction_log_path,
+            ),
         )
         slack_assistant.register_assistant_handlers(app=app, adapter=adapter)
     handler = socket_mode_handler_factory(app_token=config.app_token, app=app)
@@ -231,6 +253,7 @@ def main(
             connection_factory=connection_factory,
             internal_identity_resolver=slack_assistant.dev_identity,
             answer_path=answer_path,
+            interaction_log_path=args.interaction_log_path,
         )
     except (
         OSError,
@@ -268,6 +291,15 @@ def _parse_args(argv: collections_abc.Sequence[str]) -> argparse.Namespace:
         type=pathlib.Path,
         default=None,
         help="Optional SQL file to run whenever the DuckDB connection opens.",
+    )
+    parser.add_argument(
+        "--interaction-log-path",
+        type=pathlib.Path,
+        default=None,
+        help=(
+            "Interaction Log JSONL path. Defaults to "
+            f"{INTERACTION_LOG_PATH_ENV_VAR} or logs/interactions.jsonl."
+        ),
     )
     args = parser.parse_args(argv)
     if args.seed_sql_path is not None and args.duckdb_path is None:
