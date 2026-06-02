@@ -211,9 +211,7 @@ def apply_flag(
     if category is None:
         return None
     found = flag_store(interaction_id, category)
-    return render_flagged_message_blocks(
-        blocks=blocks, category=category, found=found
-    )
+    return render_flagged_message_blocks(blocks=blocks, category=category, found=found)
 
 
 RUNTIME_FALLBACK_MESSAGE = (

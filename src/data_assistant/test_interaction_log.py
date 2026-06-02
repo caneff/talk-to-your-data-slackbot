@@ -1,4 +1,4 @@
-"""Tests for the local Interaction Log (append-only JSONL, dev consumer).
+"""Tests for the local Interaction Log (retention-bounded JSONL, dev consumer).
 
 The Interaction Log is the local-dev Decision Trail consumer (see ADR-0016): a
 maintainer pastes a logged interaction into Claude Code when asking for an
@@ -30,6 +30,26 @@ def _record(**overrides: object) -> dict[str, object]:
     }
     record.update(overrides)
     return record
+
+
+def _line(record: dict[str, object]) -> str:
+    return json.dumps(record)
+
+
+def _line_bytes(line: str) -> int:
+    return len(line.encode("utf-8")) + 1
+
+
+def _write_lines(path: pathlib.Path, lines: list[str]) -> None:
+    path.write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
+
+
+def _read_lines(path: pathlib.Path) -> list[str]:
+    return path.read_text(encoding="utf-8").splitlines()
+
+
+def _read_json_records(path: pathlib.Path) -> list[dict[str, object]]:
+    return [json.loads(line) for line in _read_lines(path)]
 
 
 def test_append_interaction_writes_one_json_line(tmp_path: pathlib.Path) -> None:
@@ -82,6 +102,137 @@ def test_flag_vocabulary_constant_is_correctness_and_formatting() -> None:
 def test_default_log_path_is_repo_root_logs_interactions_jsonl() -> None:
     assert interaction_log.DEFAULT_LOG_PATH.name == "interactions.jsonl"
     assert interaction_log.DEFAULT_LOG_PATH.parent.name == "logs"
+
+
+# --- Interaction Log Retention Policy ---------------------------------------
+
+
+def test_append_interaction_does_not_compact_before_trigger(
+    tmp_path: pathlib.Path,
+) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+    for index in range(3):
+        interaction_log.append_interaction(
+            _record(id=f"answer-{index}"),
+            path=log_path,
+            retention_policy=interaction_log.RetentionPolicy(
+                trigger_bytes=10_000,
+                target_bytes=1,
+                recent_unflagged_answer_limit=1,
+            ),
+        )
+
+    assert [record["id"] for record in _read_json_records(log_path)] == [
+        "answer-0",
+        "answer-1",
+        "answer-2",
+    ]
+
+
+def test_append_interaction_compacts_by_priority_then_keeps_chronological_order(
+    tmp_path: pathlib.Path,
+) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+    retained_lines = [
+        _line(_record(id="flagged", flags=["legacy-category"])),
+        _line(_record(id="error", outcome="error")),
+        "not-json",
+        _line(_record(id="non-answer", outcome="non_answer")),
+    ]
+    all_lines = [
+        _line(_record(id="old-answer")),
+        *retained_lines,
+        _line(_record(id="recent-answer")),
+    ]
+    _write_lines(log_path, all_lines)
+
+    interaction_log.append_interaction(
+        _record(id="new-answer"),
+        path=log_path,
+        retention_policy=interaction_log.RetentionPolicy(
+            trigger_bytes=1,
+            target_bytes=sum(_line_bytes(line) for line in retained_lines),
+            recent_unflagged_answer_limit=5,
+        ),
+    )
+
+    assert _read_lines(log_path) == retained_lines
+
+
+def test_append_interaction_retention_limits_recent_unflagged_answers(
+    tmp_path: pathlib.Path,
+) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+    _write_lines(
+        log_path,
+        [
+            _line(_record(id="answer-1")),
+            _line(_record(id="answer-2")),
+            _line(_record(id="answer-3")),
+        ],
+    )
+
+    interaction_log.append_interaction(
+        _record(id="answer-4"),
+        path=log_path,
+        retention_policy=interaction_log.RetentionPolicy(
+            trigger_bytes=1,
+            target_bytes=10_000,
+            recent_unflagged_answer_limit=2,
+        ),
+    )
+
+    assert [record["id"] for record in _read_json_records(log_path)] == [
+        "answer-3",
+        "answer-4",
+    ]
+
+
+def test_flag_interaction_promotes_record_before_retention(
+    tmp_path: pathlib.Path,
+) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+    flag_target = _record(id="flag-target")
+    _write_lines(
+        log_path,
+        [
+            _line(flag_target),
+            _line(_record(id="newer-answer")),
+        ],
+    )
+    flagged_line = _line({**flag_target, "flags": ["correctness"]})
+
+    changed = interaction_log.flag_interaction(
+        "flag-target",
+        "correctness",
+        path=log_path,
+        retention_policy=interaction_log.RetentionPolicy(
+            trigger_bytes=1,
+            target_bytes=_line_bytes(flagged_line),
+            recent_unflagged_answer_limit=5,
+        ),
+    )
+
+    assert changed is True
+    assert _read_json_records(log_path) == [{**flag_target, "flags": ["correctness"]}]
+
+
+def test_retention_keeps_one_line_when_one_line_exceeds_target(
+    tmp_path: pathlib.Path,
+) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+    large_record = _record(id="large", response_text="x" * 200)
+    interaction_log.append_interaction(
+        large_record,
+        path=log_path,
+        retention_policy=interaction_log.RetentionPolicy(
+            trigger_bytes=1,
+            target_bytes=1,
+            recent_unflagged_answer_limit=5,
+        ),
+    )
+
+    assert [record["id"] for record in _read_json_records(log_path)] == ["large"]
 
 
 # --- flag_interaction (Slice 2, issue #111) ---------------------------------
