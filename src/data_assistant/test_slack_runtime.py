@@ -16,6 +16,7 @@ import typing
 import duckdb
 import pytest
 
+import data_assistant.openai_support as openai_support
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.slack_assistant as slack_assistant
 import data_assistant.slack_runtime as slack_runtime
@@ -278,11 +279,52 @@ def test_run_socket_mode_from_env_registers_assistant_before_startup(
     assert registered_app is app
     assert registered_adapter.connection_factory is connection_factory
     assert registered_adapter.answer_path is sentinel_answer_path
+    # The default OpenAI model label is sourced from the environ onto the
+    # adapter so the Interaction Log records a real model (ADR-0016).
+    assert registered_adapter.model_label == openai_support.DEFAULT_OPENAI_MODEL
     assert len(runtime_factories.created_handlers) == 1
     assert handler is runtime_factories.created_handlers[0]
     assert handler.app is app
     assert handler.app_token == "xapp-live-token"
     assert handler.starts == 1
+
+
+def test_run_socket_mode_from_env_threads_openai_model_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An OPENAI_MODEL override flows onto the adapter's model_label."""
+    app = object()
+    runtime_factories = RecordingRuntimeFactories(app=app)
+    registered: list[slack_assistant.AssistantAdapter] = []
+
+    def fake_register_assistant_handlers(
+        *,
+        app: object,
+        adapter: slack_assistant.AssistantAdapter,
+    ) -> None:
+        del app
+        registered.append(adapter)
+
+    monkeypatch.setattr(
+        slack_assistant,
+        "register_assistant_handlers",
+        fake_register_assistant_handlers,
+    )
+
+    def connection_factory() -> contextlib.AbstractContextManager[
+        duckdb.DuckDBPyConnection
+    ]:
+        raise AssertionError("startup should register handlers without opening data")
+
+    slack_runtime.run_socket_mode_from_env(
+        VALID_SLACK_ENV | {"OPENAI_MODEL": "gpt-test-override"},
+        app_factory=runtime_factories.app_factory,
+        socket_mode_handler_factory=runtime_factories.socket_mode_handler_factory,
+        connection_factory=connection_factory,
+        answer_path=sentinel_answer_path,
+    )
+
+    assert registered[0].model_label == "gpt-test-override"
 
 
 def test_build_duckdb_connection_factory_runs_seed_sql(tmp_path: pathlib.Path) -> None:

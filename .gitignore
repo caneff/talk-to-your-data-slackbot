@@ -4,6 +4,7 @@
 .ruff_cache/
 .pyright/
 .env
+logs/
 __pycache__/
 *.py[cod]
 dist/

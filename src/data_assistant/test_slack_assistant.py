@@ -10,11 +10,16 @@ from __future__ import annotations
 
 import collections.abc
 import contextlib
+import datetime
+import json
 import logging
+import pathlib
 
 import duckdb
+import pandas as pd
 import pytest
 
+import data_assistant.semantic_layer.schema as schema
 import data_assistant.slack_assistant as slack_assistant
 import data_assistant.workflow.contracts as contracts
 
@@ -431,3 +436,409 @@ def test_final_response_from_workflow_result_unwraps_run() -> None:
     # A bare FinalResponse passes through unchanged.
     assert slack_assistant.final_response_from_workflow_result(final) is final
     del run
+
+
+# --- Interaction Log capture (ADR-0016) -------------------------------------
+
+
+def _curated_dataset() -> schema.CuratedDataset:
+    return schema.CuratedDataset(
+        dataset_id="commerce",
+        name="Commerce",
+        tables=("orders",),
+        information_types=("orders",),
+        freshness=schema.Freshness(
+            as_of=datetime.date(2026, 1, 31),
+            description="Commerce order data refreshed daily.",
+        ),
+        example_questions=("What was revenue by region?",),
+    )
+
+
+def _dataset_table() -> schema.DatasetTable:
+    return schema.DatasetTable(
+        table_id="orders",
+        dataset_id="commerce",
+        description="Order facts.",
+        columns=(
+            schema.TableColumn(column_id="region", data_type="string"),
+            schema.TableColumn(column_id="net_revenue", data_type="decimal"),
+            schema.TableColumn(column_id="order_date", data_type="date"),
+        ),
+        metrics=(
+            schema.Metric(
+                metric_id="total_revenue",
+                label="total revenue",
+                expression="SUM(net_revenue)",
+                source_column="net_revenue",
+                kind=schema.MetricKind.MONEY,
+            ),
+        ),
+        fields=(
+            schema.SemanticField(
+                field_id="region",
+                label="region",
+                source_column="region",
+                data_type=schema.DataType.STRING,
+                operations=(schema.FieldOperation.GROUP_BY,),
+            ),
+            schema.SemanticField(
+                field_id="order_date",
+                label="order date",
+                source_column="order_date",
+                data_type=schema.DataType.DATE,
+                operations=(schema.FieldOperation.RANGE_FILTER,),
+            ),
+        ),
+    )
+
+
+def _data_assistant_run() -> contracts.DataAssistantRun:
+    dataset = _curated_dataset()
+    table = _dataset_table()
+    metric = table.metrics[0]
+    region_field = table.fields[0]
+    order_date_field = table.fields[1]
+    question_frame = contracts.QuestionFrame(
+        intent="summarize",
+        metric="total revenue",
+        time_scope=contracts.TimeScope.BOUNDED,
+        field_operations=(
+            contracts.SemanticFieldOperation(
+                operation=schema.FieldOperation.GROUP_BY,
+                field="region",
+            ),
+        ),
+        unresolved_ambiguities=(),
+    )
+    match = contracts.SemanticMatch(
+        dataset=dataset,
+        table=table,
+        metric=metric,
+        group_by_fields=(region_field,),
+    )
+    data_request = contracts.DataRequest(
+        dataset=dataset,
+        table=table,
+        metric=metric,
+        group_by_fields=(region_field,),
+        filter_operations=(
+            contracts.ResolvedSemanticFieldOperation(
+                operation=schema.FieldOperation.RANGE_FILTER,
+                field=order_date_field,
+                lower=datetime.date(2026, 1, 1),
+                upper=datetime.date(2026, 1, 31),
+            ),
+        ),
+        output_shape="total revenue grouped by region",
+        result_limit=10,
+    )
+    prepared_data = contracts.PreparedData(
+        request=data_request,
+        # SECRET / sensitive cell values that must NEVER reach the log.
+        data=pd.DataFrame(
+            {
+                "region": ("North", "South", "Acme-Secret-Corp"),
+                "net_revenue": (1200.0, 850.0, 99999.0),
+            }
+        ),
+        quality_notes=("1 row excluded because revenue was missing.",),
+    )
+    answer_draft = contracts.AnswerDraft(
+        summary="Total revenue in January 2026 was $2,050.00.",
+        key_data=pd.DataFrame(
+            {
+                "dimension_value": ("North", "South"),
+                "metric_value": (1200.0, 850.0),
+            }
+        ),
+        datasets_used=("Commerce",),
+        dataset_tables_used=("orders",),
+        metric_kind=schema.MetricKind.MONEY,
+        metric_label="total revenue",
+        time_range="January 2026",
+        filters=("order date >= 2026-01-01 and <= 2026-01-31",),
+        freshness="Commerce order data refreshed through 2026-01-31.",
+        caveats=(),
+        group_by_label="region",
+    )
+    final_response = contracts.FinalResponse(
+        text="Total revenue in January 2026 was $2,050.00.",
+        trust_summary=contracts.TrustSummary(datasets=("Commerce",)),
+        response_kind=contracts.ResponseKind.ANSWER,
+    )
+    return contracts.DataAssistantRun(
+        question_frame=question_frame,
+        available_data_resolution=contracts.AvailableDataResolution(
+            resolved_match=match,
+            dataset_selection=contracts.DatasetSelection(
+                selected_datasets=(dataset,),
+                match_rationale="single match",
+            ),
+        ),
+        data_request=data_request,
+        prepared_data=prepared_data,
+        answer_draft=answer_draft,
+        final_response=final_response,
+    )
+
+
+def _read_log_records(log_path: pathlib.Path) -> list[dict[str, object]]:
+    return [
+        json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()
+    ]
+
+
+def _run_adapter(
+    *,
+    log_path: pathlib.Path,
+    connect_orders: collections.abc.Callable[
+        ..., contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
+    ],
+    answer_path: slack_assistant.AnswerPath,
+    text: str = "What was total revenue by region in January 2026?",
+) -> None:
+    adapter = slack_assistant.AssistantAdapter(
+        connection_factory=_connection_factory(connect_orders),
+        answer_path=answer_path,
+        model_label="gpt-4o-mini",
+        log_path=log_path,
+    )
+    adapter.on_user_message(
+        text=text,
+        user="U123",
+        channel="D123",
+        thread_ts="1710000000.654321",
+        set_status=RecordingStatus(),
+        say=RecordingSay(),
+    )
+
+
+def test_on_user_message_logs_answer_record_with_shape_and_key_data(
+    tmp_path: pathlib.Path,
+    connect_orders: collections.abc.Callable[
+        ..., contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
+    ],
+) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+    run = _data_assistant_run()
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        _question: str,
+        _identity: contracts.InternalIdentity,
+    ) -> slack_assistant.SlackWorkflowResult:
+        return run
+
+    _run_adapter(
+        log_path=log_path,
+        connect_orders=connect_orders,
+        answer_path=answer_path,
+    )
+
+    records = _read_log_records(log_path)
+    assert len(records) == 1
+    record = records[0]
+    assert record["outcome"] == "answer"
+    assert record["model"] == "gpt-4o-mini"
+    assert record["user"] == "U123"
+    assert record["flags"] == []
+    assert record["question"] == "What was total revenue by region in January 2026?"
+    assert isinstance(record["id"], str) and record["id"]
+    assert isinstance(record["latency_ms"], int)
+    assert record["intent"] == "summarize"
+    assert record["dataset"] == "Commerce"
+    assert record["metric"] == "total revenue"
+    assert record["group_by"] == ["region"]
+    assert record["result_limit"] == 10
+    # Prepared-data SHAPE only -- rows x columns + quality notes.
+    assert record["prepared_data_shape"] == {"rows": 3, "columns": 2}
+    assert record["quality_notes"] == ["1 row excluded because revenue was missing."]
+    # key_data headline numbers ARE included (ADR-0016 deliberate inclusion).
+    assert record["key_data"] == [
+        {"dimension_value": "North", "metric_value": 1200.0},
+        {"dimension_value": "South", "metric_value": 850.0},
+    ]
+    # Sanitization: NO raw Prepared Data cell values anywhere in the line.
+    # (The metric EXPRESSION -- e.g. SUM(net_revenue) -- is deliberately kept as
+    # debug signal; only Prepared Data *cell values* are excluded.)
+    serialized = json.dumps(record)
+    assert "Acme-Secret-Corp" not in serialized
+    assert "99999" not in serialized
+
+
+def test_on_user_message_logs_non_answer_record_with_reason_and_stage(
+    tmp_path: pathlib.Path,
+    connect_orders: collections.abc.Callable[
+        ..., contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
+    ],
+) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+    non_answer = contracts.NonAnswer(
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        reason_code=contracts.NonAnswerReasonCode.MISSING_TIME_SCOPE,
+        context=("order date",),
+    )
+    final = contracts.FinalResponse(
+        text="I cannot answer safely yet because ...",
+        trust_summary=contracts.TrustSummary(),
+        response_kind=contracts.ResponseKind.CLARIFICATION_NEEDED,
+        non_answer=non_answer,
+    )
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        _question: str,
+        _identity: contracts.InternalIdentity,
+    ) -> slack_assistant.SlackWorkflowResult:
+        return final
+
+    _run_adapter(
+        log_path=log_path,
+        connect_orders=connect_orders,
+        answer_path=answer_path,
+    )
+
+    records = _read_log_records(log_path)
+    assert len(records) == 1
+    record = records[0]
+    assert record["outcome"] == "non_answer"
+    assert record["reason_code"] == "missing_time_scope"
+    assert record["stage"] == "question_interpreter"
+    assert record["context"] == ["order date"]
+    assert record["response_text"] == "I cannot answer safely yet because ..."
+    assert record["flags"] == []
+
+
+def test_on_user_message_logs_error_record_and_still_says_fallback(
+    tmp_path: pathlib.Path,
+    connect_orders: collections.abc.Callable[
+        ..., contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
+    ],
+) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+    say = RecordingSay()
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        _question: str,
+        _identity: contracts.InternalIdentity,
+    ) -> slack_assistant.SlackWorkflowResult:
+        raise RuntimeError("answer path blew up")
+
+    adapter = slack_assistant.AssistantAdapter(
+        connection_factory=_connection_factory(connect_orders),
+        answer_path=answer_path,
+        model_label="gpt-4o-mini",
+        log_path=log_path,
+    )
+    adapter.on_user_message(
+        text="What was total revenue last quarter?",
+        user="U123",
+        channel="D123",
+        thread_ts="1710000000.654321",
+        set_status=RecordingStatus(),
+        say=say,
+    )
+
+    # The user still gets the Runtime Fallback reply.
+    assert say.calls == [(slack_assistant.RUNTIME_FALLBACK_MESSAGE, None)]
+    records = _read_log_records(log_path)
+    assert len(records) == 1
+    record = records[0]
+    assert record["outcome"] == "error"
+    assert record["error_type"] == "RuntimeError"
+    assert record["error_message"] == "answer path blew up"
+    assert record["flags"] == []
+
+
+def test_on_user_message_log_failure_does_not_break_user_reply(
+    tmp_path: pathlib.Path,
+    connect_orders: collections.abc.Callable[
+        ..., contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
+    ],
+) -> None:
+    """A logging failure must never prevent the user-facing reply."""
+    # Point the log at a path that cannot be created (a file used as a dir).
+    blocker = tmp_path / "blocker"
+    blocker.write_text("not a directory", encoding="utf-8")
+    unwritable_log = blocker / "interactions.jsonl"
+    say = RecordingSay()
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        _question: str,
+        _identity: contracts.InternalIdentity,
+    ) -> slack_assistant.SlackWorkflowResult:
+        return _final_response(text="Answer text.")
+
+    adapter = slack_assistant.AssistantAdapter(
+        connection_factory=_connection_factory(connect_orders),
+        answer_path=answer_path,
+        model_label="gpt-4o-mini",
+        log_path=unwritable_log,
+    )
+
+    adapter.on_user_message(
+        text="any question",
+        user="U123",
+        channel="D123",
+        thread_ts="1710000000.654321",
+        set_status=RecordingStatus(),
+        say=say,
+    )
+
+    # The reply still went out even though the log write failed.
+    assert say.calls == [("Answer text.", None)]
+
+
+def test_on_user_message_record_build_failure_does_not_break_user_reply(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+    connect_orders: collections.abc.Callable[
+        ..., contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
+    ],
+) -> None:
+    """A failure to BUILD the record must not suppress a good answer.
+
+    Record construction (``to_dict`` / ``.shape`` / field extraction) must run
+    inside the same swallow as the append, so a malformed trace logs an error
+    and is dropped -- the user still gets the real answer, not the fallback.
+    """
+    log_path = tmp_path / "interactions.jsonl"
+    say = RecordingSay()
+    run = _data_assistant_run()
+
+    def boom(**_kwargs: object) -> dict[str, object]:
+        raise ValueError("record construction blew up")
+
+    monkeypatch.setattr(slack_assistant, "_interaction_record", boom)
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        _question: str,
+        _identity: contracts.InternalIdentity,
+    ) -> slack_assistant.SlackWorkflowResult:
+        return run
+
+    adapter = slack_assistant.AssistantAdapter(
+        connection_factory=_connection_factory(connect_orders),
+        answer_path=answer_path,
+        model_label="gpt-4o-mini",
+        log_path=log_path,
+    )
+
+    adapter.on_user_message(
+        text="any question",
+        user="U123",
+        channel="D123",
+        thread_ts="1710000000.654321",
+        set_status=RecordingStatus(),
+        say=say,
+    )
+
+    # The user gets the REAL answer (not the Runtime Fallback), no exception
+    # escapes, and nothing was written.
+    assert say.calls == [(run.final_response.text, run.final_response.blocks or None)]
+    assert say.calls[0][0] != slack_assistant.RUNTIME_FALLBACK_MESSAGE
+    assert not log_path.exists()

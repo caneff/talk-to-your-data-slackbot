@@ -24,12 +24,18 @@ from __future__ import annotations
 import collections.abc as collections_abc
 import contextlib
 import dataclasses
+import datetime
 import logging
+import pathlib
+import time
 import typing
+import uuid
 
 import duckdb
+import pandas as pd
 
 import data_assistant.access_controller as access_controller
+import data_assistant.interaction_log as interaction_log
 import data_assistant.workflow.contracts as contracts
 
 logger = logging.getLogger(__name__)
@@ -139,6 +145,144 @@ def final_response_from_workflow_result(
     return result.final_response
 
 
+def _latency_ms(started_at: float) -> int:
+    return int((time.monotonic() - started_at) * 1000)
+
+
+def _interaction_record(
+    *,
+    interaction_id: str,
+    timestamp: str,
+    latency_ms: int,
+    user: str,
+    question: str,
+    model: str,
+    result: SlackWorkflowResult,
+) -> dict[str, object]:
+    """Build the sanitized Interaction Log record for a successful run.
+
+    SUCCESS branches on the result type (ADR-0016): a ``DataAssistantRun`` is an
+    answer; a bare ``FinalResponse`` is a Non-Answer. Either way the record
+    carries the always-fields plus outcome-specific detail. It NEVER carries raw
+    Prepared Data cell values (see ``_answer_fields``).
+    """
+    final_response = final_response_from_workflow_result(result)
+    record: dict[str, object] = {
+        "id": interaction_id,
+        "timestamp": timestamp,
+        "user": user,
+        "question": question,
+        "latency_ms": latency_ms,
+        "response_text": final_response.text,
+        "model": model,
+        "flags": [],
+    }
+    if isinstance(result, contracts.DataAssistantRun):
+        record["outcome"] = "answer"
+        record.update(_answer_fields(result))
+    else:
+        record["outcome"] = "non_answer"
+        record.update(_non_answer_fields(final_response.non_answer))
+    return record
+
+
+def _error_record(
+    *,
+    interaction_id: str,
+    timestamp: str,
+    latency_ms: int,
+    user: str,
+    question: str,
+    model: str,
+    error: BaseException,
+) -> dict[str, object]:
+    """Build the Interaction Log record for a crashed answer path."""
+    return {
+        "id": interaction_id,
+        "timestamp": timestamp,
+        "user": user,
+        "question": question,
+        "latency_ms": latency_ms,
+        "response_text": RUNTIME_FALLBACK_MESSAGE,
+        "model": model,
+        "flags": [],
+        "outcome": "error",
+        "error_type": type(error).__name__,
+        "error_message": str(error),
+    }
+
+
+def _answer_fields(run: contracts.DataAssistantRun) -> dict[str, object]:
+    """Sanitized answer-specific fields from a successful run trace.
+
+    Includes the Question Frame summary, the routed Data Request, the
+    prepared-data SHAPE (rows x columns) + quality notes, and the tiny
+    ``key_data`` headline numbers -- the ONE deliberate inclusion of cell values
+    (ADR-0016). Bulk Prepared Data cell values are excluded by design.
+    """
+    data_request = run.data_request
+    prepared = run.prepared_data
+    rows, columns = prepared.data.shape
+    return {
+        "intent": run.question_frame.intent,
+        "question_frame": _question_frame_summary(run.question_frame),
+        "dataset": data_request.dataset.name,
+        "metric": data_request.metric.label,
+        "metric_expression": data_request.metric.expression,
+        "group_by": [field.label for field in data_request.group_by_fields],
+        "filters": list(data_request.filter_labels),
+        "result_limit": data_request.result_limit,
+        "prepared_data_shape": {"rows": int(rows), "columns": int(columns)},
+        "quality_notes": list(prepared.quality_notes),
+        "key_data": _key_data_records(run.answer_draft.key_data),
+    }
+
+
+def _non_answer_fields(non_answer: contracts.NonAnswer | None) -> dict[str, object]:
+    """Non-Answer-specific fields read from FinalResponse.non_answer."""
+    if non_answer is None:
+        return {}
+    return {
+        "stage": str(non_answer.stage),
+        "reason_code": str(non_answer.reason_code),
+        "context": list(non_answer.context),
+    }
+
+
+def _question_frame_summary(
+    question_frame: contracts.QuestionFrame,
+) -> dict[str, object]:
+    return {
+        "intent": question_frame.intent,
+        "metric": question_frame.metric,
+        "time_scope": str(question_frame.time_scope),
+        "filters": list(question_frame.filter_labels),
+        "unresolved_ambiguities": list(question_frame.unresolved_ambiguities),
+    }
+
+
+def _key_data_records(key_data: pd.DataFrame) -> list[dict[str, object]]:
+    """Serialize the small ``key_data`` headline frame to JSON-safe records.
+
+    ``key_data`` is a tiny ``pd.DataFrame`` (the headline rows). We turn it into
+    a list of ``{column: value}`` dicts, coercing each value to a JSON-safe
+    scalar so the line is greppable and never carries pandas/NumPy types. This
+    is the deliberate, documented inclusion of cell values (ADR-0016); the bulk
+    Prepared Data frame is never serialized.
+    """
+    records: list[dict[typing.Hashable, object]] = key_data.to_dict(orient="records")
+    return [
+        {str(column): _json_safe(value) for column, value in record.items()}
+        for record in records
+    ]
+
+
+def _json_safe(value: object) -> object:
+    if isinstance(value, bool | int | float | str) or value is None:
+        return value
+    return str(value)
+
+
 @dataclasses.dataclass(frozen=True)
 class AssistantAdapter:
     """Pure adapter from Slack Assistant events to the Data Assistant workflow."""
@@ -146,6 +290,13 @@ class AssistantAdapter:
     connection_factory: ConnectionFactory
     answer_path: AnswerPath
     internal_identity_resolver: AssistantIdentityResolver = default_identity
+    # Model label recorded on every Interaction Log line (ADR-0016). Threaded
+    # from slack_runtime.py where the OpenAI model is configured; empty by
+    # default so the adapter stays test-constructible without live config.
+    model_label: str = ""
+    # Injectable so tests write to tmp_path and never touch the real gitignored
+    # logs/interactions.jsonl.
+    log_path: pathlib.Path = interaction_log.DEFAULT_LOG_PATH
 
     def on_thread_started(
         self,
@@ -175,6 +326,9 @@ class AssistantAdapter:
         success and the fallback path), so there is no manual status clear.
         """
         internal_identity = self.internal_identity_resolver(user)
+        interaction_id = uuid.uuid4().hex
+        started_at = time.monotonic()
+        timestamp = datetime.datetime.now(datetime.UTC).isoformat()
         try:
             with self.connection_factory() as connection:
                 result = self.answer_path(
@@ -184,8 +338,24 @@ class AssistantAdapter:
                     set_status,
                 )
             final_response = final_response_from_workflow_result(result)
+            self._record_interaction(
+                lambda: _interaction_record(
+                    interaction_id=interaction_id,
+                    timestamp=timestamp,
+                    latency_ms=_latency_ms(started_at),
+                    user=user,
+                    question=text,
+                    model=self.model_label,
+                    result=result,
+                ),
+            )
             say(final_response.text, blocks=final_response.blocks or None)
         except Exception as error:
+            # Bind to a stable local: `except ... as error` clears `error` at
+            # the end of the block, so the record-building thunk closes over
+            # this name instead (the thunk runs synchronously, but this also
+            # keeps it lexically valid).
+            caught = error
             # Bootcamp deviation: we also log the raw question text (`text`).
             # A real production Slack bot would NOT log the question text because
             # it is user-provided free text that may contain sensitive or
@@ -198,13 +368,45 @@ class AssistantAdapter:
                 channel,
                 thread_ts,
                 user,
-                type(error).__name__,
+                type(caught).__name__,
                 text,
+            )
+            # Append the error record before the fallback say. Building and
+            # appending are both wrapped so a logging failure can never block
+            # the user reply.
+            self._record_interaction(
+                lambda: _error_record(
+                    interaction_id=interaction_id,
+                    timestamp=timestamp,
+                    latency_ms=_latency_ms(started_at),
+                    user=user,
+                    question=text,
+                    model=self.model_label,
+                    error=caught,
+                ),
             )
             # Log first, then deliver the Runtime Fallback Message. If this `say`
             # itself raises we let it propagate: the maintainer log already
             # exists. The fallback is NOT a Non-Answer.
             say(RUNTIME_FALLBACK_MESSAGE)
+
+    def _record_interaction(
+        self,
+        build_record: collections_abc.Callable[[], dict[str, object]],
+    ) -> None:
+        """Build then append one Interaction Log line; never break the reply.
+
+        The user-facing ``say`` is more important than the log line, so the
+        swallow covers BOTH record CONSTRUCTION (``to_dict`` / ``.shape`` / field
+        extraction on the trace, via the ``build_record`` thunk) AND the append.
+        Any failure in either is logged and dropped here rather than propagated
+        into the caller's ``except``, which would suppress a good answer.
+        """
+        try:
+            record = build_record()
+            interaction_log.append_interaction(record, path=self.log_path)
+        except Exception:
+            logger.exception("Failed to record Interaction Log entry.")
 
 
 def register_assistant_handlers(
