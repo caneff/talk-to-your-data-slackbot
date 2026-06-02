@@ -177,3 +177,80 @@ def test_flag_interaction_unknown_category_raises_value_error(
 
     with pytest.raises(ValueError):
         interaction_log.flag_interaction("abc123", "nonsense", path=log_path)
+
+
+# --- clear_flags (triage clear-handled, skill follow-up) --------------------
+
+
+def test_clear_flags_empties_flags_but_keeps_record(tmp_path: pathlib.Path) -> None:
+    log_path = _seed_log(tmp_path, _record(id="abc123", flags=["correctness"]))
+
+    cleared = interaction_log.clear_flags("abc123", path=log_path)
+
+    assert cleared is True
+    records = [
+        json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()
+    ]
+    # Record survives (still useful corpus); only its flags are emptied.
+    assert len(records) == 1
+    assert records[0]["id"] == "abc123"
+    assert records[0]["flags"] == []
+
+
+def test_clear_flags_clears_multiple_categories(tmp_path: pathlib.Path) -> None:
+    log_path = _seed_log(
+        tmp_path, _record(id="abc123", flags=["correctness", "formatting"])
+    )
+
+    cleared = interaction_log.clear_flags("abc123", path=log_path)
+
+    assert cleared is True
+    records = [
+        json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert records[0]["flags"] == []
+
+
+def test_clear_flags_only_touches_matching_record(tmp_path: pathlib.Path) -> None:
+    log_path = _seed_log(
+        tmp_path,
+        _record(id="first", flags=["correctness"]),
+        _record(id="second", flags=["formatting"]),
+    )
+
+    interaction_log.clear_flags("second", path=log_path)
+
+    records = [
+        json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert records[0]["flags"] == ["correctness"]
+    assert records[1]["flags"] == []
+
+
+def test_clear_flags_unknown_id_is_noop_returns_false(tmp_path: pathlib.Path) -> None:
+    log_path = _seed_log(tmp_path, _record(id="abc123", flags=["correctness"]))
+    before = log_path.read_text(encoding="utf-8")
+
+    cleared = interaction_log.clear_flags("does-not-exist", path=log_path)
+
+    assert cleared is False
+    assert log_path.read_text(encoding="utf-8") == before
+
+
+def test_clear_flags_already_unflagged_is_noop_returns_false(
+    tmp_path: pathlib.Path,
+) -> None:
+    log_path = _seed_log(tmp_path, _record(id="abc123", flags=[]))
+    before = log_path.read_text(encoding="utf-8")
+
+    cleared = interaction_log.clear_flags("abc123", path=log_path)
+
+    # Nothing to clear -> no rewrite, returns False.
+    assert cleared is False
+    assert log_path.read_text(encoding="utf-8") == before
+
+
+def test_clear_flags_missing_file_returns_false(tmp_path: pathlib.Path) -> None:
+    cleared = interaction_log.clear_flags("abc123", path=tmp_path / "nope.jsonl")
+
+    assert cleared is False

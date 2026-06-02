@@ -65,10 +65,22 @@ Never assert a cause that requires data the record does not carry.
 Group cases by root-caused layer (several flags often share one cause). For each group recommend the smallest fix and route it:
 - Clear, bounded fix → suggest `/handle-next-issue` (or a direct fix) naming the file/layer.
 - Broader or fuzzy → suggest `/to-issues` to slice it.
-Reference flags by `id` so the user can trace each back to its log line. Do **not** edit the log, delete records, or clear flags as part of triage.
+Reference flags by `id` so the user can trace each back to its log line.
+
+### 6. Offer to clear the handled flags (only on explicit confirmation)
+After filing the issues / fixes, a flag is *handled* — it should drop out of the flagged set so the next triage starts clean. Offer to clear it:
+
+- List the exact `id`s you handled this session and the issue/fix each maps to.
+- **Ask** the user whether to clear those flags. Default to **not** clearing. Never clear without an explicit yes.
+- On yes, clear each confirmed `id` with `interaction_log.clear_flags(id)` — this **empties the record's `flags` list but keeps the interaction line** (still useful as an improvement corpus; it is not a delete). Run it via the project env, e.g.:
+  ```bash
+  uv run python -c "from data_assistant import interaction_log; print(interaction_log.clear_flags('<id>'))"
+  ```
+  It returns `True` when a still-flagged record was found and emptied, `False` on an unknown id or an already-unflagged record.
+- Clear **only** the `id`s you actually handled and the user confirmed. Leave every other flagged record untouched. Never delete a record or rewrite anything other than the `flags` of confirmed ids.
 
 ## Guardrails
-- Read-only on the log. No writes, no clearing flags, no deletion.
+- The log is read-only during analysis. The **only** permitted write is `clear_flags` on confirmed-handled ids, and **only** after the user explicitly approves it (step 6). Never delete a record, never rewrite anything but the `flags` of confirmed ids, never clear a flag you did not handle.
 - Never fabricate questions, numbers, or rows not present in the record. Cite `id`s.
 - Respect the sanitization boundary — reproduce locally instead of inferring hidden cell values.
 - Flagged ≠ confirmed bug. A flag is a maintainer's signal; verify the root cause before proposing a fix.

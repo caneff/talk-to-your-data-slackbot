@@ -87,6 +87,57 @@ def flag_interaction(
         raise ValueError(
             f"Unknown flag category {category!r}; expected one of {FLAG_VOCABULARY}."
         )
+
+    def _add_category(record: dict[str, typing.Any]) -> bool:
+        flags = list(record.get("flags") or [])
+        if category not in flags:
+            flags.append(category)
+        record["flags"] = flags
+        return True
+
+    return _rewrite_matching_record(path, interaction_id, _add_category)
+
+
+def clear_flags(
+    interaction_id: str,
+    *,
+    path: pathlib.Path = DEFAULT_LOG_PATH,
+) -> bool:
+    """Empty one record's ``flags`` list via the same atomic rewrite.
+
+    Used by the triage workflow to mark a flagged interaction *handled*: once a
+    fix or issue exists, clearing the flags drops the record out of the flagged
+    set so it is not re-triaged, while the interaction line itself is **kept**
+    (it stays useful as an improvement corpus -- this is not a delete).
+
+    Returns ``True`` when a record with ``interaction_id`` that still had flags
+    was found and emptied. Returns ``False`` (a no-op, no rewrite) when no record
+    matches, the record already has no flags, or the file does not exist.
+    """
+
+    def _empty_flags(record: dict[str, typing.Any]) -> bool:
+        if not record.get("flags"):
+            return False
+        record["flags"] = []
+        return True
+
+    return _rewrite_matching_record(path, interaction_id, _empty_flags)
+
+
+def _rewrite_matching_record(
+    path: pathlib.Path,
+    interaction_id: str,
+    mutate: typing.Callable[[dict[str, typing.Any]], bool],
+) -> bool:
+    """Atomically rewrite the log, applying ``mutate`` to the record by id.
+
+    Walks every JSON line; for the record whose ``id`` matches, calls ``mutate``
+    (which edits the record dict in place and returns whether it changed it). If
+    any line changed, the whole file is rewritten via a temp file + ``os.replace``
+    so the live log is never partially written. Returns whether anything changed;
+    a missing file or no match is a ``False`` no-op. Concurrent writers are out
+    of scope -- this is a single-process local dev tool, so there is no locking.
+    """
     if not path.exists():
         return False
 
@@ -98,11 +149,7 @@ def flag_interaction(
             rewritten.append(line)
             continue
         record = json.loads(line)
-        if record.get("id") == interaction_id:
-            flags = list(record.get("flags") or [])
-            if category not in flags:
-                flags.append(category)
-            record["flags"] = flags
+        if record.get("id") == interaction_id and mutate(record):
             changed = True
             rewritten.append(json.dumps(record))
         else:
