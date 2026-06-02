@@ -23,8 +23,8 @@ build-backend = "hatchling.build"
 packages = ["src/data_assistant"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"src/data_assistant/prompts" = "data_assistant/prompts"
-"src/data_assistant/seeds" = "data_assistant/seeds"
+"src/data_assistant/prompts/question_interpreter_developer.md" = "data_assistant/prompts/question_interpreter_developer.md"
+"src/data_assistant/prompts/reasoning_layer_developer.md" = "data_assistant/prompts/reasoning_layer_developer.md"
 
 [tool.pytest.ini_options]
 testpaths = ["src"]
