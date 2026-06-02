@@ -64,6 +64,85 @@ SUGGESTED_PROMPTS: tuple[dict[str, str], ...] = (
     },
 )
 
+# --- Flag buttons (issue #111) ----------------------------------------------
+# Every Assistant reply carries two flag buttons so a maintainer can mark a bad
+# response in place; a click flags the Interaction Log record (by id), which the
+# maintainer later pastes into Claude Code ("look at the flagged correctness
+# cases"). The action_id -> category map is the SINGLE source of truth shared by
+# the button-builder and the block_actions handler; categories are exactly the
+# interaction_log.FLAG_VOCABULARY.
+FLAG_CORRECTNESS_ACTION_ID: typing.Final[str] = "flag_correctness"
+FLAG_FORMATTING_ACTION_ID: typing.Final[str] = "flag_formatting"
+
+ACTION_ID_TO_CATEGORY: typing.Final[dict[str, str]] = {
+    FLAG_CORRECTNESS_ACTION_ID: "correctness",
+    FLAG_FORMATTING_ACTION_ID: "formatting",
+}
+
+# Seam types for the pure block_actions core. ``FlagStore`` binds to
+# ``interaction_log.flag_interaction(.., path=log_path)`` (returns False on an
+# unknown id); ``Confirm`` posts the ephemeral confirmation text.
+FlagStore: typing.TypeAlias = collections_abc.Callable[[str, str], bool]
+Confirm: typing.TypeAlias = collections_abc.Callable[[str], None]
+
+
+def flag_action_blocks(interaction_id: str) -> tuple[contracts.SlackBlock, ...]:
+    """Build the Slack ``actions`` block with the two flag buttons.
+
+    Each button carries ``interaction_id`` in its ``value`` so the
+    ``block_actions`` handler can flag the right Interaction Log record. The
+    block_id also carries the id for good measure. This is a pure, static
+    blocks tuple -- it never touches the run trace, so it cannot resurrect the
+    record-build masking bug.
+    """
+    return (
+        {
+            "type": "actions",
+            "block_id": f"flag_actions:{interaction_id}",
+            "elements": [
+                {
+                    "type": "button",
+                    "action_id": FLAG_CORRECTNESS_ACTION_ID,
+                    "text": {"type": "plain_text", "text": "🚩 Incorrect"},
+                    "value": interaction_id,
+                },
+                {
+                    "type": "button",
+                    "action_id": FLAG_FORMATTING_ACTION_ID,
+                    "text": {"type": "plain_text", "text": "🎨 Formatting"},
+                    "value": interaction_id,
+                },
+            ],
+        },
+    )
+
+
+def apply_flag(
+    *,
+    action_id: str,
+    interaction_id: str,
+    flag_store: FlagStore,
+    confirm: Confirm,
+) -> None:
+    """Pure block_actions core: flag the record, then confirm ephemerally.
+
+    Maps ``action_id`` to its flag category, calls ``flag_store`` to persist the
+    flag, and posts a confirmation via ``confirm``. An unmapped ``action_id`` is
+    a defensive no-op (never flags, never crashes). When ``flag_store`` reports
+    the id was not found (``False``) we confirm a benign "couldn't find that
+    interaction" message instead of the success text -- a crash is never the
+    right response to a stray button click.
+    """
+    category = ACTION_ID_TO_CATEGORY.get(action_id)
+    if category is None:
+        return
+    found = flag_store(interaction_id, category)
+    if found:
+        confirm(f"Flagged: {category} ✓")
+    else:
+        confirm("Sorry, I couldn't find that interaction to flag.")
+
+
 RUNTIME_FALLBACK_MESSAGE = (
     "Something went wrong while answering your question. Please try again in a bit."
 )
@@ -349,7 +428,10 @@ class AssistantAdapter:
                     result=result,
                 ),
             )
-            say(final_response.text, blocks=final_response.blocks or None)
+            reply_blocks = tuple(final_response.blocks) + flag_action_blocks(
+                interaction_id
+            )
+            say(final_response.text, blocks=reply_blocks)
         except Exception as error:
             # Bind to a stable local: `except ... as error` clears `error` at
             # the end of the block, so the record-building thunk closes over
@@ -387,8 +469,14 @@ class AssistantAdapter:
             )
             # Log first, then deliver the Runtime Fallback Message. If this `say`
             # itself raises we let it propagate: the maintainer log already
-            # exists. The fallback is NOT a Non-Answer.
-            say(RUNTIME_FALLBACK_MESSAGE)
+            # exists. The fallback is NOT a Non-Answer. It still carries the flag
+            # buttons (its error record exists) so a crash reply is flaggable.
+            fallback_section: contracts.SlackBlock = {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": RUNTIME_FALLBACK_MESSAGE},
+            }
+            fallback_blocks = (fallback_section,) + flag_action_blocks(interaction_id)
+            say(RUNTIME_FALLBACK_MESSAGE, blocks=fallback_blocks)
 
     def _record_interaction(
         self,
@@ -464,3 +552,58 @@ def register_assistant_handlers(
     # oversight.
 
     app.use(assistant)
+
+    _register_flag_actions(app=app, adapter=adapter)
+
+
+def _register_flag_actions(
+    *,
+    app: typing.Any,
+    adapter: AssistantAdapter,
+) -> None:
+    """Wire the flag buttons' ``block_actions`` listeners (thin untested shim).
+
+    For each flag ``action_id`` we register a Bolt action listener that, over
+    Socket Mode: ``ack()``s first, reads the embedded ``interaction_id`` from
+    the button ``value`` in ``body``, binds the ``flag_store`` seam to
+    ``interaction_log.flag_interaction`` (with the adapter's ``log_path``) and
+    the ``confirm`` seam to an ephemeral ``respond``, then delegates to the pure
+    ``apply_flag``. All behavior lives in ``apply_flag``; this shim is the only
+    live-API-shaped code here and is intentionally untested.
+
+    Bolt's ``respond`` is bound to the action's ``response_url``; calling
+    ``respond(text=..., response_type="ephemeral")`` posts an ephemeral message
+    visible only to the clicking maintainer (verified against the
+    ``slack_bolt`` 1.28.0 ``Respond.__call__`` signature: ``text`` then keyword
+    ``response_type``).
+    """
+
+    def _flag_action(
+        ack: collections_abc.Callable[[], None],
+        body: dict[str, typing.Any],
+        respond: typing.Any,
+    ) -> None:
+        ack()
+        actions: list[dict[str, typing.Any]] = body.get("actions") or [{}]
+        action = actions[0]
+        action_id = str(action.get("action_id", ""))
+        interaction_id = str(action.get("value", ""))
+
+        def flag_store(target_id: str, category: str) -> bool:
+            return interaction_log.flag_interaction(
+                target_id, category, path=adapter.log_path
+            )
+
+        def confirm(text: str) -> None:
+            respond(text=text, response_type="ephemeral")
+
+        apply_flag(
+            action_id=action_id,
+            interaction_id=interaction_id,
+            flag_store=flag_store,
+            confirm=confirm,
+        )
+
+    # Register one listener per flag action_id (the single source of truth).
+    for flag_action_id in ACTION_ID_TO_CATEGORY:
+        app.action(flag_action_id)(_flag_action)
