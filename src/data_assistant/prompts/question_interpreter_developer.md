@@ -16,6 +16,12 @@ Rules:
   "prescribe", or "diagnose".
 - Use null for intent only when no Data Question intent applies.
 - Use null for metric only when the Data Question names no metric at all.
+- Exact-match override (highest priority): If the Data Question's metric wording
+  is exactly an available metric label (case-insensitive), set metric to that
+  label and leave metric_ambiguity null — even when the wording contains net,
+  gross, recurring, or organic. Only consider metric_ambiguity when NO available
+  metric label matches the wording. Never flag an exact available label as
+  ambiguous.
 - If the Data Question's metric wording carries a qualifier (for example net,
   gross, recurring, or organic), first check available_metric_labels. If a
   label reflects the qualifier (for example "total net revenue" exists for the

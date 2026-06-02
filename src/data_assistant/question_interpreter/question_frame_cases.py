@@ -143,7 +143,7 @@ def _recurring_revenue_metric_ambiguity_proposal() -> (
     return _proposal(
         intent="summarize",
         metric=None,
-        metric_ambiguity="recurring revenue",
+        metric_ambiguity="total recurring revenue",
         field_operations=(_january_2026_order_date_filter(),),
     )
 
