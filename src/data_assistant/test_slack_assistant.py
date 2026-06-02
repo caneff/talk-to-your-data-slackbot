@@ -627,6 +627,7 @@ def test_on_user_message_logs_answer_record_with_shape_and_key_data(
         _connection: duckdb.DuckDBPyConnection,
         _question: str,
         _identity: contracts.InternalIdentity,
+        _progress_sink: contracts.ProgressSink,
     ) -> slack_assistant.SlackWorkflowResult:
         return run
 
@@ -690,6 +691,7 @@ def test_on_user_message_logs_non_answer_record_with_reason_and_stage(
         _connection: duckdb.DuckDBPyConnection,
         _question: str,
         _identity: contracts.InternalIdentity,
+        _progress_sink: contracts.ProgressSink,
     ) -> slack_assistant.SlackWorkflowResult:
         return final
 
@@ -723,6 +725,7 @@ def test_on_user_message_logs_error_record_and_still_says_fallback(
         _connection: duckdb.DuckDBPyConnection,
         _question: str,
         _identity: contracts.InternalIdentity,
+        _progress_sink: contracts.ProgressSink,
     ) -> slack_assistant.SlackWorkflowResult:
         raise RuntimeError("answer path blew up")
 
@@ -769,6 +772,7 @@ def test_on_user_message_log_failure_does_not_break_user_reply(
         _connection: duckdb.DuckDBPyConnection,
         _question: str,
         _identity: contracts.InternalIdentity,
+        _progress_sink: contracts.ProgressSink,
     ) -> slack_assistant.SlackWorkflowResult:
         return _final_response(text="Answer text.")
 
@@ -818,6 +822,7 @@ def test_on_user_message_record_build_failure_does_not_break_user_reply(
         _connection: duckdb.DuckDBPyConnection,
         _question: str,
         _identity: contracts.InternalIdentity,
+        _progress_sink: contracts.ProgressSink,
     ) -> slack_assistant.SlackWorkflowResult:
         return run
 
