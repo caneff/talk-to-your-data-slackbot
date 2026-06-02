@@ -610,6 +610,48 @@ def test_data_assistant_rejects_rank_intent_before_provider_call(
     assert non_answer.reason_code == contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT
 
 
+def test_data_assistant_rejects_availability_question_before_provider_call(
+    monkeypatch: pytest.MonkeyPatch,
+    connect_orders: local_duckdb_fixture.OrdersConnector,
+    allowed_internal_identity: contracts.InternalIdentity,
+) -> None:
+    sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
+
+    class ProviderThatMustNotBeCalled:
+        def propose_question_frame(
+            self,
+            *,
+            question: str,
+            semantic_layer_context: dict[str, object],
+        ) -> question_interpreter.QuestionFrameProposal:
+            del question, semantic_layer_context
+            raise AssertionError(
+                "availability guard should short-circuit provider"
+            )
+
+    with connect_orders((("2026-01-03", "North", "1200.00"),)) as connection:
+        result = workflow_runner.run_data_assistant(
+            connection,
+            "What months do have revenue data?",
+            question_interpreter_provider=ProviderThatMustNotBeCalled(),
+            internal_identity=allowed_internal_identity,
+        )
+
+    assert result is sentinel_response
+    assert len(captured_non_answers) == 1
+    non_answer = captured_non_answers[0]
+    assert non_answer.stage == contracts.NonAnswerStage.QUESTION_INTERPRETER
+    assert (
+        non_answer.reason_code
+        == contracts.NonAnswerReasonCode.UNSUPPORTED_AVAILABILITY
+    )
+    # The honest availability reject must not masquerade as a clarification.
+    assert (
+        non_answer.reason_code
+        != contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD
+    )
+
+
 def test_data_assistant_denies_dataset_access_before_request_or_preparation(
     monkeypatch: pytest.MonkeyPatch,
     canonical_question: str,

@@ -24,7 +24,8 @@ _Avoid_: Capability, command, query type
 **Deferred Intent**:
 A type of **Data Question** intentionally left out of v1, including compare,
 explain, list top or bottom results, trend, forecast, prescribe, automated
-root-cause analysis, and background anomaly detection.
+root-cause analysis, background anomaly detection, and data-availability or
+coverage lookups (which periods or dimensions have data).
 _Avoid_: Unsupported feature, backlog item, advanced query
 
 **Unsupported Intent**:
