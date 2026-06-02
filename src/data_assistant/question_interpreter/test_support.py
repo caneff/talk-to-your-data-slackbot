@@ -63,6 +63,9 @@ def provider_that_must_not_be_called() -> (
 
 def provider_failure_provider(
     reason: str = "provider unavailable",
+    diagnostic_class: (
+        question_interpreter.ProviderFailureDiagnosticClass | None
+    ) = None,
 ) -> question_interpreter.QuestionInterpreterProvider:
     """Build a fake provider that returns a ProviderFailure."""
 
@@ -74,7 +77,10 @@ def provider_failure_provider(
             semantic_layer_context: dict[str, object],
         ) -> question_interpreter.ProviderFailure:
             del question, semantic_layer_context
-            return question_interpreter.ProviderFailure(reason=reason)
+            return question_interpreter.ProviderFailure(
+                reason=reason,
+                diagnostic_class=diagnostic_class,
+            )
 
     return ProviderFailureProvider()
 

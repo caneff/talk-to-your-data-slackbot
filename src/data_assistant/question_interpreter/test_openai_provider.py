@@ -503,7 +503,12 @@ def test_openai_provider_maps_refusal_to_provider_failure() -> None:
         semantic_layer_context={"datasets": []},
     )
 
-    assert result == question_interpreter.ProviderFailure(reason="cannot comply")
+    assert result == question_interpreter.ProviderFailure(
+        reason="cannot comply",
+        diagnostic_class=(
+            question_interpreter.ProviderFailureDiagnosticClass.PROVIDER_REFUSAL
+        ),
+    )
     assert len(parse_calls) == 1
 
 
@@ -573,6 +578,65 @@ def test_openai_provider_maps_exhausted_structured_output_attempts_to_failure() 
         reason=(
             "OpenAI provider failed after 2 structured output attempts: "
             "OpenAI provider returned no parsed output"
-        )
+        ),
+        diagnostic_class=(
+            question_interpreter.ProviderFailureDiagnosticClass.STRUCTURED_OUTPUT_RETRY_EXHAUSTED
+        ),
+    )
+    assert len(parse_calls) == 2
+
+
+def test_openai_provider_maps_parse_exception_to_provider_failure_diagnostic() -> None:
+    parse_calls: list[dict[str, object]] = []
+
+    provider = _openai_provider_returning_results(
+        (
+            RuntimeError("boom"),
+            RuntimeError("boom"),
+        ),
+        parse_calls=parse_calls,
+    )
+
+    result = provider.propose_question_frame(
+        question=test_support.CANONICAL_DATA_QUESTION,
+        semantic_layer_context={"datasets": []},
+    )
+
+    assert result == question_interpreter.ProviderFailure(
+        reason="OpenAI provider failed after 2 structured output attempts: boom",
+        diagnostic_class=(
+            question_interpreter.ProviderFailureDiagnosticClass.PROVIDER_EXCEPTION
+        ),
+    )
+    assert len(parse_calls) == 2
+
+
+def test_openai_provider_maps_mixed_retryable_failures_to_retry_exhausted() -> None:
+    parse_calls: list[dict[str, object]] = []
+
+    class FakeMissingParsedResponse:
+        output_parsed = None
+
+    provider = _openai_provider_returning_results(
+        (
+            RuntimeError("boom"),
+            FakeMissingParsedResponse(),
+        ),
+        parse_calls=parse_calls,
+    )
+
+    result = provider.propose_question_frame(
+        question=test_support.CANONICAL_DATA_QUESTION,
+        semantic_layer_context={"datasets": []},
+    )
+
+    assert result == question_interpreter.ProviderFailure(
+        reason=(
+            "OpenAI provider failed after 2 structured output attempts: "
+            "OpenAI provider returned no parsed output"
+        ),
+        diagnostic_class=(
+            question_interpreter.ProviderFailureDiagnosticClass.STRUCTURED_OUTPUT_RETRY_EXHAUSTED
+        ),
     )
     assert len(parse_calls) == 2

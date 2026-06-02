@@ -429,6 +429,19 @@ CONTRACT_SNAPSHOT_CASES = (
         ),
     ),
     provider_snapshot_case(
+        name="provider_failure_with_safe_diagnostic_context",
+        provider=interpreter_support.provider_failure_provider(
+            diagnostic_class=(
+                question_interpreter.ProviderFailureDiagnosticClass.STRUCTURED_OUTPUT_RETRY_EXHAUSTED
+            ),
+        ),
+        expected=contracts.NonAnswer(
+            stage=_STAGE,
+            reason_code=contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
+            context=("structured_output_retry_exhausted",),
+        ),
+    ),
+    provider_snapshot_case(
         name="invalid_provider_output",
         provider=interpreter_support.invalid_result_provider({"hello": "world"}),
         expected=non_answer_catalog.non_answer(

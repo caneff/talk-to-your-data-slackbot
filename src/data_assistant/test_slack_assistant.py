@@ -801,6 +801,51 @@ def test_on_user_message_logs_non_answer_record_with_reason_and_stage(
     assert record["flags"] == []
 
 
+def test_on_user_message_logs_provider_failure_diagnostic_context(
+    tmp_path: pathlib.Path,
+    connect_orders: collections.abc.Callable[
+        ..., contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
+    ],
+) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+    non_answer = contracts.NonAnswer(
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        reason_code=contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
+        context=("structured_output_retry_exhausted",),
+    )
+    final = contracts.FinalResponse(
+        text="I cannot answer safely yet because the provider could not respond.",
+        trust_summary=contracts.TrustSummary(),
+        response_kind=contracts.ResponseKind.UNSUPPORTED,
+        non_answer=non_answer,
+    )
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        _question: str,
+        _identity: contracts.InternalIdentity,
+        _progress_sink: contracts.ProgressSink,
+    ) -> slack_assistant.SlackWorkflowResult:
+        return final
+
+    _run_adapter(
+        log_path=log_path,
+        connect_orders=connect_orders,
+        answer_path=answer_path,
+    )
+
+    records = _read_log_records(log_path)
+    assert len(records) == 1
+    record = records[0]
+    assert record["outcome"] == "non_answer"
+    assert record["reason_code"] == "provider_failure"
+    assert record["stage"] == "question_interpreter"
+    assert record["context"] == ["structured_output_retry_exhausted"]
+    assert record["response_text"] == (
+        "I cannot answer safely yet because the provider could not respond."
+    )
+
+
 def test_on_user_message_logs_error_record_and_still_says_fallback(
     tmp_path: pathlib.Path,
     connect_orders: collections.abc.Callable[

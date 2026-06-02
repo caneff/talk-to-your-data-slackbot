@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import enum
 import typing
 
 import pydantic
@@ -117,11 +118,21 @@ class QuestionFrameProposal(pydantic.BaseModel):
     )
 
 
+class ProviderFailureDiagnosticClass(enum.StrEnum):
+    """Safe maintainer-facing classes for provider failure diagnosis."""
+
+    PROVIDER_EXCEPTION = "provider_exception"
+    PROVIDER_REFUSAL = "provider_refusal"
+    MISSING_PARSED_OUTPUT = "missing_parsed_output"
+    STRUCTURED_OUTPUT_RETRY_EXHAUSTED = "structured_output_retry_exhausted"
+
+
 @dataclasses.dataclass(frozen=True)
 class ProviderFailure:
     """Provider failed to produce a proposal."""
 
     reason: str
+    diagnostic_class: ProviderFailureDiagnosticClass | None = None
 
 
 class QuestionInterpreterProvider(typing.Protocol):

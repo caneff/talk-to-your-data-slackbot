@@ -71,9 +71,10 @@ def _promote_provider_result(
     semantic_layer: schema.SemanticLayer,
 ) -> contracts.StageResult[contracts.QuestionFrame]:
     if isinstance(raw_provider_result, ProviderFailure):
-        return non_answer_catalog.non_answer(
-            contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
+        return contracts.NonAnswer(
             stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+            reason_code=contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
+            context=_provider_failure_context(raw_provider_result),
         )
     if not isinstance(raw_provider_result, QuestionFrameProposal):
         return non_answer_catalog.non_answer(
@@ -140,6 +141,14 @@ def _promote_provider_result(
             time_scope=time_scope,
         )
     )
+
+
+def _provider_failure_context(
+    provider_failure: ProviderFailure,
+) -> tuple[str, ...]:
+    if provider_failure.diagnostic_class is None:
+        return ("provider failure",)
+    return (provider_failure.diagnostic_class.value,)
 
 
 def _derive_time_scope(

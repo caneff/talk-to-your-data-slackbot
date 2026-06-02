@@ -10,6 +10,7 @@ import data_assistant.openai_support as openai_support
 from data_assistant.openai_support import OpenAIInputMessage
 from data_assistant.question_interpreter.proposals import (
     ProviderFailure,
+    ProviderFailureDiagnosticClass,
     QuestionFrameProposal,
 )
 
@@ -81,6 +82,12 @@ class OpenAIQuestionInterpreterProvider:
             ),
             text_format=QuestionFrameProposal,
             failure_factory=lambda reason: ProviderFailure(reason=reason),
+            failure_with_diagnostic_factory=lambda reason, diagnostic_class: (
+                ProviderFailure(
+                    reason=reason,
+                    diagnostic_class=ProviderFailureDiagnosticClass(diagnostic_class),
+                )
+            ),
             extra_parse_kwargs={"temperature": 0},
             structured_output_attempts=_STRUCTURED_OUTPUT_ATTEMPTS,
         )

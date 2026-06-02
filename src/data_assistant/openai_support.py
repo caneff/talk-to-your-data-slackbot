@@ -40,6 +40,7 @@ FailureT = typing.TypeVar("FailureT")
 class _ParseFailure:
     reason: str
     retryable: bool
+    diagnostic_class: str
 
 
 class OpenAIResponsesClient(typing.Protocol):
@@ -128,6 +129,9 @@ def run_parse(
     input_messages: list[OpenAIInputMessage],
     text_format: type[ProposalT],
     failure_factory: collections.abc.Callable[[str], FailureT],
+    failure_with_diagnostic_factory: (
+        collections.abc.Callable[[str, str], FailureT] | None
+    ) = None,
     extra_parse_kwargs: dict[str, object] | None = None,
     structured_output_attempts: int = 1,
 ) -> ProposalT | FailureT:
@@ -143,6 +147,7 @@ def run_parse(
     if structured_output_attempts < 1:
         raise ValueError("structured_output_attempts must be at least 1")
     last_failure: _ParseFailure | None = None
+    seen_diagnostic_classes: set[str] = set()
     for _ in range(structured_output_attempts):
         result = _run_parse_once(
             client=client,
@@ -154,17 +159,39 @@ def run_parse(
         if not isinstance(result, _ParseFailure):
             return result
         if not result.retryable:
-            return failure_factory(result.reason)
+            return _build_failure(
+                reason=result.reason,
+                diagnostic_class=result.diagnostic_class,
+                failure_factory=failure_factory,
+                failure_with_diagnostic_factory=failure_with_diagnostic_factory,
+            )
         last_failure = result
+        seen_diagnostic_classes.add(result.diagnostic_class)
 
     if last_failure is None:
         raise AssertionError("structured output attempt loop must run at least once")
     if structured_output_attempts == 1:
-        return failure_factory(last_failure.reason)
-    return failure_factory(
-        "OpenAI provider failed after "
-        f"{structured_output_attempts} structured output attempts: "
-        f"{last_failure.reason}"
+        return _build_failure(
+            reason=last_failure.reason,
+            diagnostic_class=last_failure.diagnostic_class,
+            failure_factory=failure_factory,
+            failure_with_diagnostic_factory=failure_with_diagnostic_factory,
+        )
+    exhausted_diagnostic_class = (
+        "structured_output_retry_exhausted"
+        if last_failure.diagnostic_class == "missing_parsed_output"
+        or len(seen_diagnostic_classes) > 1
+        else last_failure.diagnostic_class
+    )
+    return _build_failure(
+        reason=(
+            "OpenAI provider failed after "
+            f"{structured_output_attempts} structured output attempts: "
+            f"{last_failure.reason}"
+        ),
+        diagnostic_class=exhausted_diagnostic_class,
+        failure_factory=failure_factory,
+        failure_with_diagnostic_factory=failure_with_diagnostic_factory,
     )
 
 
@@ -187,19 +214,39 @@ def _run_parse_once(
         return _ParseFailure(
             reason=str(error) or "OpenAI provider failed",
             retryable=True,
+            diagnostic_class="provider_exception",
         )
 
     refusal = extract_response_refusal(response)
     if refusal:
-        return _ParseFailure(reason=refusal, retryable=False)
+        return _ParseFailure(
+            reason=refusal,
+            retryable=False,
+            diagnostic_class="provider_refusal",
+        )
 
     parsed_output = getattr(response, "output_parsed", None)
     if not isinstance(parsed_output, text_format):
         return _ParseFailure(
             reason="OpenAI provider returned no parsed output",
             retryable=True,
+            diagnostic_class="missing_parsed_output",
         )
     return parsed_output
+
+
+def _build_failure(
+    *,
+    reason: str,
+    diagnostic_class: str,
+    failure_factory: collections.abc.Callable[[str], FailureT],
+    failure_with_diagnostic_factory: (
+        collections.abc.Callable[[str, str], FailureT] | None
+    ),
+) -> FailureT:
+    if failure_with_diagnostic_factory is None:
+        return failure_factory(reason)
+    return failure_with_diagnostic_factory(reason, diagnostic_class)
 
 
 def extract_response_refusal(response: object) -> str | None:
