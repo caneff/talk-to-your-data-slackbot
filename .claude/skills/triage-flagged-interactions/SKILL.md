@@ -68,15 +68,17 @@ If shape + `key_data` cannot confirm the root cause, reproduce locally (the log 
 - Compare the produced `DataAssistantRun` trace to the logged record.
 Never assert a cause that requires data the record does not carry.
 
-### 5. Propose action
+### 5. Recommend action (read-only by default)
+Default triage is read-only: present findings, root-cause mapping, and proposed issue/fix text. Do **not** create GitHub issues, comment on issues, clear flags, rewrite logs, or mutate any external system unless the user explicitly confirms that action in the current turn.
+
 Group cases by root-caused layer (several flags often share one cause). For each group recommend the smallest fix and route it:
-- Clear, bounded fix → suggest `/handle-next-issue` (or a direct fix) naming the file/layer.
-- Broader or fuzzy → suggest `/to-issues` to slice it.
-- `investigate` flag → route to a **code investigation / engineering issue** (use `/to-issues` or a direct fix on the layer that emitted the signal), NOT a response-copy fix — the user-facing answer is fine; the system behavior is what needs analyzing.
+- Clear, bounded fix → propose `/handle-next-issue` (or a direct fix) naming the file/layer, and include draft issue/fix text if useful.
+- Broader or fuzzy → propose `/to-issues` to slice it, and include draft issue text if useful.
+- `investigate` flag → propose a **code investigation / engineering issue** (via `/to-issues` or a direct fix on the layer that emitted the signal), NOT a response-copy fix — the user-facing answer is fine; the system behavior is what needs analyzing.
 - Already-tracked root cause → if a flag's root cause is already covered by an open issue, just map the `id` to that issue number and move on. Do **not** file a duplicate, do **not** comment on the existing issue, and do **not** propose "repeat occurrence" / "additional occurrence" notes. Repeat flags on a known cause are confirmation noise, not new signal; the mapping in your triage output is the only record needed.
 Reference flags by `id` so the user can trace each back to its log line.
 
-**Apply the `priority:low` label to every issue you file from a flag.** Flagged-interaction issues are demand-driven noise that should NOT jump ahead of roadmap work; the label tells `handle-next-issue` not to favor them (it picks default-priority issues first). Create the label if absent, then file with it:
+When the user explicitly confirms filing an issue in the current turn, **apply the `priority:low` label to every issue you file from a flag** unless the user says a particular flag is urgent. Flagged-interaction issues are demand-driven noise that should NOT jump ahead of roadmap work; the label tells `handle-next-issue` not to favor them (it picks default-priority issues first). Create the label if absent, then file with it:
 ```bash
 gh label create "priority:low" --color c5def5 \
   --description "Deprioritized: do not favor over default-priority work when picking the next issue" 2>/dev/null || true
@@ -85,7 +87,7 @@ gh issue create --label "priority:low" --label bug --title "..." --body "..."
 If the user explicitly says a particular flag is urgent, omit the label for that one and say so.
 
 ### 6. Offer to clear the handled flags (only on explicit confirmation)
-After filing the issues / fixes, a flag is *handled* — it should drop out of the flagged set so the next triage starts clean. Offer to clear it:
+After the user confirms and you actually file the issue(s) or complete the fix(es), a flag is *handled* — it should drop out of the flagged set so the next triage starts clean. Offer to clear it:
 
 - List the exact `id`s you handled this session and the issue/fix each maps to.
 - **Ask** the user whether to clear those flags. Default to **not** clearing. Never clear without an explicit yes.
@@ -97,7 +99,8 @@ After filing the issues / fixes, a flag is *handled* — it should drop out of t
 - Clear **only** the `id`s you actually handled and the user confirmed. Leave every other flagged record untouched. Never delete a record or rewrite anything other than the `flags` of confirmed ids.
 
 ## Guardrails
-- The log is read-only during analysis. The **only** permitted write is `clear_flags` on confirmed-handled ids, and **only** after the user explicitly approves it (step 6). Never delete a record, never rewrite anything but the `flags` of confirmed ids, never clear a flag you did not handle.
+- Triage is read-only until the user explicitly confirms a mutation in the current turn. Do not create issues, comment on issues, clear flags, rewrite logs, or mutate external systems during default triage.
+- The log is read-only during analysis. The **only** permitted log write is `clear_flags` on confirmed-handled ids, and **only** after the user explicitly approves it (step 6). Never delete a record, never rewrite anything but the `flags` of confirmed ids, never clear a flag you did not handle.
 - Never fabricate questions, numbers, or rows not present in the record. Cite `id`s.
 - Respect the sanitization boundary — reproduce locally instead of inferring hidden cell values.
 - Flagged ≠ confirmed bug. A flag is a maintainer's signal; verify the root cause before proposing a fix.
