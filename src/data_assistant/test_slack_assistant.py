@@ -20,6 +20,7 @@ import duckdb
 import pandas as pd
 import pytest
 
+import data_assistant.assistant_thread_pointer as assistant_thread_pointer
 import data_assistant.interaction_log as interaction_log
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.slack_assistant as slack_assistant
@@ -154,15 +155,23 @@ def _unused_answer_path(
     raise AssertionError("thread_started must not run the answer path")
 
 
-def test_on_thread_started_posts_greeting_and_suggested_prompts() -> None:
+def test_on_thread_started_posts_greeting_and_suggested_prompts(
+    tmp_path: pathlib.Path,
+) -> None:
     adapter = slack_assistant.AssistantAdapter(
         connection_factory=_unused_connection_factory,
         answer_path=_unused_answer_path,
+        pointer_path=tmp_path / "last_assistant_thread.json",
     )
     say = RecordingSay()
     set_suggested_prompts = RecordingSuggestedPrompts()
 
-    adapter.on_thread_started(say=say, set_suggested_prompts=set_suggested_prompts)
+    adapter.on_thread_started(
+        say=say,
+        set_suggested_prompts=set_suggested_prompts,
+        channel="C123",
+        thread_ts="1748880000.123456",
+    )
 
     assert say.calls == [(slack_assistant.GREETING, None)]
     assert set_suggested_prompts.calls == [
@@ -172,6 +181,61 @@ def test_on_thread_started_posts_greeting_and_suggested_prompts() -> None:
     assert len(slack_assistant.SUGGESTED_PROMPTS) == 3
     for prompt in set_suggested_prompts.calls[0]:
         assert set(prompt) == {"title", "message"}
+
+
+def test_on_thread_started_writes_assistant_thread_pointer(
+    tmp_path: pathlib.Path,
+) -> None:
+    pointer_path = tmp_path / "last_assistant_thread.json"
+    adapter = slack_assistant.AssistantAdapter(
+        connection_factory=_unused_connection_factory,
+        answer_path=_unused_answer_path,
+        pointer_path=pointer_path,
+    )
+
+    adapter.on_thread_started(
+        say=RecordingSay(),
+        set_suggested_prompts=RecordingSuggestedPrompts(),
+        channel="C123",
+        thread_ts="1748880000.123456",
+    )
+
+    # The QA driver later reads this to auto-discover the thread.
+    assert assistant_thread_pointer.read_latest(pointer_path) == (
+        "C123",
+        "1748880000.123456",
+    )
+
+
+def test_on_thread_started_greets_even_if_pointer_write_fails(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A pointer-write failure must NEVER break the greeting/suggested prompts.
+
+    Same 'reply wins' boundary as the Interaction Log capture: best-effort
+    discovery state is strictly subordinate to the user-facing greeting.
+    """
+    # Point at a path that cannot be created (a file used as a directory).
+    blocker = tmp_path / "blocker"
+    blocker.write_text("not a directory", encoding="utf-8")
+    adapter = slack_assistant.AssistantAdapter(
+        connection_factory=_unused_connection_factory,
+        answer_path=_unused_answer_path,
+        pointer_path=blocker / "last_assistant_thread.json",
+    )
+    say = RecordingSay()
+    set_suggested_prompts = RecordingSuggestedPrompts()
+
+    adapter.on_thread_started(
+        say=say,
+        set_suggested_prompts=set_suggested_prompts,
+        channel="C123",
+        thread_ts="1748880000.123456",
+    )
+
+    # Greeting + suggested prompts still went out despite the failed write.
+    assert say.calls == [(slack_assistant.GREETING, None)]
+    assert len(set_suggested_prompts.calls) == 1
 
 
 def test_on_user_message_sets_status_runs_pipeline_then_says(
@@ -888,6 +952,79 @@ def test_on_user_message_logs_error_record_and_still_says_fallback(
     assert record["error_type"] == "RuntimeError"
     assert record["error_message"] == "answer path blew up"
     assert record["flags"] == []
+
+
+def test_answer_and_render_returns_id_response_blocks_and_logs_one_record(
+    tmp_path: pathlib.Path,
+    connect_orders: collections.abc.Callable[
+        ..., contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
+    ],
+) -> None:
+    """The extracted success core: id -> answer -> log -> render-with-buttons.
+
+    Both ``on_user_message`` and the Slack QA driver call this, so it must return
+    everything a caller needs to post the reply AND append exactly one record.
+    """
+    log_path = tmp_path / "interactions.jsonl"
+    set_status = RecordingStatus()
+    seen_questions: list[str] = []
+    blocks: tuple[contracts.SlackBlock, ...] = (
+        {"type": "section", "text": {"type": "mrkdwn", "text": "trust"}},
+    )
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        question: str,
+        _identity: contracts.InternalIdentity,
+        progress_sink: contracts.ProgressSink,
+    ) -> slack_assistant.SlackWorkflowResult:
+        progress_sink(EXPECTED_PROGRESS_STATUSES[0])
+        seen_questions.append(question)
+        return _final_response(text="Final answer text.", blocks=blocks)
+
+    adapter = slack_assistant.AssistantAdapter(
+        connection_factory=_connection_factory(connect_orders),
+        answer_path=answer_path,
+        model_label="gpt-4o-mini",
+        log_path=log_path,
+    )
+
+    interaction_id, final_response, reply_blocks = adapter.answer_and_render(
+        text="What was total revenue by region in January 2026?",
+        user="U123",
+        set_status=set_status,
+    )
+
+    # Progress flows through the injected status sink.
+    assert set_status.calls == [EXPECTED_PROGRESS_STATUSES[0]]
+    assert seen_questions == ["What was total revenue by region in January 2026?"]
+    # The triple lets the driver post the reply as the bot.
+    assert isinstance(interaction_id, str) and interaction_id
+    assert final_response.text == "Final answer text."
+    reply_blocks = tuple(reply_blocks)
+    assert reply_blocks[: len(blocks)] == blocks
+    assert _action_ids_in(reply_blocks) == {
+        slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
+        slack_assistant.FLAG_FORMATTING_ACTION_ID,
+        slack_assistant.FLAG_INVESTIGATE_ACTION_ID,
+    }
+    # The flag buttons carry the SAME id that was returned, so a clicked flag
+    # attaches to the record this call appended.
+    for block in reply_blocks:
+        if block.get("type") != "actions":
+            continue
+        for element in _button_elements(block):
+            assert element["value"] == interaction_id
+
+    # Exactly one record was appended, under the returned id.
+    records = _read_log_records(log_path)
+    assert len(records) == 1
+    assert records[0]["id"] == interaction_id
+    # A bare FinalResponse records as a non_answer (ADR-0016 result branching);
+    # the point here is the single record under the returned id, not its outcome.
+    assert records[0]["outcome"] == "non_answer"
+    assert records[0]["model"] == "gpt-4o-mini"
+    assert records[0]["user"] == "U123"
 
 
 def test_on_user_message_log_failure_does_not_break_user_reply(

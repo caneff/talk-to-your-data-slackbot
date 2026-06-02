@@ -476,7 +476,7 @@ def test_main_starts_socket_mode_with_dev_connection_factory(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: pathlib.Path,
 ) -> None:
-    dev_connection_factory = slack_runtime._dev_connection_factory  # pyright: ignore[reportPrivateUsage]
+    dev_connection_factory = slack_runtime.dev_connection_factory
     dev_identity_resolver: slack_assistant.AssistantIdentityResolver = (
         slack_assistant.dev_identity
     )
