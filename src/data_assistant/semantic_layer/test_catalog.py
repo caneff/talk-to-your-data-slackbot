@@ -30,6 +30,31 @@ def test_catalog_rejects_duplicate_table_ids() -> None:
         )
 
 
+def test_catalog_aggregates_duplicate_and_relationship_errors() -> None:
+    with pytest.raises(ValueError) as exc_info:
+        SemanticLayerCatalog(
+            datasets=(
+                _dataset(dataset_id="commerce", table_ids=("orders", "missing")),
+                _dataset(dataset_id="commerce", table_ids=("orders", "missing")),
+            ),
+            tables=(
+                _table(table_id="orders", dataset_id="commerce"),
+                _table(table_id="orders", dataset_id="commerce"),
+                _table(table_id="orphan", dataset_id="orphan"),
+            ),
+        )
+
+    assert str(exc_info.value) == "\n".join(
+        (
+            "Duplicate Curated Dataset ids: commerce",
+            "Duplicate Dataset Table ids: orders",
+            "Unknown Dataset Table refs for Curated Dataset commerce: missing",
+            "Dataset Table refs listed by multiple Curated Datasets: orders",
+            "Orphan Dataset Tables not listed by any Curated Dataset: orphan",
+        )
+    )
+
+
 def test_catalog_aggregates_structural_relationship_errors() -> None:
     with pytest.raises(ValueError) as exc_info:
         SemanticLayerCatalog(

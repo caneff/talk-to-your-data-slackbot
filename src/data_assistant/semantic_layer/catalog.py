@@ -17,19 +17,22 @@ class SemanticLayerCatalog:
     tables: tuple[schema.DatasetTable, ...]
 
     def __post_init__(self) -> None:
+        errors: list[str] = []
         duplicate_dataset_ids = _duplicate_ids(
             dataset.dataset_id for dataset in self.datasets
         )
         if duplicate_dataset_ids:
-            msg = "Duplicate Curated Dataset ids: " + ", ".join(duplicate_dataset_ids)
-            raise ValueError(msg)
+            errors.append(
+                "Duplicate Curated Dataset ids: " + ", ".join(duplicate_dataset_ids)
+            )
         duplicate_table_ids = _duplicate_ids(table.table_id for table in self.tables)
         if duplicate_table_ids:
-            msg = "Duplicate Dataset Table ids: " + ", ".join(duplicate_table_ids)
-            raise ValueError(msg)
-        relationship_errors = _relationship_errors(self.datasets, self.tables)
-        if relationship_errors:
-            raise ValueError("\n".join(relationship_errors))
+            errors.append(
+                "Duplicate Dataset Table ids: " + ", ".join(duplicate_table_ids)
+            )
+        errors.extend(_relationship_errors(self.datasets, self.tables))
+        if errors:
+            raise ValueError("\n".join(_unique_messages(errors)))
 
     def find_dataset(self, dataset_id: str) -> schema.CuratedDataset:
         for dataset in self.datasets:
@@ -118,4 +121,15 @@ def _relationship_errors(
             + ", ".join(orphan_table_ids)
         )
 
-    return tuple(errors)
+    return _unique_messages(errors)
+
+
+def _unique_messages(messages: collections.abc.Iterable[str]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    unique_messages: list[str] = []
+    for message in messages:
+        if message in seen:
+            continue
+        seen.add(message)
+        unique_messages.append(message)
+    return tuple(unique_messages)
