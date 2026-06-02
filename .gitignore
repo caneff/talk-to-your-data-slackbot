@@ -5,6 +5,7 @@
 .pyright/
 .env
 logs/
+.claude/scheduled_tasks.lock
 __pycache__/
 *.py[cod]
 dist/
