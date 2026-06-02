@@ -100,6 +100,13 @@ FlagStore: typing.TypeAlias = collections_abc.Callable[[str, str], bool]
 FLAG_STATUS_BLOCK_ID: typing.Final[str] = "flag_status"
 _FLAG_STATUS_PREFIX: typing.Final[str] = "✓ Flagged: "
 
+# Every reply leads with a small grey echo of the question so a reader can pair a
+# response back to what was asked. We cap the echoed text to keep the context
+# line short; the FULL question still lands in the Interaction Log ``question``
+# field, so truncation here is purely cosmetic.
+QUESTION_ECHO_MAX_CHARS: typing.Final[int] = 200
+_QUESTION_ECHO_PREFIX: typing.Final[str] = "❓ "
+
 
 def flag_action_blocks(interaction_id: str) -> tuple[contracts.SlackBlock, ...]:
     """Build the Slack ``actions`` block with the three flag buttons.
@@ -149,6 +156,22 @@ def _flag_status_block(categories: tuple[str, ...]) -> contracts.SlackBlock:
                 "text": _FLAG_STATUS_PREFIX + ", ".join(categories),
             }
         ],
+    }
+
+
+def _question_echo_block(question: str) -> contracts.SlackBlock:
+    """Build the leading context block that echoes the original question.
+
+    Renders small + grey above the answer body so a reader can pair a reply to
+    its question. The text is truncated to :data:`QUESTION_ECHO_MAX_CHARS` with a
+    ``…`` suffix when over the cap -- the untruncated question still lands in the
+    Interaction Log ``question`` field, so this trim is cosmetic only.
+    """
+    if len(question) > QUESTION_ECHO_MAX_CHARS:
+        question = question[:QUESTION_ECHO_MAX_CHARS] + "…"
+    return {
+        "type": "context",
+        "elements": [{"type": "mrkdwn", "text": _QUESTION_ECHO_PREFIX + question}],
     }
 
 
@@ -602,8 +625,10 @@ class AssistantAdapter:
                 result=result,
             ),
         )
-        reply_blocks = _visible_response_blocks(final_response) + flag_action_blocks(
-            interaction_id
+        reply_blocks = (
+            (_question_echo_block(text),)
+            + _visible_response_blocks(final_response)
+            + flag_action_blocks(interaction_id)
         )
         return interaction_id, final_response, reply_blocks
 
@@ -681,7 +706,11 @@ class AssistantAdapter:
                 "type": "section",
                 "text": {"type": "mrkdwn", "text": RUNTIME_FALLBACK_MESSAGE},
             }
-            fallback_blocks = (fallback_section,) + flag_action_blocks(interaction_id)
+            fallback_blocks = (
+                (_question_echo_block(text),)
+                + (fallback_section,)
+                + flag_action_blocks(interaction_id)
+            )
             say(RUNTIME_FALLBACK_MESSAGE, blocks=fallback_blocks)
 
     def _record_interaction(
