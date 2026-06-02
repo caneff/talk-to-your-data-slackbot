@@ -278,7 +278,10 @@ def _parse_args(argv: collections_abc.Sequence[str]) -> argparse.Namespace:
         "--semantic-layer-path",
         type=pathlib.Path,
         default=None,
-        help="Semantic Layer directory to load instead of semantic_layer/.",
+        help=(
+            "Semantic Layer directory to load instead of "
+            "examples/commerce_smoke/semantic_layer/."
+        ),
     )
     parser.add_argument(
         "--duckdb-path",
