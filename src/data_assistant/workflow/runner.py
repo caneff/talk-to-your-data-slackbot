@@ -108,6 +108,7 @@ def run_data_assistant(
         )
 
     # 4. Prepare Data.
+    progress_sink(RUNNING_NUMBERS_STATUS)
     data_request_result = data_requester.create_data_request(
         question_frame=question_frame,
         resolved_match=available_data_resolution.resolved_match,
@@ -119,7 +120,6 @@ def run_data_assistant(
         )
     data_request = data_request_result.value
 
-    progress_sink(RUNNING_NUMBERS_STATUS)
     prepared_data = data_preparation.prepare_data(
         data_request=data_request,
         connection=connection,
