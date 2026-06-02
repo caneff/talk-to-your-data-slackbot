@@ -159,6 +159,40 @@ Override the command only if you want the tiny local smoke-test fixture instead:
 docker run --env-file .env talk-to-your-data-slackbot:local python -m data_assistant.slack_runtime
 ```
 
+## Host on Render (time-boxed demo)
+
+For a short, time-boxed demo (~1 month) where the bot should answer without a
+laptop running, deploy the same Docker image as a Render **Background Worker**.
+This builds on the image from "Run in Docker" above — no rebuild or app change.
+
+Use the `render.yaml` Blueprint at the repo root: in Render, create a new
+Blueprint from this repo and it provisions a Background Worker built from
+`Dockerfile`. A Background Worker has no inbound port and never spins down,
+which matches Socket Mode (the adapter dials an outbound WebSocket to Slack and
+binds no port — so the Worker needs no port config). The free tier does not
+support Background Workers, so the Blueprint pins the lowest paid `starter` plan.
+
+In the Render dashboard, set the secrets (declared `sync: false`, never
+committed):
+
+- `SLACK_BOT_TOKEN`
+- `SLACK_APP_TOKEN`
+- `OPENAI_API_KEY`
+- optional `OPENAI_MODEL`
+  default is `gpt-4o-mini`
+
+The hosted Worker starts the Retail Operations demo by default, the same as the
+local image, and still requires the Slack app from `slack-app-manifest.yaml`.
+
+**Cost warning:** the `starter` plan bills for the whole time the Worker runs,
+and live OpenAI API cost is incurred per Data Question anyone asks while the
+hosted demo is up.
+
+**End-of-demo shutdown:** when the demo window is over, suspend or delete the
+Render Worker (or delete the Blueprint) so the paid Worker stops billing. The
+standing-charge tradeoff is only accepted for the boxed demo window; see
+`docs/adr/0013-demo-runs-via-local-docker-not-render.md`.
+
 ## Manual Slack smoke test
 
 1. Start the adapter with `uv run python -m data_assistant.slack_runtime`.
