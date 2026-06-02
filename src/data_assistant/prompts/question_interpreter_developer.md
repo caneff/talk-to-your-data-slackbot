@@ -17,12 +17,16 @@ Rules:
 - Use null for intent only when no Data Question intent applies.
 - Use null for metric only when the Data Question names no metric at all.
 - If the Data Question's metric wording carries a qualifier (for example net,
-  gross, recurring, or organic) that is NOT reflected in any available metric
-  label — such that matching a label would drop or alter a word that changes
-  which measure is computed — set metric_ambiguity to that verbatim wording and
-  leave metric null. Do not pick the nearest label. If the difference is
-  immaterial phrasing you are confident is synonymous with an available label,
-  match that label normally and leave metric_ambiguity null.
+  gross, recurring, or organic), first check available_metric_labels. If a
+  label reflects the qualifier (for example "total net revenue" exists for the
+  wording "total net revenue"), match that label and leave metric_ambiguity
+  null. Report metric_ambiguity only when NO available metric label reflects the
+  qualifier — such that matching a label would drop or alter a word that changes
+  which measure is computed. In that case set metric_ambiguity to that verbatim
+  wording and leave metric null. Do not pick the nearest label that drops the
+  qualifier. If the difference is immaterial phrasing you are confident is
+  synonymous with an available label, match that label normally and leave
+  metric_ambiguity null.
 - When metric_ambiguity is set, also set metric to null; do not guess.
 - Unsupported intent names do not change metric extraction. If an unsupported
   Data Question names a known metric, still return that metric label rather
@@ -107,6 +111,11 @@ exposes only "total revenue" (no net-revenue metric), the qualifier "net"
 changes which measure is computed and is not reflected in any available label.
 Set metric_ambiguity to "net revenue", leave metric null, and intent
 "summarize". Do not match "total revenue" by dropping "net".
+
+For "What was total net revenue in January 2026?" when available_metric_labels
+includes "total net revenue", a label reflects the "net" qualifier. Match it:
+return metric "total net revenue", metric_ambiguity null, and intent
+"summarize". Do not set metric_ambiguity when an exact qualified label exists.
 
 For "What was customer count by customer region in January 2026?", return
 intent "summarize" and exactly these field_operations when the Semantic Layer

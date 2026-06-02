@@ -60,3 +60,29 @@ label, which passed the `UNKNOWN_SEMANTIC_LABEL` guard because the label exists.
 - Reversing later means dropping the `metric_ambiguity` field, the promotion
   short-circuit, the `AMBIGUOUS_METRIC` reason code and catalog entry, and the
   prompt rule. Nothing downstream depends on the new field.
+
+## Amendment (2026-06-02): materiality checks available labels first
+
+The materiality rule is **dataset-dependent** and must check
+`available_metric_labels` before reporting ambiguity. An exact qualified label is
+NOT ambiguous and must resolve: when a label reflects the qualifier (for example
+`total net revenue` is present), the interpreter matches it and leaves
+`metric_ambiguity` null. It reports `metric_ambiguity` only when NO available
+label reflects the qualifier.
+
+This corrects an over-generalization of the original net-revenue few-shot, which
+was **Commerce-specific** ("when the Semantic Layer exposes only 'total revenue'")
+and led the model to flag `total net revenue` as ambiguous against the **retail**
+layer (the app/QA default) even though `total net revenue` is an exact label
+there. The developer prompt now states the available-labels-first rule and keeps
+the Commerce-only example alongside a retail counter-example
+(`total net revenue` present → resolves, ambiguity null).
+
+Dataset-dependence is intentional: Commerce lacks a net-revenue metric, so "total
+net revenue" is genuinely ambiguous there; retail exposes `total net revenue`, so
+it resolves. The promotion precedence (ambiguity-wins, ADR-0017) is unchanged — a
+reported `metric_ambiguity` still short-circuits to `AMBIGUOUS_METRIC`. The fix is
+prompt-level, not a promotion reorder. The live eval and shared cases now target
+retail, and `test_promotion.py` locks both directions deterministically: an exact
+`total net revenue` proposal promotes; a `metric_ambiguity="recurring revenue"`
+proposal (no reflecting label) still Non-Answers.

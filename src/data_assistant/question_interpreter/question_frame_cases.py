@@ -1,4 +1,12 @@
-"""Shared provider-facing Question Frame cases for evals and demo replay."""
+"""Shared provider-facing Question Frame cases for evals and demo replay.
+
+These cases target the retail Semantic Layer
+(`examples/retail_ops_demo/semantic_layer`), the app/QA default that the live
+eval loads. Labels here must match the retail YAMLs:
+`demo_orders.yaml` (metrics incl. `total net revenue`; fields `store region`,
+`order channel`, `order date` range_filter) and `demo_customers.yaml`
+(`customer count`; fields `customer region`, `customer created date`).
+"""
 
 from __future__ import annotations
 
@@ -34,10 +42,10 @@ def _proposal(
     )
 
 
-def _group_by_region() -> question_interpreter.GroupByOperationProposal:
+def _group_by_store_region() -> question_interpreter.GroupByOperationProposal:
     return question_interpreter.GroupByOperationProposal(
         operation="group_by",
-        field="region",
+        field="store region",
     )
 
 
@@ -59,44 +67,48 @@ def _january_2026_order_date_filter() -> (
     )
 
 
-def _january_2026_created_date_filter() -> (
+def _january_2026_customer_created_date_filter() -> (
     question_interpreter.RangeFilterOperationProposal
 ):
     return question_interpreter.RangeFilterOperationProposal(
         operation="range_filter",
-        field="created date",
+        field="customer created date",
         lower="2026-01-01",
         upper="2026-01-31",
     )
 
 
-def _region_filter(value: str) -> question_interpreter.IncludeFilterOperationProposal:
+def _order_channel_filter(
+    value: str,
+) -> question_interpreter.IncludeFilterOperationProposal:
     return question_interpreter.IncludeFilterOperationProposal(
         operation="include_filter",
-        field="region",
+        field="order channel",
         values=(value,),
     )
 
 
-def _january_revenue_by_region_proposal() -> question_interpreter.QuestionFrameProposal:
+def _january_net_revenue_by_store_region_proposal() -> (
+    question_interpreter.QuestionFrameProposal
+):
     return _proposal(
         intent="summarize",
-        metric="total revenue",
+        metric="total net revenue",
         field_operations=(
-            _group_by_region(),
+            _group_by_store_region(),
             _january_2026_order_date_filter(),
         ),
     )
 
 
-def _january_revenue_rank_region_proposal() -> (
+def _january_net_revenue_rank_store_region_proposal() -> (
     question_interpreter.QuestionFrameProposal
 ):
     return _proposal(
         intent="rank",
-        metric="total revenue",
+        metric="total net revenue",
         field_operations=(
-            _group_by_region(),
+            _group_by_store_region(),
             _january_2026_order_date_filter(),
         ),
     )
@@ -110,39 +122,39 @@ def _january_customer_count_by_customer_region_proposal() -> (
         metric="customer count",
         field_operations=(
             _group_by_customer_region(),
-            _january_2026_created_date_filter(),
+            _january_2026_customer_created_date_filter(),
         ),
     )
 
 
-def _missing_time_scope_revenue_by_region_proposal() -> (
+def _missing_time_scope_net_revenue_by_store_region_proposal() -> (
     question_interpreter.QuestionFrameProposal
 ):
     return _proposal(
         intent="summarize",
-        metric="total revenue",
-        field_operations=(_group_by_region(),),
+        metric="total net revenue",
+        field_operations=(_group_by_store_region(),),
     )
 
 
-def _net_revenue_metric_ambiguity_proposal() -> (
+def _recurring_revenue_metric_ambiguity_proposal() -> (
     question_interpreter.QuestionFrameProposal
 ):
     return _proposal(
         intent="summarize",
         metric=None,
-        metric_ambiguity="net revenue",
+        metric_ambiguity="recurring revenue",
         field_operations=(_january_2026_order_date_filter(),),
     )
 
 
-def _all_time_region_value_revenue_proposal(
+def _all_time_net_revenue_for_channel_value_proposal(
     value: str,
 ) -> question_interpreter.QuestionFrameProposal:
     return _proposal(
         intent="summarize",
-        metric="total revenue",
-        field_operations=(_region_filter(value),),
+        metric="total net revenue",
+        field_operations=(_order_channel_filter(value),),
         all_time=True,
     )
 
@@ -150,42 +162,44 @@ def _all_time_region_value_revenue_proposal(
 SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
     SharedQuestionFrameCase(
         name="canonical_question",
-        question="What was total revenue by region in January 2026?",
-        expected=_january_revenue_by_region_proposal(),
+        question="What was total net revenue by store region in January 2026?",
+        expected=_january_net_revenue_by_store_region_proposal(),
     ),
     SharedQuestionFrameCase(
-        name="show_total_revenue_by_region",
-        question="Show total revenue by region in January 2026.",
-        expected=_january_revenue_by_region_proposal(),
+        name="show_total_net_revenue_by_store_region",
+        question="Show total net revenue by store region in January 2026.",
+        expected=_january_net_revenue_by_store_region_proposal(),
     ),
     SharedQuestionFrameCase(
-        name="summarize_total_revenue_by_region",
-        question="Summarize total revenue by region for January 2026.",
-        expected=_january_revenue_by_region_proposal(),
+        name="summarize_total_net_revenue_by_store_region",
+        question="Summarize total net revenue by store region for January 2026.",
+        expected=_january_net_revenue_by_store_region_proposal(),
     ),
     SharedQuestionFrameCase(
-        name="rank_total_revenue_by_region",
-        question="Which region had the highest total revenue in January 2026?",
-        expected=_january_revenue_rank_region_proposal(),
+        name="rank_total_net_revenue_by_store_region",
+        question=(
+            "Which store region had the highest total net revenue in January 2026?"
+        ),
+        expected=_january_net_revenue_rank_store_region_proposal(),
     ),
     SharedQuestionFrameCase(
-        name="customer_count_by_region",
+        name="customer_count_by_customer_region",
         question="What was customer count by customer region in January 2026?",
         expected=_january_customer_count_by_customer_region_proposal(),
     ),
     SharedQuestionFrameCase(
         name="safe_non_answer_question",
-        question="What was total revenue by region?",
-        expected=_missing_time_scope_revenue_by_region_proposal(),
+        question="What was total net revenue by store region?",
+        expected=_missing_time_scope_net_revenue_by_store_region_proposal(),
     ),
     SharedQuestionFrameCase(
-        name="net_revenue_metric_ambiguity",
-        question="What was total net revenue in January 2026?",
-        expected=_net_revenue_metric_ambiguity_proposal(),
+        name="recurring_revenue_metric_ambiguity",
+        question="What was total recurring revenue in January 2026?",
+        expected=_recurring_revenue_metric_ambiguity_proposal(),
     ),
     SharedQuestionFrameCase(
-        name="all_time_revenue_for_region_value",
-        question="What was total revenue in the West region for all time?",
-        expected=_all_time_region_value_revenue_proposal("West"),
+        name="all_time_net_revenue_for_channel_value",
+        question="What was total net revenue for the Web order channel for all time?",
+        expected=_all_time_net_revenue_for_channel_value_proposal("Web"),
     ),
 )

@@ -19,6 +19,7 @@ import data_assistant.question_interpreter as question_interpreter
 import data_assistant.question_interpreter.question_frame_cases as question_frame_cases
 import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.semantic_layer.schema as schema
+import data_assistant.slack_runtime as slack_runtime
 
 ProviderResult: typing.TypeAlias = (
     question_interpreter.QuestionFrameProposal | question_interpreter.ProviderFailure
@@ -303,7 +304,9 @@ def main(
 
     report = run_live_question_interpreter_eval(
         provider=provider,
-        semantic_layer=semantic_layer_loader.load_semantic_layer(),
+        semantic_layer=semantic_layer_loader.load_semantic_layer(
+            slack_runtime.RETAIL_SEMANTIC_LAYER_PATH
+        ),
         progress=args.progress,
         progress_file=stderr,
     )

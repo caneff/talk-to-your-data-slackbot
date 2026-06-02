@@ -12,6 +12,7 @@ import data_assistant.question_interpreter.test_support as test_support
 import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_layer.testing_support as semantic_layer_testing
+import data_assistant.slack_runtime as slack_runtime
 
 
 def test_compare_proposal_matches_exact_meaning() -> None:
@@ -698,11 +699,11 @@ def test_default_live_eval_cases_come_from_shared_question_frame_cases() -> None
     )
 
 
-def test_default_live_eval_includes_customer_count_by_region_case() -> None:
+def test_default_live_eval_includes_customer_count_by_customer_region_case() -> None:
     case = next(
         case
         for case in live_eval.DEFAULT_CASES
-        if case.name == "customer_count_by_region"
+        if case.name == "customer_count_by_customer_region"
     )
 
     assert case.enabled is True
@@ -719,7 +720,7 @@ def test_default_live_eval_includes_customer_count_by_region_case() -> None:
             ),
             question_interpreter.RangeFilterOperationProposal(
                 operation="range_filter",
-                field="created date",
+                field="customer created date",
                 lower="2026-01-01",
                 upper="2026-01-31",
             ),
@@ -736,6 +737,7 @@ def test_main_loads_real_semantic_layer_for_live_eval(
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     loaded_semantic_layer = semantic_layer_testing.semantic_layer_with_table()
     captured_semantic_layers: list[schema.SemanticLayer] = []
+    captured_paths: list[pathlib.Path] = []
 
     class FakeProvider:
         def propose_question_frame(
@@ -753,7 +755,10 @@ def test_main_loads_real_semantic_layer_for_live_eval(
         assert environ["OPENAI_API_KEY"] == "dotenv-key"
         return FakeProvider()
 
-    def fake_load_semantic_layer() -> schema.SemanticLayer:
+    def fake_load_semantic_layer(
+        path: pathlib.Path = semantic_layer_loader.DEFAULT_SEMANTIC_LAYER_PATH,
+    ) -> schema.SemanticLayer:
+        captured_paths.append(path)
         return loaded_semantic_layer
 
     def fake_run_live_eval(
@@ -794,3 +799,4 @@ def test_main_loads_real_semantic_layer_for_live_eval(
 
     assert exit_code == 0
     assert captured_semantic_layers == [loaded_semantic_layer]
+    assert captured_paths == [slack_runtime.RETAIL_SEMANTIC_LAYER_PATH]
