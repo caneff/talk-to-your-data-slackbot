@@ -1,0 +1,26 @@
+# Render Blueprint for the time-boxed (~1 month) demo.
+#
+# Deploys the existing Dockerfile as a Background Worker: a long-running process
+# with no inbound port and no spin-down, which matches the Slack Socket Mode
+# topology (outbound WebSocket only). Background Workers require a paid plan;
+# Render's free tier does not support them. See README "Host on Render
+# (time-boxed demo)" and docs/adr/0013-demo-runs-via-local-docker-not-render.md.
+services:
+  - type: worker
+    name: talk-to-your-data-slackbot
+    # `env` is Render's still-supported field for selecting the build environment;
+    # current docs also accept the alias `runtime: docker`.
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    envVars:
+      # Secrets are entered in the Render dashboard, never committed.
+      - key: SLACK_BOT_TOKEN
+        sync: false
+      - key: SLACK_APP_TOKEN
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      # Optional. Defaults to gpt-4o-mini if unset.
+      - key: OPENAI_MODEL
+        sync: false

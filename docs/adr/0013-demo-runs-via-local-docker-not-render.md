@@ -42,3 +42,23 @@ to be reachable when no one is presenting it.
   setup, which remains the real friction.
 - Live OpenAI cost is incurred per question for anyone with access to the Slack
   app while a container is running.
+
+## Revisited / Narrowed
+
+The original decision above still holds for **indefinite** hosting: an always-on
+Render Background Worker is not worth a standing charge for a demo that two or
+three people touch occasionally.
+
+We are now carving out one narrow case. For a **time-boxed (~1 month) demo** the
+paid Background Worker — previously rejected on standing cost — is a *sanctioned*
+path. The small monthly cost (lowest paid tier) is accepted only for that demo
+window. Nothing else changes: the existing Docker image deploys unchanged, the
+Slack Socket Mode topology stays (outbound WebSocket, no inbound port, no queue,
+no public request URL), and the free Web Service tier remains rejected for the
+reasons above.
+
+This ADR is **not** superseded. The boxed-demo path is documented in the README
+("Host on Render (time-boxed demo)") and pinned as code in `render.yaml` at the
+repo root, which fixes `type: worker` so nobody falls back into the free-tier Web
+Service trap. When the demo window ends, the Worker is suspended or deleted so
+the paid charge does not persist — restoring the original $0 default.
