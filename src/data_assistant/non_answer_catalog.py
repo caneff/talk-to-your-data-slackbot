@@ -24,6 +24,7 @@ _StaticReasonCode: typing.TypeAlias = typing.Literal[
     contracts.NonAnswerReasonCode.NO_MATCHING_DATASET,
     contracts.NonAnswerReasonCode.NO_MATCHING_TABLE,
     contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
+    contracts.NonAnswerReasonCode.UNSUPPORTED_AVAILABILITY,
     contracts.NonAnswerReasonCode.UNSUPPORTED_DATA,
     contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION,
     contracts.NonAnswerReasonCode.UNSUPPORTED_FILTER,
@@ -99,6 +100,15 @@ _DEFINITIONS: dict[contracts.NonAnswerReasonCode, _NonAnswerDefinition] = {
         ),
         context=(),
         next_step="Use exact Semantic Layer metric and dimension labels.",
+    ),
+    contracts.NonAnswerReasonCode.UNSUPPORTED_AVAILABILITY: _NonAnswerDefinition(
+        response_kind=contracts.ResponseKind.UNSUPPORTED,
+        reason="The Data Assistant does not answer data-availability questions yet.",
+        context=("data availability",),
+        next_step=(
+            "Ask for a metric over a known period, such as: "
+            "What was total revenue by region in January 2026?"
+        ),
     ),
     contracts.NonAnswerReasonCode.UNSUPPORTED_DATA: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,
