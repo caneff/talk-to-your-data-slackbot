@@ -19,8 +19,11 @@ serializes whatever flat dict it is handed.
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import pathlib
+import tempfile
 import typing
 
 # Repo-root-relative gitignored log location. ``interaction_log.py`` lives at
@@ -54,3 +57,70 @@ def append_interaction(
     with path.open("a", encoding="utf-8") as log_file:
         log_file.write(line + "\n")
     return str(record["id"])
+
+
+def flag_interaction(
+    interaction_id: str,
+    category: str,
+    *,
+    path: pathlib.Path = DEFAULT_LOG_PATH,
+) -> bool:
+    """Append ``category`` to one record's ``flags`` via an atomic rewrite.
+
+    Slice 2 (issue #111): when a maintainer clicks a flag button on a Slack
+    reply, the matching Interaction Log record (by ``id``) gets ``category``
+    added to its ``flags`` list, **deduped** (set-union semantics; existing
+    order preserved). Returns ``True`` when a record was found and updated,
+    ``False`` when no record matches ``interaction_id`` (a no-op -- e.g. an id
+    from an already-rotated log).
+
+    ``category`` must be one of :data:`FLAG_VOCABULARY`; anything else is a
+    programmer error (the action_id->category map is the single source of
+    truth) and raises ``ValueError``.
+
+    The rewrite is atomic: every line is written to a temp file in the SAME
+    directory, then ``os.replace`` renames it over the original. The live log is
+    never partially written. Concurrent writers are out of scope -- this is a
+    single-process local dev tool, so there is no file locking.
+    """
+    if category not in FLAG_VOCABULARY:
+        raise ValueError(
+            f"Unknown flag category {category!r}; expected one of {FLAG_VOCABULARY}."
+        )
+    if not path.exists():
+        return False
+
+    lines = path.read_text(encoding="utf-8").splitlines()
+    changed = False
+    rewritten: list[str] = []
+    for line in lines:
+        if not line:
+            rewritten.append(line)
+            continue
+        record = json.loads(line)
+        if record.get("id") == interaction_id:
+            flags = list(record.get("flags") or [])
+            if category not in flags:
+                flags.append(category)
+            record["flags"] = flags
+            changed = True
+            rewritten.append(json.dumps(record))
+        else:
+            rewritten.append(line)
+
+    if not changed:
+        return False
+
+    # Atomic in-place rewrite: temp file in the same directory, then rename.
+    directory = path.parent
+    fd, temp_name = tempfile.mkstemp(dir=directory, prefix=path.name, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as temp_file:
+            for line in rewritten:
+                temp_file.write(line + "\n")
+        os.replace(temp_name, path)
+    except BaseException:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(temp_name)
+        raise
+    return True

@@ -14,11 +14,13 @@ import datetime
 import json
 import logging
 import pathlib
+import typing
 
 import duckdb
 import pandas as pd
 import pytest
 
+import data_assistant.interaction_log as interaction_log
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.slack_assistant as slack_assistant
 import data_assistant.workflow.contracts as contracts
@@ -31,11 +33,38 @@ EXPECTED_PROGRESS_STATUSES = [
 ]
 
 
+def _action_ids_in(blocks: tuple[contracts.SlackBlock, ...]) -> set[str]:
+    """Collect every button ``action_id`` across all ``actions`` blocks."""
+    action_ids: set[str] = set()
+    for block in blocks:
+        if block.get("type") != "actions":
+            continue
+        for element in _button_elements(block):
+            action_id = element["action_id"]
+            assert isinstance(action_id, str)
+            action_ids.add(action_id)
+    return action_ids
+
+
+def _button_elements(block: contracts.SlackBlock) -> list[dict[str, object]]:
+    """Narrow an ``actions`` block's ``elements`` to a typed list of buttons."""
+    elements = block.get("elements")
+    assert isinstance(elements, list)
+    typed: list[dict[str, object]] = []
+    for element in typing.cast("list[object]", elements):
+        assert isinstance(element, dict)
+        button = typing.cast("dict[str, object]", element)
+        typed.append(button)
+    return typed
+
+
 class RecordingSay:
     """Capture ``say`` calls (text plus optional blocks)."""
 
     def __init__(self) -> None:
-        self.calls: list[tuple[str, object]] = []
+        self.calls: list[
+            tuple[str, collections.abc.Sequence[contracts.SlackBlock] | None]
+        ] = []
 
     def __call__(
         self,
@@ -169,7 +198,18 @@ def test_on_user_message_sets_status_runs_pipeline_then_says(
     assert set_status.calls == [EXPECTED_PROGRESS_STATUSES[0]]
     assert calls == ["answer_path"]
     assert seen_questions == [canonical_question]
-    assert say.calls == [("Final answer text.", blocks)]
+    assert len(say.calls) == 1
+    said_text, said_blocks = say.calls[0]
+    assert said_text == "Final answer text."
+    # The original trust-summary block is preserved, with the flag actions block
+    # appended so every reply is flaggable.
+    assert said_blocks is not None
+    said_blocks = tuple(said_blocks)
+    assert said_blocks[: len(blocks)] == blocks
+    assert _action_ids_in(said_blocks) == {
+        slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
+        slack_assistant.FLAG_FORMATTING_ACTION_ID,
+    }
 
 
 def test_on_user_message_uses_pipeline_progress_sink_for_staged_status(
@@ -209,7 +249,15 @@ def test_on_user_message_uses_pipeline_progress_sink_for_staged_status(
 
     assert seen_questions == [canonical_question]
     assert set_status.calls == EXPECTED_PROGRESS_STATUSES
-    assert say.calls == [("Final answer text.", None)]
+    assert len(say.calls) == 1
+    said_text, said_blocks = say.calls[0]
+    assert said_text == "Final answer text."
+    # Even with no trust-summary blocks the reply carries the flag buttons.
+    assert said_blocks is not None
+    assert _action_ids_in(tuple(said_blocks)) == {
+        slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
+        slack_assistant.FLAG_FORMATTING_ACTION_ID,
+    }
 
 
 def test_on_user_message_says_non_answer_without_fallback(
@@ -247,7 +295,15 @@ def test_on_user_message_says_non_answer_without_fallback(
         say=say,
     )
 
-    assert say.calls == [(non_answer.text, None)]
+    assert len(say.calls) == 1
+    said_text, said_blocks = say.calls[0]
+    assert said_text == non_answer.text
+    # A Non-Answer is also flaggable (e.g. flag a spurious refusal).
+    assert said_blocks is not None
+    assert _action_ids_in(tuple(said_blocks)) == {
+        slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
+        slack_assistant.FLAG_FORMATTING_ACTION_ID,
+    }
     assert slack_assistant.RUNTIME_FALLBACK_MESSAGE not in [c[0] for c in say.calls]
 
 
@@ -282,8 +338,15 @@ def test_on_user_message_says_runtime_fallback_on_crash_without_raising(
         say=say,
     )
 
-    assert say.calls == [(slack_assistant.RUNTIME_FALLBACK_MESSAGE, None)]
-    fallback_text = say.calls[0][0]
+    assert len(say.calls) == 1
+    fallback_text, fallback_blocks = say.calls[0]
+    assert fallback_text == slack_assistant.RUNTIME_FALLBACK_MESSAGE
+    # The crash reply is itself flaggable (its record exists with outcome=error).
+    assert fallback_blocks is not None
+    assert _action_ids_in(tuple(fallback_blocks)) == {
+        slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
+        slack_assistant.FLAG_FORMATTING_ACTION_ID,
+    }
     assert "secret-value" not in fallback_text
     assert "RuntimeError" not in fallback_text
     assert "total revenue last quarter" not in fallback_text
@@ -744,8 +807,9 @@ def test_on_user_message_logs_error_record_and_still_says_fallback(
         say=say,
     )
 
-    # The user still gets the Runtime Fallback reply.
-    assert say.calls == [(slack_assistant.RUNTIME_FALLBACK_MESSAGE, None)]
+    # The user still gets the Runtime Fallback reply (now with flag buttons).
+    assert len(say.calls) == 1
+    assert say.calls[0][0] == slack_assistant.RUNTIME_FALLBACK_MESSAGE
     records = _read_log_records(log_path)
     assert len(records) == 1
     record = records[0]
@@ -793,7 +857,8 @@ def test_on_user_message_log_failure_does_not_break_user_reply(
     )
 
     # The reply still went out even though the log write failed.
-    assert say.calls == [("Answer text.", None)]
+    assert len(say.calls) == 1
+    assert say.calls[0][0] == "Answer text."
 
 
 def test_on_user_message_record_build_failure_does_not_break_user_reply(
@@ -844,6 +909,124 @@ def test_on_user_message_record_build_failure_does_not_break_user_reply(
 
     # The user gets the REAL answer (not the Runtime Fallback), no exception
     # escapes, and nothing was written.
-    assert say.calls == [(run.final_response.text, run.final_response.blocks or None)]
+    assert len(say.calls) == 1
+    assert say.calls[0][0] == run.final_response.text
     assert say.calls[0][0] != slack_assistant.RUNTIME_FALLBACK_MESSAGE
     assert not log_path.exists()
+
+
+# --- Flag buttons + block_actions core (issue #111) -------------------------
+
+
+def test_flag_action_blocks_carries_interaction_id_and_action_ids() -> None:
+    blocks = slack_assistant.flag_action_blocks("interaction-xyz")
+
+    assert _action_ids_in(blocks) == {
+        slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
+        slack_assistant.FLAG_FORMATTING_ACTION_ID,
+    }
+    # Every button carries the interaction id in its ``value`` so the handler
+    # can flag the right record.
+    for block in blocks:
+        if block.get("type") != "actions":
+            continue
+        for element in _button_elements(block):
+            assert element["value"] == "interaction-xyz"
+
+
+def test_action_id_to_category_is_single_source_of_truth() -> None:
+    assert slack_assistant.ACTION_ID_TO_CATEGORY == {
+        slack_assistant.FLAG_CORRECTNESS_ACTION_ID: "correctness",
+        slack_assistant.FLAG_FORMATTING_ACTION_ID: "formatting",
+    }
+    # The mapped categories are exactly the Interaction Log flag vocabulary.
+    assert set(slack_assistant.ACTION_ID_TO_CATEGORY.values()) == set(
+        interaction_log.FLAG_VOCABULARY
+    )
+
+
+class _RecordingFlagStore:
+    """Fake ``flag_interaction`` seam: records calls, returns a fixed result."""
+
+    def __init__(self, *, result: bool = True) -> None:
+        self.calls: list[tuple[str, str]] = []
+        self._result = result
+
+    def __call__(self, interaction_id: str, category: str) -> bool:
+        self.calls.append((interaction_id, category))
+        return self._result
+
+
+class _RecordingConfirm:
+    """Fake ephemeral confirm: captures the text."""
+
+    def __init__(self) -> None:
+        self.texts: list[str] = []
+
+    def __call__(self, text: str) -> None:
+        self.texts.append(text)
+
+
+def test_apply_flag_correctness_button_flags_and_confirms() -> None:
+    store = _RecordingFlagStore()
+    confirm = _RecordingConfirm()
+
+    slack_assistant.apply_flag(
+        action_id=slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
+        interaction_id="abc123",
+        flag_store=store,
+        confirm=confirm,
+    )
+
+    assert store.calls == [("abc123", "correctness")]
+    assert len(confirm.texts) == 1
+    assert "correctness" in confirm.texts[0]
+
+
+def test_apply_flag_formatting_button_flags_and_confirms() -> None:
+    store = _RecordingFlagStore()
+    confirm = _RecordingConfirm()
+
+    slack_assistant.apply_flag(
+        action_id=slack_assistant.FLAG_FORMATTING_ACTION_ID,
+        interaction_id="abc123",
+        flag_store=store,
+        confirm=confirm,
+    )
+
+    assert store.calls == [("abc123", "formatting")]
+    assert len(confirm.texts) == 1
+    assert "formatting" in confirm.texts[0]
+
+
+def test_apply_flag_unknown_id_confirms_benignly_without_crash() -> None:
+    store = _RecordingFlagStore(result=False)
+    confirm = _RecordingConfirm()
+
+    slack_assistant.apply_flag(
+        action_id=slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
+        interaction_id="missing",
+        flag_store=store,
+        confirm=confirm,
+    )
+
+    # Store was consulted, but the benign confirm acknowledges nothing was found.
+    assert store.calls == [("missing", "correctness")]
+    assert len(confirm.texts) == 1
+    assert "correctness" not in confirm.texts[0]
+    assert confirm.texts[0]
+
+
+def test_apply_flag_unknown_action_id_is_defensive_noop() -> None:
+    store = _RecordingFlagStore()
+    confirm = _RecordingConfirm()
+
+    slack_assistant.apply_flag(
+        action_id="not_a_flag_button",
+        interaction_id="abc123",
+        flag_store=store,
+        confirm=confirm,
+    )
+
+    # Defensive: an unmapped action_id never flags and never crashes.
+    assert store.calls == []
