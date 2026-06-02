@@ -66,6 +66,18 @@ def _section_texts_in(
     return texts
 
 
+def _context_text(block: contracts.SlackBlock) -> str:
+    """Narrow a ``context`` block's first mrkdwn element to its text."""
+    assert block.get("type") == "context"
+    elements = block.get("elements")
+    assert isinstance(elements, list) and elements
+    first = typing.cast("list[object]", elements)[0]
+    assert isinstance(first, dict)
+    text = typing.cast("dict[str, object]", first).get("text")
+    assert isinstance(text, str)
+    return text
+
+
 def _button_elements(block: contracts.SlackBlock) -> list[dict[str, object]]:
     """Narrow an ``actions`` block's ``elements`` to a typed list of buttons."""
     elements = block.get("elements")
@@ -284,11 +296,14 @@ def test_on_user_message_sets_status_runs_pipeline_then_says(
     assert len(say.calls) == 1
     said_text, said_blocks = say.calls[0]
     assert said_text == "Final answer text."
-    # The original trust-summary block is preserved, with the flag actions block
-    # appended so every reply is flaggable.
+    # Every reply leads with the question echo; the original trust-summary block
+    # is preserved after it, with the flag actions block appended so every reply
+    # is flaggable.
     assert said_blocks is not None
     said_blocks = tuple(said_blocks)
-    assert said_blocks[: len(blocks)] == blocks
+    assert said_blocks[0]["type"] == "context"
+    assert _context_text(said_blocks[0]) == "❓ " + canonical_question
+    assert said_blocks[1 : 1 + len(blocks)] == blocks
     assert _action_ids_in(said_blocks) == {
         slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
         slack_assistant.FLAG_FORMATTING_ACTION_ID,
@@ -432,6 +447,12 @@ def test_on_user_message_says_runtime_fallback_on_crash_without_raising(
     assert fallback_text == slack_assistant.RUNTIME_FALLBACK_MESSAGE
     # The crash reply is itself flaggable (its record exists with outcome=error).
     assert fallback_blocks is not None
+    fallback_blocks = tuple(fallback_blocks)
+    # The crash reply also leads with the question echo so it stays pairable.
+    assert fallback_blocks[0]["type"] == "context"
+    assert (
+        _context_text(fallback_blocks[0]) == "❓ What was total revenue last quarter?"
+    )
     assert _action_ids_in(tuple(fallback_blocks)) == {
         slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
         slack_assistant.FLAG_FORMATTING_ACTION_ID,
@@ -1002,7 +1023,13 @@ def test_answer_and_render_returns_id_response_blocks_and_logs_one_record(
     assert isinstance(interaction_id, str) and interaction_id
     assert final_response.text == "Final answer text."
     reply_blocks = tuple(reply_blocks)
-    assert reply_blocks[: len(blocks)] == blocks
+    # Every reply leads with a context echo of the original question.
+    assert reply_blocks[0]["type"] == "context"
+    assert (
+        _context_text(reply_blocks[0])
+        == "❓ What was total revenue by region in January 2026?"
+    )
+    assert reply_blocks[1 : 1 + len(blocks)] == blocks
     assert _action_ids_in(reply_blocks) == {
         slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
         slack_assistant.FLAG_FORMATTING_ACTION_ID,
@@ -1025,6 +1052,51 @@ def test_answer_and_render_returns_id_response_blocks_and_logs_one_record(
     assert records[0]["outcome"] == "non_answer"
     assert records[0]["model"] == "gpt-4o-mini"
     assert records[0]["user"] == "U123"
+
+
+def test_answer_and_render_truncates_long_question_in_echo_block(
+    tmp_path: pathlib.Path,
+    connect_orders: collections.abc.Callable[
+        ..., contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
+    ],
+) -> None:
+    """The leading echo trims an over-cap question with a ``…`` suffix.
+
+    The full question still lands in the Interaction Log ``question`` field, so
+    the trim is cosmetic to the context line only.
+    """
+    long_question = "x" * (slack_assistant.QUESTION_ECHO_MAX_CHARS + 50)
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        _question: str,
+        _identity: contracts.InternalIdentity,
+        _progress_sink: contracts.ProgressSink,
+    ) -> slack_assistant.SlackWorkflowResult:
+        return _final_response(text="Final answer text.")
+
+    log_path = tmp_path / "interactions.jsonl"
+    adapter = slack_assistant.AssistantAdapter(
+        connection_factory=_connection_factory(connect_orders),
+        answer_path=answer_path,
+        log_path=log_path,
+    )
+
+    interaction_id, _final_response_out, reply_blocks = adapter.answer_and_render(
+        text=long_question,
+        user="U123",
+        set_status=RecordingStatus(),
+    )
+
+    echo_text = _context_text(tuple(reply_blocks)[0])
+    assert echo_text.startswith("❓ ")
+    assert echo_text.endswith("…")
+    body = echo_text[len("❓ ") :]
+    assert len(body) == slack_assistant.QUESTION_ECHO_MAX_CHARS + 1  # cap + "…"
+    # The untruncated question is still logged in full.
+    records = _read_log_records(log_path)
+    assert records[0]["id"] == interaction_id
+    assert records[0]["question"] == long_question
 
 
 def test_on_user_message_log_failure_does_not_break_user_reply(
