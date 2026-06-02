@@ -64,8 +64,8 @@ SUGGESTED_PROMPTS: tuple[dict[str, str], ...] = (
     },
 )
 
-# --- Flag buttons (issue #111) ----------------------------------------------
-# Every Assistant reply carries two flag buttons so a maintainer can mark a bad
+# --- Flag buttons (issue #111; investigate category added in issue #123) -----
+# Every Assistant reply carries three flag buttons so a maintainer can mark a
 # response in place; a click flags the Interaction Log record (by id), which the
 # maintainer later pastes into Claude Code ("look at the flagged correctness
 # cases"). The action_id -> category map is the SINGLE source of truth shared by
@@ -73,10 +73,12 @@ SUGGESTED_PROMPTS: tuple[dict[str, str], ...] = (
 # interaction_log.FLAG_VOCABULARY.
 FLAG_CORRECTNESS_ACTION_ID: typing.Final[str] = "flag_correctness"
 FLAG_FORMATTING_ACTION_ID: typing.Final[str] = "flag_formatting"
+FLAG_INVESTIGATE_ACTION_ID: typing.Final[str] = "flag_investigate"
 
 ACTION_ID_TO_CATEGORY: typing.Final[dict[str, str]] = {
     FLAG_CORRECTNESS_ACTION_ID: "correctness",
     FLAG_FORMATTING_ACTION_ID: "formatting",
+    FLAG_INVESTIGATE_ACTION_ID: "investigate",
 }
 
 # Seam type for the pure block_actions core. ``FlagStore`` binds to
@@ -95,7 +97,7 @@ _FLAG_STATUS_PREFIX: typing.Final[str] = "✓ Flagged: "
 
 
 def flag_action_blocks(interaction_id: str) -> tuple[contracts.SlackBlock, ...]:
-    """Build the Slack ``actions`` block with the two flag buttons.
+    """Build the Slack ``actions`` block with the three flag buttons.
 
     Each button carries ``interaction_id`` in its ``value`` so the
     ``block_actions`` handler can flag the right Interaction Log record. The
@@ -118,6 +120,12 @@ def flag_action_blocks(interaction_id: str) -> tuple[contracts.SlackBlock, ...]:
                     "type": "button",
                     "action_id": FLAG_FORMATTING_ACTION_ID,
                     "text": {"type": "plain_text", "text": "🎨 Formatting"},
+                    "value": interaction_id,
+                },
+                {
+                    "type": "button",
+                    "action_id": FLAG_INVESTIGATE_ACTION_ID,
+                    "text": {"type": "plain_text", "text": "🔎 Investigate"},
                     "value": interaction_id,
                 },
             ],

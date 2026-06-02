@@ -34,9 +34,13 @@ DEFAULT_LOG_PATH = (
     pathlib.Path(__file__).resolve().parents[2] / "logs" / "interactions.jsonl"
 )
 
-# Flag vocabulary for the Interaction Log. Defined here for Slice 2 (the Slack
-# flag buttons, issue #111); this slice always writes ``flags == []``.
-FLAG_VOCABULARY: typing.Final[tuple[str, ...]] = ("correctness", "formatting")
+# Flag vocabulary for the Interaction Log. Defined here for the Slack flag
+# buttons (issue #111); the ``investigate`` category was added in issue #123.
+FLAG_VOCABULARY: typing.Final[tuple[str, ...]] = (
+    "correctness",
+    "formatting",
+    "investigate",
+)
 
 InteractionRecord: typing.TypeAlias = typing.Mapping[str, object]
 

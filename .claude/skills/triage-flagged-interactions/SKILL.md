@@ -10,7 +10,7 @@ Turn maintainer flags on Data Assistant responses into root-caused, actionable w
 ## Source of truth
 
 - Log file: `logs/interactions.jsonl` (gitignored, append-only, one JSON object per Data Question). Written by `interaction_log.append_interaction`; flagged in place by `interaction_log.flag_interaction`.
-- A **flagged** record has a non-empty `flags` array. Categories (exact): `correctness`, `formatting` (= `interaction_log.FLAG_VOCABULARY`).
+- A **flagged** record has a non-empty `flags` array. Categories (exact): `correctness`, `formatting`, `investigate` (= `interaction_log.FLAG_VOCABULARY`).
 - If the file does not exist or has no flagged records, say so plainly and stop — do not fabricate cases.
 
 ## Record schema (what you may rely on)
@@ -30,7 +30,7 @@ The log deliberately **excludes raw Prepared Data cell values** (ADR-0016). You 
 ## Process
 
 ### 1. Load the flagged set
-Read `logs/interactions.jsonl`, parse each line, keep records with non-empty `flags`. If the user named a category (`correctness` / `formatting`), filter to it. Report the count and the category split.
+Read `logs/interactions.jsonl`, parse each line, keep records with non-empty `flags`. If the user named a category (`correctness` / `formatting` / `investigate`), filter to it. Report the count and the category split.
 
 ### 2. Present each flagged case
 For every flagged record show, compactly:
@@ -51,9 +51,12 @@ Map each case to the most likely failing stage, using the category as a strong h
 | Numbers wrong but routing right; `key_data` mismatches the question | **Data retrieval / request** | `workflow/runner.py`, `DataRequest` |
 | Prose wrong/misleading but numbers right; narrative drift | **Reasoning Layer** | `reasoning_layer/` (cf. ADR-0012) |
 | `formatting` flag — bad blocks/table/trust summary, right content | **Response Composer** | `response_composer.py` |
+| `investigate` flag — response is acceptable, but an internal signal warrants code analysis (`reason_code` e.g. `invalid_provider_output` / `provider_failure`, high `latency_ms`, suspicious `quality_notes`) | the layer that emitted the recorded internal signal | per-stage; **reproduce locally** to see the raw payload the log omits |
 | `non_answer` that should have answered | stage named in `stage` field | per-stage |
 
 `formatting` flags almost always live in the **Response Composer**; `correctness` flags live upstream (interpreter → router → retrieval → reasoning). Use `reason_code`/`stage` to skip straight to the stage on non-answers.
+
+`investigate` flags are about the **system**, not the user-facing answer: the response was acceptable (e.g. an honest Non-Answer like "the Question Interpreter provider returned invalid output"), but the maintainer wants the internal behavior analyzed in code. Do **not** assume the response is wrong. Read the recorded internal signal (`reason_code`, `latency_ms`, `quality_notes`) and **reproduce locally** to see the raw payload the log omits (ADR-0016 sanitization), then route to a code investigation. The "flagged ≠ confirmed bug" caution applies doubly here — the flag is a hint to look, not evidence of a defect.
 
 ### 4. Reproduce when the log is insufficient
 If shape + `key_data` cannot confirm the root cause, reproduce locally (the log omits cell values by design):
@@ -65,6 +68,7 @@ Never assert a cause that requires data the record does not carry.
 Group cases by root-caused layer (several flags often share one cause). For each group recommend the smallest fix and route it:
 - Clear, bounded fix → suggest `/handle-next-issue` (or a direct fix) naming the file/layer.
 - Broader or fuzzy → suggest `/to-issues` to slice it.
+- `investigate` flag → route to a **code investigation / engineering issue** (use `/to-issues` or a direct fix on the layer that emitted the signal), NOT a response-copy fix — the user-facing answer is fine; the system behavior is what needs analyzing.
 - Already-tracked root cause → if a flag's root cause is already covered by an open issue, just map the `id` to that issue number and move on. Do **not** file a duplicate, do **not** comment on the existing issue, and do **not** propose "repeat occurrence" / "additional occurrence" notes. Repeat flags on a known cause are confirmation noise, not new signal; the mapping in your triage output is the only record needed.
 Reference flags by `id` so the user can trace each back to its log line.
 

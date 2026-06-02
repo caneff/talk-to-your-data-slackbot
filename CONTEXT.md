@@ -274,8 +274,11 @@ improvement work after the log grows beyond its configured limits.
 _Avoid_: Log rotation, sampling policy, archival policy
 
 **Flag**:
-A team member's mark on a logged interaction, categorized as **correctness** or
-**formatting**, signaling a response to improve.
+A team member's mark on a logged interaction, categorized as **correctness**
+(a factual inaccuracy in the response), **formatting** (a correct response
+displayed badly), or **investigate** (the response is acceptable but its
+underlying system behavior should be analyzed in code), signaling a response to
+improve or a system behavior to investigate.
 _Avoid_: Rating, vote, reaction
 
 **Metadata Cache**:

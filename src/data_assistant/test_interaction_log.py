@@ -95,8 +95,12 @@ def test_append_interaction_round_trips_via_json(tmp_path: pathlib.Path) -> None
     assert loaded["flags"] == []
 
 
-def test_flag_vocabulary_constant_is_correctness_and_formatting() -> None:
-    assert set(interaction_log.FLAG_VOCABULARY) == {"correctness", "formatting"}
+def test_flag_vocabulary_constant_is_correctness_formatting_investigate() -> None:
+    assert set(interaction_log.FLAG_VOCABULARY) == {
+        "correctness",
+        "formatting",
+        "investigate",
+    }
 
 
 def test_default_log_path_is_repo_root_logs_interactions_jsonl() -> None:
@@ -285,6 +289,20 @@ def test_flag_interaction_keeps_both_categories_on_one_record(
         json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()
     ]
     assert set(records[0]["flags"]) == {"correctness", "formatting"}
+
+
+def test_flag_interaction_appends_investigate_category(
+    tmp_path: pathlib.Path,
+) -> None:
+    log_path = _seed_log(tmp_path, _record(id="abc123", flags=[]))
+
+    changed = interaction_log.flag_interaction("abc123", "investigate", path=log_path)
+
+    assert changed is True
+    records = [
+        json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert records[0]["flags"] == ["investigate"]
 
 
 def test_flag_interaction_only_touches_matching_record(
