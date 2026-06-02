@@ -261,6 +261,17 @@ selection, access control, data planning, reasoning, and response composition,
 excluding raw **Prepared Data** and sensitive cell values.
 _Avoid_: Audit dump, transcript, raw trace
 
+**Interaction Log**:
+The recorded history of **Data Questions**, their responses, and any **Flags**,
+kept to improve the **Data Assistant**. It is the local-dev, richer counterpart
+to the (sanitized, shipped) **Decision Trail**.
+_Avoid_: Analytics log, transcript, audit dump
+
+**Flag**:
+A team member's mark on a logged interaction, categorized as **correctness** or
+**formatting**, signaling a response to improve.
+_Avoid_: Rating, vote, reaction
+
 **Metadata Cache**:
 A cache for **Semantic Layer** metadata such as dataset definitions, metric
 definitions, join rules, permission rules, and freshness metadata.

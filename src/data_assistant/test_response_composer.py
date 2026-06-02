@@ -226,6 +226,50 @@ def test_response_composer_renders_through_injected_wording_provider() -> None:
     assert response.trust_summary.limitations == ("Sentinel reason.",)
 
 
+def test_response_composer_carries_non_answer_on_final_response() -> None:
+    """The Non-Answer is carried on ``FinalResponse.non_answer`` for the log.
+
+    The Interaction Log (ADR-0016) reads the FINE 15-way ``reason_code`` and
+    ``stage`` off this field instead of the coarse 4-bucket ``ResponseKind``.
+    """
+    non_answer = _non_answer(
+        contracts.NonAnswerReasonCode.MISSING_TIME_SCOPE,
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+    )
+
+    response = response_composer.compose_non_answer_response(
+        non_answer,
+        wording_provider=non_answer_catalog.StaticCatalogWording(),
+    )
+
+    assert response.non_answer is non_answer
+
+
+def test_response_composer_leaves_non_answer_none_on_answer() -> None:
+    response = response_composer.compose_final_response(
+        contracts.AnswerDraft(
+            summary="Total revenue in January 2026 was $1,200.00.",
+            key_data=pd.DataFrame(
+                {
+                    "dimension_value": ("North",),
+                    "metric_value": (1200.0,),
+                }
+            ),
+            datasets_used=("Commerce",),
+            dataset_tables_used=("orders",),
+            metric_kind=schema.MetricKind.MONEY,
+            metric_label="total revenue",
+            time_range="January 2026",
+            filters=(),
+            freshness="Commerce order data refreshed through 2026-01-31.",
+            caveats=(),
+            group_by_label="region",
+        )
+    )
+
+    assert response.non_answer is None
+
+
 def test_response_composer_renders_non_answer_copy_into_text() -> None:
     """Composer weaves the catalog-rendered reason and next step into the text.
 

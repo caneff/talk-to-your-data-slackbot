@@ -99,6 +99,7 @@ def compose_non_answer_response(
         text=text,
         trust_summary=trust_summary,
         response_kind=response_kind,
+        non_answer=non_answer,
     )
 
 

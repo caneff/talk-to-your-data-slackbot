@@ -290,6 +290,11 @@ class FinalResponse:
     trust_summary: TrustSummary
     response_kind: ResponseKind
     blocks: tuple[SlackBlock, ...] = ()
+    # Set on the Non-Answer path so the Interaction Log (ADR-0016) records the
+    # FINE 15-way reason_code + stage instead of the coarse 4-bucket
+    # response_kind. The answer path leaves this None. Last field: backward
+    # compatible with every existing constructor.
+    non_answer: NonAnswer | None = None
 
 
 @dataclasses.dataclass(frozen=True)

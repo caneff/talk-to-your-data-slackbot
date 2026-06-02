@@ -16,6 +16,7 @@ import dotenv
 import duckdb
 
 import data_assistant.local_duckdb_fixture as local_duckdb_fixture
+import data_assistant.openai_support as openai_support
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.reasoning_layer as reasoning_layer
 import data_assistant.semantic_layer.loader as semantic_layer_loader
@@ -80,6 +81,18 @@ def build_openai_answer_path(
         )
 
     return answer_path
+
+
+def _resolve_model_label(environ: collections_abc.Mapping[str, str]) -> str:
+    """Resolve the OpenAI model label recorded on each Interaction Log line.
+
+    Sources the same ``OPENAI_MODEL`` env var (defaulting to
+    ``openai_support.DEFAULT_OPENAI_MODEL``) that the live Question Interpreter
+    provider uses, so the logged model matches the model actually invoked. Kept
+    as a plain string rather than a live client to keep the adapter
+    test-constructible without OpenAI configuration.
+    """
+    return environ.get("OPENAI_MODEL", openai_support.DEFAULT_OPENAI_MODEL)
 
 
 def _load_env_file(
@@ -192,6 +205,7 @@ def run_socket_mode_from_env(
             connection_factory=connection_factory,
             answer_path=active_answer_path,
             internal_identity_resolver=internal_identity_resolver,
+            model_label=_resolve_model_label(environ),
         )
         slack_assistant.register_assistant_handlers(app=app, adapter=adapter)
     handler = socket_mode_handler_factory(app_token=config.app_token, app=app)
