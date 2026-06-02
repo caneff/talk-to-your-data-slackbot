@@ -18,6 +18,13 @@ import pytest
 import data_assistant.slack_assistant as slack_assistant
 import data_assistant.workflow.contracts as contracts
 
+EXPECTED_PROGRESS_STATUSES = [
+    "understanding your question...",
+    "finding the right data...",
+    "running the numbers...",
+    "writing it up...",
+]
+
 
 class RecordingSay:
     """Capture ``say`` calls (text plus optional blocks)."""
@@ -89,6 +96,7 @@ def _unused_answer_path(
     _connection: duckdb.DuckDBPyConnection,
     _question: str,
     _identity: contracts.InternalIdentity,
+    _progress_sink: contracts.ProgressSink,
 ) -> slack_assistant.SlackWorkflowResult:
     raise AssertionError("thread_started must not run the answer path")
 
@@ -131,9 +139,10 @@ def test_on_user_message_sets_status_runs_pipeline_then_says(
         _connection: duckdb.DuckDBPyConnection,
         question: str,
         _identity: contracts.InternalIdentity,
+        progress_sink: contracts.ProgressSink,
     ) -> slack_assistant.SlackWorkflowResult:
-        # set_status must already have fired before the pipeline runs.
-        assert set_status.calls == [slack_assistant.ANALYZING_STATUS]
+        assert set_status.calls == []
+        progress_sink(EXPECTED_PROGRESS_STATUSES[0])
         calls.append("answer_path")
         seen_questions.append(question)
         return _final_response(blocks=blocks)
@@ -152,10 +161,50 @@ def test_on_user_message_sets_status_runs_pipeline_then_says(
         say=say,
     )
 
-    assert set_status.calls == [slack_assistant.ANALYZING_STATUS]
+    assert set_status.calls == [EXPECTED_PROGRESS_STATUSES[0]]
     assert calls == ["answer_path"]
     assert seen_questions == [canonical_question]
     assert say.calls == [("Final answer text.", blocks)]
+
+
+def test_on_user_message_uses_pipeline_progress_sink_for_staged_status(
+    canonical_question: str,
+    connect_orders: collections.abc.Callable[
+        ..., contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
+    ],
+) -> None:
+    say = RecordingSay()
+    set_status = RecordingStatus()
+    seen_questions: list[str] = []
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        question: str,
+        _identity: contracts.InternalIdentity,
+        progress_sink: contracts.ProgressSink,
+    ) -> slack_assistant.SlackWorkflowResult:
+        seen_questions.append(question)
+        for status in EXPECTED_PROGRESS_STATUSES:
+            progress_sink(status)
+        return _final_response()
+
+    adapter = slack_assistant.AssistantAdapter(
+        connection_factory=_connection_factory(connect_orders),
+        answer_path=answer_path,
+    )
+
+    adapter.on_user_message(
+        text=canonical_question,
+        user="U123",
+        channel="D123",
+        thread_ts="1710000000.654321",
+        set_status=set_status,
+        say=say,
+    )
+
+    assert seen_questions == [canonical_question]
+    assert set_status.calls == EXPECTED_PROGRESS_STATUSES
+    assert say.calls == [("Final answer text.", None)]
 
 
 def test_on_user_message_says_non_answer_without_fallback(
@@ -175,6 +224,7 @@ def test_on_user_message_says_non_answer_without_fallback(
         _connection: duckdb.DuckDBPyConnection,
         _question: str,
         _identity: contracts.InternalIdentity,
+        _progress_sink: contracts.ProgressSink,
     ) -> slack_assistant.SlackWorkflowResult:
         return non_answer
 
@@ -208,6 +258,7 @@ def test_on_user_message_says_runtime_fallback_on_crash_without_raising(
         _connection: duckdb.DuckDBPyConnection,
         _question: str,
         _identity: contracts.InternalIdentity,
+        _progress_sink: contracts.ProgressSink,
     ) -> slack_assistant.SlackWorkflowResult:
         raise RuntimeError("answer path blew up: secret-value=9999")
 
@@ -247,6 +298,7 @@ def test_on_user_message_logs_failure_metadata_for_maintainers(
         _connection: duckdb.DuckDBPyConnection,
         _question: str,
         _identity: contracts.InternalIdentity,
+        _progress_sink: contracts.ProgressSink,
     ) -> slack_assistant.SlackWorkflowResult:
         raise RuntimeError("connection blew up")
 
@@ -295,6 +347,7 @@ def test_on_user_message_passes_resolved_identity_to_answer_path(
         _connection: duckdb.DuckDBPyConnection,
         _question: str,
         identity: contracts.InternalIdentity,
+        _progress_sink: contracts.ProgressSink,
     ) -> slack_assistant.SlackWorkflowResult:
         seen_identity_ids.append(identity.identity_id)
         return _final_response()
@@ -347,6 +400,7 @@ def test_custom_identity_resolver_is_used(
         _connection: duckdb.DuckDBPyConnection,
         _question: str,
         identity: contracts.InternalIdentity,
+        _progress_sink: contracts.ProgressSink,
     ) -> slack_assistant.SlackWorkflowResult:
         seen_identity_ids.append(identity.identity_id)
         return _final_response()

@@ -95,11 +95,12 @@ def test_build_openai_answer_path_uses_openai_provider_without_fallback(
         connection: duckdb.DuckDBPyConnection,
         question: str,
         internal_identity: contracts.InternalIdentity,
+        progress_sink: contracts.ProgressSink,
         semantic_layer: object | None = None,
         question_interpreter_provider: object | None = None,
         reasoning_provider: object | None = None,
     ) -> contracts.FinalResponse:
-        del connection, question, internal_identity, semantic_layer
+        del connection, question, internal_identity, progress_sink, semantic_layer
         captured_providers.append(question_interpreter_provider)
         captured_reasoning_providers.append(reasoning_provider)
         return contracts.FinalResponse(
@@ -132,6 +133,7 @@ def test_build_openai_answer_path_uses_openai_provider_without_fallback(
             connection,
             "What was total revenue by region in January 2026?",
             contracts.InternalIdentity(identity_id="slack_user:U123"),
+            lambda status: None,
         )
 
     assert isinstance(result, contracts.FinalResponse)
@@ -223,8 +225,9 @@ def sentinel_answer_path(
     connection: duckdb.DuckDBPyConnection,
     question: str,
     internal_identity: contracts.InternalIdentity,
+    progress_sink: contracts.ProgressSink,
 ) -> contracts.FinalResponse:
-    del connection, question, internal_identity
+    del connection, question, internal_identity, progress_sink
     return contracts.FinalResponse(
         text="answer",
         trust_summary=contracts.TrustSummary(),

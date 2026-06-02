@@ -174,6 +174,7 @@ class ResponseKind(enum.StrEnum):
 
 
 SlackBlock: typing.TypeAlias = dict[str, object]
+ProgressSink: typing.TypeAlias = typing.Callable[[str], None]
 
 
 @dataclasses.dataclass(frozen=True)

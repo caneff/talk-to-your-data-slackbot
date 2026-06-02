@@ -16,6 +16,15 @@ import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_router as semantic_router
 import data_assistant.workflow.contracts as contracts
 
+UNDERSTANDING_QUESTION_STATUS = "understanding your question..."
+FINDING_DATA_STATUS = "finding the right data..."
+RUNNING_NUMBERS_STATUS = "running the numbers..."
+WRITING_IT_UP_STATUS = "writing it up..."
+
+
+def _noop_progress_sink(status: str) -> None:
+    del status
+
 
 def run_data_assistant(
     connection: duckdb.DuckDBPyConnection,
@@ -25,6 +34,7 @@ def run_data_assistant(
     reasoning_provider: reasoning_layer.ReasoningProvider | None = None,
     internal_identity: contracts.InternalIdentity,
     semantic_layer: schema.SemanticLayer | None = None,
+    progress_sink: contracts.ProgressSink = _noop_progress_sink,
 ) -> contracts.WorkflowResult:
     """Run the canonical Data Assistant path end to end.
 
@@ -60,6 +70,7 @@ def run_data_assistant(
     )
 
     # 1. Interpret Data Question.
+    progress_sink(UNDERSTANDING_QUESTION_STATUS)
     question_frame_result = question_interpreter.interpret_question(
         question=question,
         semantic_layer=active_semantic_layer,
@@ -73,6 +84,7 @@ def run_data_assistant(
     question_frame = question_frame_result.value
 
     # 2. Resolve Available Data.
+    progress_sink(FINDING_DATA_STATUS)
     available_data_result = semantic_router.resolve_available_data(
         question_frame=question_frame,
         semantic_layer=active_semantic_layer,
@@ -96,6 +108,7 @@ def run_data_assistant(
         )
 
     # 4. Prepare Data.
+    progress_sink(RUNNING_NUMBERS_STATUS)
     data_request_result = data_requester.create_data_request(
         question_frame=question_frame,
         resolved_match=available_data_resolution.resolved_match,
@@ -113,6 +126,7 @@ def run_data_assistant(
     )
 
     # 5. Synthesize Final Response.
+    progress_sink(WRITING_IT_UP_STATUS)
     if reasoning_provider is None:
         answer_draft = reasoning_layer.draft_answer(
             prepared_data=prepared_data,
