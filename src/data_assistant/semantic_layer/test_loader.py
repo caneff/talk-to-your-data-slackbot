@@ -1,14 +1,19 @@
 import pytest
 
+import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.semantic_layer.schema as schema
 
 
 def test_semantic_layer_loads_dataset_table_relationship() -> None:
     loaded_semantic_layer = semantic_layer_loader.load_semantic_layer()
+    assert isinstance(
+        loaded_semantic_layer,
+        semantic_layer_catalog.SemanticLayerCatalog,
+    )
 
-    dataset = semantic_layer_loader.find_dataset("commerce", loaded_semantic_layer)
-    tables = semantic_layer_loader.tables_for_dataset(dataset, loaded_semantic_layer)
+    dataset = loaded_semantic_layer.find_dataset("commerce")
+    tables = loaded_semantic_layer.tables_for_dataset_id("commerce")
     table_ids = {table.table_id for table in tables}
 
     assert dataset.name == "Commerce"
@@ -23,7 +28,7 @@ def test_semantic_layer_loads_dataset_table_relationship() -> None:
     )
     assert table_ids == {"orders", "customers"}
 
-    customers = semantic_layer_loader.find_table("customers", loaded_semantic_layer)
+    customers = loaded_semantic_layer.find_table("customers")
     column_ids = {column.column_id for column in customers.columns}
     metrics_by_id = {metric.metric_id: metric for metric in customers.metrics}
     fields_by_id = {field.field_id: field for field in customers.fields}
@@ -37,7 +42,7 @@ def test_semantic_layer_loads_dataset_table_relationship() -> None:
     assert fields_by_id["customer_region"].source_column == "customer_region"
     assert schema.FieldOperation.GROUP_BY in fields_by_id["customer_region"].operations
 
-    orders = semantic_layer_loader.find_table("orders", loaded_semantic_layer)
+    orders = loaded_semantic_layer.find_table("orders")
     orders_metrics_by_id = {metric.metric_id: metric for metric in orders.metrics}
     assert orders_metrics_by_id["total_revenue"].source_column == "revenue"
     assert orders_metrics_by_id["total_revenue"].kind == schema.MetricKind.MONEY

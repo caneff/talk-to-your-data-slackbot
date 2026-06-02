@@ -118,10 +118,3 @@ class DatasetTable(_SemanticLayerModel):
                 )
                 raise ValueError(msg)
         return self
-
-
-class SemanticLayer(_SemanticLayerModel):
-    """Semantic Layer definitions loaded from versioned config."""
-
-    datasets: tuple[CuratedDataset, ...]
-    tables: tuple[DatasetTable, ...]

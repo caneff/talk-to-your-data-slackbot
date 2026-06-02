@@ -6,6 +6,7 @@ import datetime
 import decimal
 
 import data_assistant.non_answer_catalog as non_answer_catalog
+import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
 from data_assistant.question_interpreter import guards as interpreter_guards
@@ -23,7 +24,7 @@ _SUPPORTED_PROVIDER_INTENTS = frozenset({"summarize"})
 def interpret_question(
     *,
     question: str,
-    semantic_layer: schema.SemanticLayer,
+    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
     provider: QuestionInterpreterProvider,
 ) -> contracts.StageResult[contracts.QuestionFrame]:
     """Promote validated provider proposal into a trusted Question Frame."""
@@ -68,7 +69,7 @@ def interpret_question(
 
 def _promote_provider_result(
     raw_provider_result: object,
-    semantic_layer: schema.SemanticLayer,
+    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> contracts.StageResult[contracts.QuestionFrame]:
     if isinstance(raw_provider_result, ProviderFailure):
         return contracts.NonAnswer(
@@ -155,7 +156,7 @@ def _derive_time_scope(
     *,
     proposal: QuestionFrameProposal,
     field_operations: tuple[contracts.SemanticFieldOperation, ...],
-    semantic_layer: schema.SemanticLayer,
+    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> contracts.TimeScope | contracts.NonAnswer:
     date_field_labels = {
         field.label
@@ -185,7 +186,7 @@ def _derive_time_scope(
 
 def _promote_field_operations(
     operation_proposals: tuple[FieldOperationProposal, ...],
-    semantic_layer: schema.SemanticLayer,
+    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> contracts.NonAnswer | tuple[contracts.SemanticFieldOperation, ...]:
     fields_by_label = {
         field.label: field for table in semantic_layer.tables for field in table.fields

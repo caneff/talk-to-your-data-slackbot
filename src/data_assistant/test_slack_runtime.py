@@ -17,7 +17,7 @@ import duckdb
 import pytest
 
 import data_assistant.openai_support as openai_support
-import data_assistant.semantic_layer.schema as schema
+import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.slack_assistant as slack_assistant
 import data_assistant.slack_runtime as slack_runtime
 import data_assistant.workflow.contracts as contracts
@@ -395,19 +395,24 @@ def test_main_uses_configured_semantic_layer_and_duckdb_paths(
         "create table demo_value (value integer); insert into demo_value values (7);",
         encoding="utf-8",
     )
-    loaded_semantic_layer = typing.cast(schema.SemanticLayer, object())
+    loaded_semantic_layer = typing.cast(
+        semantic_layer_catalog.SemanticLayerCatalog,
+        object(),
+    )
     loaded_paths: list[pathlib.Path] = []
     built_answer_paths: list[slack_assistant.AnswerPath] = []
     received_connection_factories: list[slack_runtime.ConnectionFactory | None] = []
 
-    def fake_load_semantic_layer(path: pathlib.Path) -> schema.SemanticLayer:
+    def fake_load_semantic_layer(
+        path: pathlib.Path,
+    ) -> semantic_layer_catalog.SemanticLayerCatalog:
         loaded_paths.append(path)
         return loaded_semantic_layer
 
     def fake_build_openai_answer_path(
         environ: collections.abc.Mapping[str, str],
         *,
-        semantic_layer: schema.SemanticLayer | None = None,
+        semantic_layer: semantic_layer_catalog.SemanticLayerCatalog | None = None,
     ) -> slack_assistant.AnswerPath:
         del environ
         assert semantic_layer is loaded_semantic_layer
@@ -491,14 +496,16 @@ def test_main_no_flags_wires_retail_default(
     ] = []
     sentinel_answer_path = typing.cast(slack_assistant.AnswerPath, object())
 
-    def fake_load_semantic_layer(path: pathlib.Path) -> schema.SemanticLayer:
+    def fake_load_semantic_layer(
+        path: pathlib.Path,
+    ) -> semantic_layer_catalog.SemanticLayerCatalog:
         loaded_paths.append(path)
-        return typing.cast(schema.SemanticLayer, object())
+        return typing.cast(semantic_layer_catalog.SemanticLayerCatalog, object())
 
     def fake_build_openai_answer_path(
         environ: collections.abc.Mapping[str, str],
         *,
-        semantic_layer: schema.SemanticLayer | None = None,
+        semantic_layer: semantic_layer_catalog.SemanticLayerCatalog | None = None,
     ) -> slack_assistant.AnswerPath:
         del environ, semantic_layer
         return sentinel_answer_path
@@ -581,14 +588,16 @@ def test_main_threads_explicit_interaction_log_path(
         received_log_paths.append(interaction_log_path)
         return FakeSocketModeHandler(app_token="xapp-test-token", app=object())
 
-    def fake_load_semantic_layer(path: pathlib.Path) -> schema.SemanticLayer:
+    def fake_load_semantic_layer(
+        path: pathlib.Path,
+    ) -> semantic_layer_catalog.SemanticLayerCatalog:
         del path
-        return typing.cast(schema.SemanticLayer, object())
+        return typing.cast(semantic_layer_catalog.SemanticLayerCatalog, object())
 
     def fake_build_openai_answer_path(
         environ: collections.abc.Mapping[str, str],
         *,
-        semantic_layer: schema.SemanticLayer | None = None,
+        semantic_layer: semantic_layer_catalog.SemanticLayerCatalog | None = None,
     ) -> slack_assistant.AnswerPath:
         del environ, semantic_layer
         return typing.cast(slack_assistant.AnswerPath, object())

@@ -2,11 +2,12 @@ import datetime
 import typing
 
 import data_assistant.question_interpreter as question_interpreter
+import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.schema as schema
 
 
 def test_semantic_layer_context_exposes_business_labels_not_storage_details() -> None:
-    semantic_layer = schema.SemanticLayer(
+    semantic_layer = semantic_layer_catalog.SemanticLayerCatalog(
         datasets=(
             schema.CuratedDataset(
                 dataset_id="internal_commerce",

@@ -9,8 +9,8 @@ import data_assistant.question_interpreter as question_interpreter
 import data_assistant.question_interpreter.live_eval as live_eval
 import data_assistant.question_interpreter.question_frame_cases as question_frame_cases
 import data_assistant.question_interpreter.test_support as test_support
+import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.loader as semantic_layer_loader
-import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_layer.testing_support as semantic_layer_testing
 
 
@@ -436,7 +436,7 @@ def test_main_loads_openai_config_from_dotenv(
     def fake_run_live_eval(
         *,
         provider: question_interpreter.QuestionInterpreterProvider,
-        semantic_layer: schema.SemanticLayer,
+        semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
         cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
             live_eval.DEFAULT_CASES
         ),
@@ -494,7 +494,7 @@ def test_main_passes_verbose_flag_to_report_writer(
     def fake_run_live_eval(
         *,
         provider: question_interpreter.QuestionInterpreterProvider,
-        semantic_layer: schema.SemanticLayer,
+        semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
         cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
             live_eval.DEFAULT_CASES
         ),
@@ -565,7 +565,7 @@ def test_main_enables_progress_by_default_and_accepts_no_progress(
     def fake_run_live_eval(
         *,
         provider: question_interpreter.QuestionInterpreterProvider,
-        semantic_layer: schema.SemanticLayer,
+        semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
         cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
             live_eval.DEFAULT_CASES
         ),
@@ -635,7 +635,7 @@ def test_main_returns_one_when_live_eval_report_has_failures(
     def fake_run_live_eval(
         *,
         provider: question_interpreter.QuestionInterpreterProvider,
-        semantic_layer: schema.SemanticLayer,
+        semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
         cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
             live_eval.DEFAULT_CASES
         ),
@@ -735,7 +735,7 @@ def test_main_loads_real_semantic_layer_for_live_eval(
     env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     loaded_semantic_layer = semantic_layer_testing.semantic_layer_with_table()
-    captured_semantic_layers: list[schema.SemanticLayer] = []
+    captured_semantic_layers: list[semantic_layer_catalog.SemanticLayerCatalog] = []
 
     class FakeProvider:
         def propose_question_frame(
@@ -753,13 +753,13 @@ def test_main_loads_real_semantic_layer_for_live_eval(
         assert environ["OPENAI_API_KEY"] == "dotenv-key"
         return FakeProvider()
 
-    def fake_load_semantic_layer() -> schema.SemanticLayer:
+    def fake_load_semantic_layer() -> semantic_layer_catalog.SemanticLayerCatalog:
         return loaded_semantic_layer
 
     def fake_run_live_eval(
         *,
         provider: question_interpreter.QuestionInterpreterProvider,
-        semantic_layer: schema.SemanticLayer,
+        semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
         cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
             live_eval.DEFAULT_CASES
         ),

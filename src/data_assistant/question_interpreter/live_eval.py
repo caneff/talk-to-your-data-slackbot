@@ -17,8 +17,8 @@ import tqdm
 
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.question_interpreter.question_frame_cases as question_frame_cases
+import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.loader as semantic_layer_loader
-import data_assistant.semantic_layer.schema as schema
 
 ProviderResult: typing.TypeAlias = (
     question_interpreter.QuestionFrameProposal | question_interpreter.ProviderFailure
@@ -131,7 +131,7 @@ def compare_question_frame_meaning(
 def run_live_question_interpreter_eval(
     *,
     provider: question_interpreter.QuestionInterpreterProvider,
-    semantic_layer: schema.SemanticLayer,
+    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
     cases: collections.abc.Iterable[LiveEvalCase] = DEFAULT_CASES,
     sample_count: int = DEFAULT_SAMPLE_COUNT,
     progress: bool = False,

@@ -2,22 +2,19 @@
 
 from __future__ import annotations
 
-import data_assistant.semantic_layer.loader as semantic_layer_loader
+import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
 
 
 def find_semantic_matches(
     question_frame: contracts.QuestionFrame,
-    semantic_layer: schema.SemanticLayer,
+    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> tuple[contracts.SemanticMatch, ...]:
     """Find exact table-level Semantic Layer matches for a Question Frame."""
     matches: list[contracts.SemanticMatch] = []
     for dataset in semantic_layer.datasets:
-        for table in semantic_layer_loader.tables_for_dataset(
-            dataset,
-            semantic_layer,
-        ):
+        for table in semantic_layer.tables_for_dataset_id(dataset.dataset_id):
             metric = _find_metric(question_frame, table)
             group_by_fields = _find_group_by_fields(question_frame, table)
             if (
