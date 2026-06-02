@@ -109,7 +109,9 @@ the Question Interpreter provider before falling through to the existing typed
 Non-Answer path. Live provider failures and refusals also use that Non-Answer
 path; the runtime does not fall back to a deterministic interpreter.
 
-For local development, the runtime uses a tiny in-memory DuckDB `orders` table. It is only there to support a manual Slack smoke test. No dataset files are committed.
+For local development, the runtime uses a tiny in-memory DuckDB `orders` table.
+It is only there to support a manual Slack smoke test. No DuckDB database file
+is committed.
 
 To run the same Slack bot against a different Semantic Layer and DuckDB
 location, pass runtime data flags:
@@ -143,10 +145,19 @@ Run local Socket Mode adapter from the image:
 docker run --env-file .env talk-to-your-data-slackbot:local
 ```
 
-The container still runs `python -m data_assistant.slack_runtime`, so the Slack
-app from `slack-app-manifest.yaml` is still required. Socket Mode opens an
-outbound connection to Slack and binds no inbound port, so no `-p` flag is
-needed for local Docker runs.
+The Docker image starts the Retail Operations demo by default, using the
+standalone Semantic Layer and deterministic DuckDB seed under
+`examples/retail_ops_demo/`. The container still runs
+`python -m data_assistant.slack_runtime`, so the Slack app from
+`slack-app-manifest.yaml` is still required. Socket Mode opens an outbound
+connection to Slack and binds no inbound port, so no `-p` flag is needed for
+local Docker runs.
+
+Override the command only if you want the tiny local smoke-test fixture instead:
+
+```bash
+docker run --env-file .env talk-to-your-data-slackbot:local python -m data_assistant.slack_runtime
+```
 
 ## Manual Slack smoke test
 

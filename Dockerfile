@@ -22,5 +22,6 @@ WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY src ./src
 COPY semantic_layer ./semantic_layer
+COPY examples/retail_ops_demo ./examples/retail_ops_demo
 
-CMD ["python", "-m", "data_assistant.slack_runtime"]
+CMD ["python", "-m", "data_assistant.slack_runtime", "--semantic-layer-path", "examples/retail_ops_demo/semantic_layer", "--duckdb-path", ":memory:", "--seed-sql-path", "examples/retail_ops_demo/seeds/retail_ops_seed.sql"]
