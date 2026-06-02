@@ -2,13 +2,75 @@
 
 Python project scaffold for a Slackbot that helps users talk to their data.
 
+## What this version does differently
+
+The common approach to "talk to your data" hands the question to an LLM, lets it
+write the SQL, and lets it write the answer around whatever numbers come back —
+quick to demo, but the model owns both the query and the prose, so a
+wrong-but-plausible query reads like a confident answer. This version takes the
+opposite stance: the LLM interprets and narrates, but never touches the bytes in
+between. The decisions most worth calling out:
+
+- **No text-to-SQL — retrieval is fully deterministic.** The LLM emits a typed
+  `Question Frame` (intent, metric, dimension, filters, time range), and a plain
+  `Data Requester` builds and runs the query, bounded by the `Semantic Layer`'s
+  approved metrics and dimensions. Supporting a new question shape means adding a
+  typed intent, not widening what the model may query. See
+  [ADR-0014](docs/adr/0014-data-retrieval-stays-deterministic-no-text-to-sql.md).
+
+- **The model never writes a number.** The `Reasoning Layer` writes prose around
+  a fixed set of seven `Narrative Slots` (`{metric}`, `{metric_total}`,
+  `{top_dimension}`, …) and the pipeline fills every slot from `Prepared Data`,
+  formatted by `Metric Kind`. The model only ever sees a *figure-free*
+  `Result Shape` — the slot names, never the values — and a zero-digit rule
+  rejects any stray digit it emits. If it trips the rule or the provider fails,
+  the answer degrades *visibly* to a deterministic template rather than inventing
+  a figure. See
+  [ADR-0012](docs/adr/0012-reasoning-layer-narrates-prose-pipeline-owns-numbers.md).
+
+- **It returns a Non-Answer instead of guessing.** A question with no time period
+  is treated as a `Material Ambiguity` — the bot asks you to narrow it rather than
+  silently defaulting to all-time. v1 supports only the summarize intent; an
+  `Unsupported Intent Guard` cleanly rejects rank/compare/trend questions instead
+  of collapsing them into a grouped answer.
+
+- **Meaning lives in versioned YAML, not a prompt.** The `Semantic Layer`
+  (`semantic_layer/`) is the checked-in source of what the bot knows — datasets,
+  metrics, dimensions, joins, access — so meaning is reviewable in git instead of
+  hiding inside raw table names the model happened to read.
+
+- **It runs on Slack's Assistant surface, not a plain DM bot.** The runtime uses
+  Bolt's `Assistant` container, so answers arrive in a dedicated assistant pane
+  with native transient status and suggested prompts — a deliberate divergence
+  from the classic-bot manifest the course provides. See
+  [ADR-0015](docs/adr/0015-adopt-slack-assistant-surface.md).
+
+- **Bad answers are one click from becoming fixes.** Every answer carries
+  *Flag correctness* / *Flag formatting* buttons. A flag appends to a local,
+  retention-bounded `Interaction Log` (`logs/interactions.jsonl`) that records the
+  `Question Frame`, routed request, result shape, and headline figures. The
+  `triage-flagged-interactions` skill then reads those flagged records,
+  root-causes each to a pipeline layer, and routes the fix. See
+  [ADR-0016](docs/adr/0016-local-interaction-log-decision-trail-dev-consumer.md).
+
+- **One image, no public URL.** Socket Mode dials an outbound WebSocket to Slack
+  and binds no inbound port, so the `Dockerfile` image is the load-bearing
+  artifact: `docker run` it locally with three secrets — no port config, no
+  ngrok, no web server. The same image deploys unchanged to a Render
+  **Background Worker** (via the `render.yaml` Blueprint) when a time-boxed
+  hosted demo is wanted. See
+  [ADR-0013](docs/adr/0013-demo-runs-via-local-docker-not-render.md).
+
+- **Every answer carries a `Trust Summary`,** and access is checked *before* any
+  data is pulled, so the bot can explain a denial without leaking what it denied.
+
+The capitalized terms are the project's shared vocabulary, defined in
+[CONTEXT.md](CONTEXT.md); the reasoning behind each decision lives in
+[docs/adr/](docs/adr/).
+
 ## Slack MVP scope
 
 This repo's Slack Runtime Adapter is DM-only.
-
-The MVP Demo Scenario also includes a no-secret local harness that simulates
-Slack-like requests with a fake Question Interpreter provider, without any
-Slack app, tokens, OpenAI secrets, or network calls.
 
 Out of scope for this MVP:
 
@@ -17,27 +79,6 @@ Out of scope for this MVP:
 - Progress Updates
 - Trust Detail follow-ups
 - Public HTTP deployment
-
-## Local demo
-
-Run the no-secret local demo:
-
-```bash
-uv run python -m data_assistant.demo
-```
-
-The demo uses a tiny in-memory DuckDB `orders` table and prints:
-
-- Slack-like happy path request
-- Slack Acknowledgement status
-- threaded Final Response
-- Slack-like Non-Answer request
-- threaded Non-Answer Response
-
-The happy path uses the canonical January 2026 fixture with one missing
-`region` and one missing `revenue`, so the Trust Summary shows both caveats.
-
-## Optional manual Slack smoke test
 
 ## Local Slack setup
 
@@ -320,4 +361,4 @@ uv run ruff check .
 uv run pyright
 ```
 
-Normal validation and the local demo do not contact OpenAI.
+Normal validation does not contact OpenAI.

@@ -8,8 +8,9 @@ structured JSON line to a gitignored, retention-bounded **Interaction Log** at
 the model, and — for answers — the **Question Frame**, the routed Data Request,
 the **Prepared Data** *shape* (rows × columns) plus quality notes, and the tiny
 `key_data` headline numbers. The Interaction Log is the local-dev consumer the
-roadmap's deferred **Decision Trail** was waiting for: a maintainer pastes a
-logged interaction into Claude Code when asking for an improvement. Retention
+roadmap's deferred **Decision Trail** was waiting for: a maintainer turns a
+logged interaction into an improvement via Claude Code, driven by the
+`triage-flagged-interactions` skill. Retention
 preserves the most useful improvement evidence first while enforcing a hard
 local file-size cap.
 
@@ -36,6 +37,14 @@ local file-size cap.
   never shipped. Bulk **Prepared Data** cell values and secrets are still
   excluded — only the shape, quality notes, and `key_data` headline rows are
   recorded. The **Question Frame** and metric expression are kept as debug signal.
+- The consumer side is operationalized by the `triage-flagged-interactions`
+  skill (`.claude/skills/`). It reads `logs/interactions.jsonl`, keeps records
+  with a non-empty `flags` list, root-causes each flag to a pipeline layer using
+  the recorded debug signal (`question_frame`, routed request, `prepared_data_shape`,
+  `quality_notes`, `key_data`, or `stage`/`reason_code`), and routes the fix —
+  reproducing locally when the sanitized shape is insufficient rather than
+  inventing the omitted cell values. It treats the log as read-only except for
+  `clear_flags` on maintainer-confirmed handled ids.
 - Capture lives at the **Slack Assistant Adapter** (`on_user_message`), which
   already holds the full result, latency, and user in scope. The pure pipeline
   runner stays I/O-free, so the demo, tests, and evals never write logs.
