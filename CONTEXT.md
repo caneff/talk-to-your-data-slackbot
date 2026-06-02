@@ -134,6 +134,18 @@ measures, **Semantic Fields** used for grouping, filters, and unresolved
 ambiguities, without selecting a **Curated Dataset** or **Dataset Table**.
 _Avoid_: Query, prompt, plan
 
+**Question Grouping**:
+A requested grouping in a **Data Question**, expressed over a business-facing
+**Semantic Field** label before any **Curated Dataset** or **Dataset Table** has
+been selected.
+_Avoid_: Column grouping, table grouping, filter
+
+**Question Field Filter**:
+A row constraint requested by a **Data Question**, expressed over a
+business-facing **Semantic Field** label and typed filter values before any
+**Curated Dataset** or **Dataset Table** has been selected.
+_Avoid_: Column filter, SQL predicate, grouping
+
 **Time Scope**:
 The period a **Data Question** asks about, which is one of three: _bounded_ (a
 named period such as a month, a date range, or a single date), _all-time_ (the
@@ -192,6 +204,16 @@ datasets, selected **Dataset Tables**, approved metrics, approved **Semantic
 Fields**, filters, limits, join paths, privacy constraints, and expected output
 shape.
 _Avoid_: SQL, query, dataframe
+
+**Resolved Grouping**:
+A **Question Grouping** resolved against selected **Semantic Layer** objects for
+use in a **Data Request**.
+_Avoid_: Question grouping, column grouping, filter
+
+**Resolved Field Filter**:
+A **Question Field Filter** resolved against selected **Semantic Layer** objects
+for use in a **Data Request**.
+_Avoid_: Question field filter, raw column filter, SQL predicate
 
 **Prepared Data**:
 The bounded result produced from a **Data Request** and passed to the
