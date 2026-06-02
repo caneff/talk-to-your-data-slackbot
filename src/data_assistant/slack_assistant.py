@@ -36,6 +36,7 @@ import duckdb
 import pandas as pd
 
 import data_assistant.access_controller as access_controller
+import data_assistant.assistant_thread_pointer as assistant_thread_pointer
 import data_assistant.interaction_log as interaction_log
 import data_assistant.workflow.contracts as contracts
 
@@ -519,16 +520,36 @@ class AssistantAdapter:
     # Injectable so tests write to tmp_path and never touch the real gitignored
     # logs/interactions.jsonl.
     log_path: pathlib.Path = interaction_log.DEFAULT_LOG_PATH
+    # Injectable last-opened-thread pointer (issue #128): on_thread_started
+    # records (channel, thread_ts) here so the QA driver can auto-discover the
+    # most recently opened assistant thread. Same tmp_path injection as log_path.
+    pointer_path: pathlib.Path = assistant_thread_pointer.DEFAULT_POINTER_PATH
 
     def on_thread_started(
         self,
         *,
         say: Sayer,
         set_suggested_prompts: SuggestedPromptsSetter,
+        channel: str,
+        thread_ts: str,
     ) -> None:
-        """Greet the user and offer the provisional suggested prompts."""
+        """Greet the user, offer prompts, and record the thread pointer.
+
+        Writing the (channel, thread_ts) pointer is best-effort discovery state
+        for the QA driver; it is wrapped so a write failure NEVER blocks the
+        greeting or suggested prompts -- the same 'reply/greeting wins' boundary
+        as the Interaction Log capture.
+        """
         say(GREETING)
         set_suggested_prompts(prompts=[dict(prompt) for prompt in SUGGESTED_PROMPTS])
+        try:
+            assistant_thread_pointer.write_latest(
+                channel,
+                thread_ts,
+                path=self.pointer_path,
+            )
+        except Exception:
+            logger.exception("Failed to record assistant-thread pointer.")
 
     def answer_and_render(
         self,
@@ -694,7 +715,8 @@ def register_assistant_handlers(
     injects listener arguments by exact name (verified against slack_bolt
     1.28.0): ``say``, ``set_status``, ``set_suggested_prompts``, ``context``.
     ``context.user_id`` / ``context.channel_id`` / ``context.thread_ts`` carry
-    the routing identifiers.
+    the routing identifiers. ``thread_started`` also takes ``context`` so the
+    adapter can record the (channel, thread_ts) pointer the QA driver reads.
     """
     from slack_bolt import Assistant
 
@@ -703,12 +725,15 @@ def register_assistant_handlers(
     assistant: typing.Any = Assistant()
 
     def _thread_started(
+        context: typing.Any,
         say: Sayer,
         set_suggested_prompts: SuggestedPromptsSetter,
     ) -> None:
         adapter.on_thread_started(
             say=say,
             set_suggested_prompts=set_suggested_prompts,
+            channel=context.channel_id or "",
+            thread_ts=context.thread_ts or "",
         )
 
     def _user_message(

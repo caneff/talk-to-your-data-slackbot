@@ -377,7 +377,8 @@ Step by step:
 
 1. Put `SLACK_BOT_TOKEN` and `OPENAI_API_KEY` (and optional `OPENAI_MODEL`) in
    `.env`.
-2. **Start the bot and leave it running:**
+2. **Start the LOCAL bot and leave it running, in the same working directory
+   you will run the driver from:**
 
    ```bash
    uv run python -m data_assistant.slack_runtime
@@ -385,24 +386,42 @@ Step by step:
 
    The driver posts the answers, but the running bot owns the flag-button
    (`block_actions`) listeners and must share the same `logs/interactions.jsonl`
-   file — so a flag you click attaches to the record the driver wrote. Run both
-   from the same working directory.
+   file — so a flag you click attaches to the record the driver wrote.
+
+   > **Note:** point the driver at your **local dev bot**, not the production
+   > Slack app your team uses for real data questions. This drives the dev/test
+   > instance: the driver uses `dev_identity` and the local dev data fixture (the
+   > same dev config `slack_runtime` uses for the smoke test), so it answers from
+   > local development data under a dev identity — not real curated datasets.
+   > It must also be the **local** `slack_runtime`, not the live Render
+   > deployment, because the driver and bot communicate only through local files:
+   > the driver appends the interaction record to `logs/interactions.jsonl` and
+   > reads the auto-discovery pointer `logs/last_assistant_thread.json`, while the
+   > bot matches your flag click to a record by id in that same log. If the bot
+   > runs on Render, your click hits Render's log (no matching record →
+   > `flag_interaction` no-ops) and the pointer lives on Render's disk (so
+   > auto-discovery can't read it). The Interaction Log is deliberately local
+   > (**ADR-0016**), so: local dev bot, same directory.
 3. In Slack, open the app under **Agents & AI Apps** and start a thread (the bot
-   greets and shows suggested prompts).
-4. Get that thread's `channel` id and `thread_ts`: send any one message in the
-   thread, then **Copy link** on a message in it. The link looks like
-   `…/archives/<CHANNEL>/p1748880000123456` — `<CHANNEL>` is the channel id, and
-   the `thread_ts` is that `p…` number with a dot inserted before the last six
-   digits (`1748880000.123456`).
-5. Run the driver (defaults the battery to `docs/qa-commerce-questions.md`):
+   greets and shows suggested prompts). Opening the thread is enough — the bot
+   records that thread as the driver's target (auto-discovery,
+   last-writer-wins: the most recently opened thread).
+4. Run the driver (defaults the battery to `docs/qa-commerce-questions.md`, and
+   posts into the thread you just opened — no ids needed):
 
    ```bash
-   uv run python -m data_assistant.slack_qa_driver --channel <CHANNEL> --thread-ts <THREAD_TS>
+   uv run python -m data_assistant.slack_qa_driver
    ```
 
-   Use `--battery PATH` to replay a different battery file (same markdown shape:
-   top-level `- ` bullets are sent; headings, prose, and indented sub-bullets are
-   skipped).
+   `--channel <CHANNEL>` and `--thread-ts <THREAD_TS>` remain as explicit
+   overrides if you want to target a specific thread instead of the most
+   recently opened one (each fills independently from the pointer when omitted).
+   To get those ids manually: **Copy link** on a message in the thread — the link
+   looks like `…/archives/<CHANNEL>/p1748880000123456`, where `<CHANNEL>` is the
+   channel id and the `thread_ts` is that `p…` number with a dot inserted before
+   the last six digits (`1748880000.123456`). Use `--battery PATH` to replay a
+   different battery file (same markdown shape: top-level `- ` bullets are sent;
+   headings, prose, and indented sub-bullets are skipped).
 6. For each question the driver prints `[i/N]`, posts the answer + flag buttons
    into the thread, and waits. Read the reply in Slack; if it is wrong press a
    flag button (**correctness** / **formatting** / **investigate**). Press

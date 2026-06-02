@@ -15,7 +15,10 @@ via the **bot token** (``chat.postMessage``). It does NOT synthesize a user
 message, so it needs no user token, no manifest/scope change, and no reinstall.
 Flag clicks are handled by the already-running bot's ``block_actions``
 listeners over Socket Mode -- so the bot must be running and must share the same
-``logs/interactions.jsonl`` path the driver writes.
+``logs/interactions.jsonl`` path the driver writes. The driver also
+auto-discovers which assistant thread to post into from the pointer the bot
+writes on ``thread_started`` (``logs/last_assistant_thread.json``), so
+``--channel``/``--thread-ts`` are optional explicit overrides.
 
 Like the ``live_eval`` mains, ``main`` is near-untested by design: it talks to
 live Slack and the live OpenAI answer path. Only :func:`parse_battery` (a pure
@@ -33,10 +36,16 @@ import typing
 
 import dotenv
 
+import data_assistant.assistant_thread_pointer as assistant_thread_pointer
 import data_assistant.slack_assistant as slack_assistant
 import data_assistant.slack_runtime as slack_runtime
 
 DEFAULT_BATTERY_PATH: typing.Final[str] = "docs/qa-commerce-questions.md"
+
+_NO_THREAD_MESSAGE: typing.Final[str] = (
+    "No assistant thread found — open a thread with the bot first, "
+    "or pass --channel/--thread-ts."
+)
 
 
 def parse_battery(markdown: str) -> list[str]:
@@ -54,6 +63,31 @@ def parse_battery(markdown: str) -> list[str]:
         if line.startswith("- "):
             questions.append(line[len("- ") :].strip())
     return questions
+
+
+def resolve_thread_target(
+    *,
+    channel: str | None,
+    thread_ts: str | None,
+    pointer_path: pathlib.Path = assistant_thread_pointer.DEFAULT_POINTER_PATH,
+) -> tuple[str, str] | str:
+    """Decide which assistant thread to post into: explicit args, else pointer.
+
+    Explicit ``--channel``/``--thread-ts`` always win. Any id left unset is
+    filled from the auto-discovery pointer (``last_assistant_thread.json``) the
+    running bot wrote on ``thread_started`` -- last-writer-wins, so it resolves
+    to the most recently opened thread. Returns ``(channel, thread_ts)`` when
+    both are resolved, or an operator-facing error message string when they are
+    not. Pure (only reads the injected pointer file) so it is unit-tested
+    without Slack.
+    """
+    pointer = assistant_thread_pointer.read_latest(pointer_path) or (None, None)
+    pointer_channel, pointer_thread_ts = pointer
+    resolved_channel = channel or pointer_channel
+    resolved_thread_ts = thread_ts or pointer_thread_ts
+    if resolved_channel and resolved_thread_ts:
+        return resolved_channel, resolved_thread_ts
+    return _NO_THREAD_MESSAGE
 
 
 def _quietly_set_status(status: str) -> None:
@@ -92,6 +126,12 @@ def main(
         print("Missing required environment variable: SLACK_BOT_TOKEN", file=sys.stderr)
         return 1
 
+    target = resolve_thread_target(channel=args.channel, thread_ts=args.thread_ts)
+    if isinstance(target, str):
+        print(target, file=sys.stderr)
+        return 1
+    channel, thread_ts = target
+
     battery_text = pathlib.Path(args.battery).read_text(encoding="utf-8")
     questions = parse_battery(battery_text)
     if not questions:
@@ -109,7 +149,7 @@ def main(
 
     print(
         f"Replaying {len(questions)} question(s) from {args.battery} "
-        f"into channel={args.channel} thread_ts={args.thread_ts} as the bot.\n"
+        f"into channel={channel} thread_ts={thread_ts} as the bot.\n"
         "The bot must be running to own the flag buttons and share the log.\n"
     )
     for index, question in enumerate(questions, start=1):
@@ -120,8 +160,8 @@ def main(
             set_status=_quietly_set_status,
         )
         client.chat_postMessage(
-            channel=args.channel,
-            thread_ts=args.thread_ts,
+            channel=channel,
+            thread_ts=thread_ts,
             text=final_response.text,
             blocks=list(reply_blocks),
         )
@@ -148,13 +188,21 @@ def _parse_args(argv: collections_abc.Sequence[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--channel",
-        required=True,
-        help="Channel id of the assistant thread to post answers into.",
+        default=None,
+        help=(
+            "Channel id of the assistant thread to post answers into. "
+            "Defaults to the most recently opened thread auto-discovered from "
+            "the bot's pointer file."
+        ),
     )
     parser.add_argument(
         "--thread-ts",
-        required=True,
-        help="thread_ts of the assistant thread to post answers into.",
+        default=None,
+        help=(
+            "thread_ts of the assistant thread to post answers into. "
+            "Defaults to the most recently opened thread auto-discovered from "
+            "the bot's pointer file."
+        ),
     )
     parser.add_argument(
         "--battery",

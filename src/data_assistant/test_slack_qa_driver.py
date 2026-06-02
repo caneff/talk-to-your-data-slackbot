@@ -8,8 +8,10 @@ top-level questions with no Slack and no OpenAI.
 
 from __future__ import annotations
 
+import pathlib
 import textwrap
 
+import data_assistant.assistant_thread_pointer as assistant_thread_pointer
 import data_assistant.slack_qa_driver as slack_qa_driver
 
 
@@ -79,3 +81,78 @@ def test_parse_battery_strips_surrounding_whitespace() -> None:
     markdown = "-   What was total revenue?   \n"
 
     assert slack_qa_driver.parse_battery(markdown) == ["What was total revenue?"]
+
+
+def test_resolve_thread_target_uses_explicit_args_over_pointer(
+    tmp_path: pathlib.Path,
+) -> None:
+    pointer_path = tmp_path / "last_assistant_thread.json"
+    assistant_thread_pointer.write_latest("Cpointer", "9.9", path=pointer_path)
+
+    target = slack_qa_driver.resolve_thread_target(
+        channel="Cexplicit",
+        thread_ts="1.1",
+        pointer_path=pointer_path,
+    )
+
+    # Explicit overrides win even when a pointer exists.
+    assert target == ("Cexplicit", "1.1")
+
+
+def test_resolve_thread_target_falls_back_to_pointer_when_args_missing(
+    tmp_path: pathlib.Path,
+) -> None:
+    pointer_path = tmp_path / "last_assistant_thread.json"
+    assistant_thread_pointer.write_latest("Cpointer", "9.9", path=pointer_path)
+
+    target = slack_qa_driver.resolve_thread_target(
+        channel=None,
+        thread_ts=None,
+        pointer_path=pointer_path,
+    )
+
+    assert target == ("Cpointer", "9.9")
+
+
+def test_resolve_thread_target_partial_args_fill_from_pointer(
+    tmp_path: pathlib.Path,
+) -> None:
+    pointer_path = tmp_path / "last_assistant_thread.json"
+    assistant_thread_pointer.write_latest("Cpointer", "9.9", path=pointer_path)
+
+    # Only one id passed: the other fills from the pointer.
+    target = slack_qa_driver.resolve_thread_target(
+        channel="Cexplicit",
+        thread_ts=None,
+        pointer_path=pointer_path,
+    )
+
+    assert target == ("Cexplicit", "9.9")
+
+
+def test_resolve_thread_target_no_args_no_pointer_returns_error(
+    tmp_path: pathlib.Path,
+) -> None:
+    target = slack_qa_driver.resolve_thread_target(
+        channel=None,
+        thread_ts=None,
+        pointer_path=tmp_path / "missing.json",
+    )
+
+    # Unresolved -> a clear operator-facing error message (a str, not a tuple).
+    assert isinstance(target, str)
+    assert "No assistant thread found" in target
+
+
+def test_resolve_thread_target_partial_args_no_pointer_returns_error(
+    tmp_path: pathlib.Path,
+) -> None:
+    # One id passed but the other cannot be filled (no pointer) -> still an error.
+    target = slack_qa_driver.resolve_thread_target(
+        channel="Cexplicit",
+        thread_ts=None,
+        pointer_path=tmp_path / "missing.json",
+    )
+
+    assert isinstance(target, str)
+    assert "No assistant thread found" in target

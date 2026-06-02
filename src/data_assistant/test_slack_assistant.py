@@ -20,6 +20,7 @@ import duckdb
 import pandas as pd
 import pytest
 
+import data_assistant.assistant_thread_pointer as assistant_thread_pointer
 import data_assistant.interaction_log as interaction_log
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.slack_assistant as slack_assistant
@@ -154,15 +155,23 @@ def _unused_answer_path(
     raise AssertionError("thread_started must not run the answer path")
 
 
-def test_on_thread_started_posts_greeting_and_suggested_prompts() -> None:
+def test_on_thread_started_posts_greeting_and_suggested_prompts(
+    tmp_path: pathlib.Path,
+) -> None:
     adapter = slack_assistant.AssistantAdapter(
         connection_factory=_unused_connection_factory,
         answer_path=_unused_answer_path,
+        pointer_path=tmp_path / "last_assistant_thread.json",
     )
     say = RecordingSay()
     set_suggested_prompts = RecordingSuggestedPrompts()
 
-    adapter.on_thread_started(say=say, set_suggested_prompts=set_suggested_prompts)
+    adapter.on_thread_started(
+        say=say,
+        set_suggested_prompts=set_suggested_prompts,
+        channel="C123",
+        thread_ts="1748880000.123456",
+    )
 
     assert say.calls == [(slack_assistant.GREETING, None)]
     assert set_suggested_prompts.calls == [
@@ -172,6 +181,61 @@ def test_on_thread_started_posts_greeting_and_suggested_prompts() -> None:
     assert len(slack_assistant.SUGGESTED_PROMPTS) == 3
     for prompt in set_suggested_prompts.calls[0]:
         assert set(prompt) == {"title", "message"}
+
+
+def test_on_thread_started_writes_assistant_thread_pointer(
+    tmp_path: pathlib.Path,
+) -> None:
+    pointer_path = tmp_path / "last_assistant_thread.json"
+    adapter = slack_assistant.AssistantAdapter(
+        connection_factory=_unused_connection_factory,
+        answer_path=_unused_answer_path,
+        pointer_path=pointer_path,
+    )
+
+    adapter.on_thread_started(
+        say=RecordingSay(),
+        set_suggested_prompts=RecordingSuggestedPrompts(),
+        channel="C123",
+        thread_ts="1748880000.123456",
+    )
+
+    # The QA driver later reads this to auto-discover the thread.
+    assert assistant_thread_pointer.read_latest(pointer_path) == (
+        "C123",
+        "1748880000.123456",
+    )
+
+
+def test_on_thread_started_greets_even_if_pointer_write_fails(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A pointer-write failure must NEVER break the greeting/suggested prompts.
+
+    Same 'reply wins' boundary as the Interaction Log capture: best-effort
+    discovery state is strictly subordinate to the user-facing greeting.
+    """
+    # Point at a path that cannot be created (a file used as a directory).
+    blocker = tmp_path / "blocker"
+    blocker.write_text("not a directory", encoding="utf-8")
+    adapter = slack_assistant.AssistantAdapter(
+        connection_factory=_unused_connection_factory,
+        answer_path=_unused_answer_path,
+        pointer_path=blocker / "last_assistant_thread.json",
+    )
+    say = RecordingSay()
+    set_suggested_prompts = RecordingSuggestedPrompts()
+
+    adapter.on_thread_started(
+        say=say,
+        set_suggested_prompts=set_suggested_prompts,
+        channel="C123",
+        thread_ts="1748880000.123456",
+    )
+
+    # Greeting + suggested prompts still went out despite the failed write.
+    assert say.calls == [(slack_assistant.GREETING, None)]
+    assert len(set_suggested_prompts.calls) == 1
 
 
 def test_on_user_message_sets_status_runs_pipeline_then_says(
