@@ -109,16 +109,10 @@ def run_data_assistant(
 
     # 4. Prepare Data.
     progress_sink(RUNNING_NUMBERS_STATUS)
-    data_request_result = data_requester.create_data_request(
+    data_request = data_requester.create_data_request(
         question_frame=question_frame,
-        resolved_match=available_data_resolution.resolved_match,
+        available_data_resolution=available_data_resolution,
     )
-    if isinstance(data_request_result, contracts.NonAnswer):
-        return response_composer.compose_non_answer_response(
-            data_request_result,
-            wording_provider=non_answer_catalog.StaticCatalogWording(),
-        )
-    data_request = data_request_result.value
 
     prepared_data = data_preparation.prepare_data(
         data_request=data_request,

@@ -171,9 +171,7 @@ def data_request(
     available_data_resolution: contracts.AvailableDataResolution,
 ) -> contracts.DataRequest:
     """Build the canonical Data Request through the requester boundary."""
-    return unwrap_stage_result(
-        data_requester.create_data_request(
-            question_frame,
-            available_data_resolution.resolved_match,
-        ),
+    return data_requester.create_data_request(
+        question_frame,
+        available_data_resolution,
     )

@@ -658,9 +658,9 @@ def test_data_assistant_denies_dataset_access_before_request_or_preparation(
 
     def fail_create_data_request(
         question_frame: contracts.QuestionFrame,
-        resolved_match: contracts.SemanticMatch,
-    ) -> contracts.StageResult[contracts.DataRequest]:
-        del question_frame, resolved_match
+        available_data_resolution: contracts.AvailableDataResolution,
+    ) -> contracts.DataRequest:
+        del question_frame, available_data_resolution
         raise AssertionError("create_data_request should not be called")
 
     def fail_prepare_data(
@@ -688,50 +688,6 @@ def test_data_assistant_denies_dataset_access_before_request_or_preparation(
     assert non_answer.stage == contracts.NonAnswerStage.ACCESS_CONTROLLER
     assert non_answer.reason_code == contracts.NonAnswerReasonCode.ACCESS_DENIED
     assert non_answer.datasets == ("commerce",)
-
-
-def test_data_assistant_stops_progress_after_prepare_stage_non_answer(
-    monkeypatch: pytest.MonkeyPatch,
-    canonical_question: str,
-    connect_orders: local_duckdb_fixture.OrdersConnector,
-    canonical_question_provider: question_interpreter.QuestionInterpreterProvider,
-    allowed_internal_identity: contracts.InternalIdentity,
-) -> None:
-    sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
-    seen_statuses: list[str] = []
-
-    def return_prepare_stage_non_answer(
-        question_frame: contracts.QuestionFrame,
-        resolved_match: contracts.SemanticMatch,
-    ) -> contracts.StageResult[contracts.DataRequest]:
-        del question_frame, resolved_match
-        return contracts.NonAnswer(
-            stage=contracts.NonAnswerStage.SEMANTIC_ROUTER,
-            reason_code=contracts.NonAnswerReasonCode.NO_MATCHING_TABLE,
-        )
-
-    monkeypatch.setattr(
-        data_requester,
-        "create_data_request",
-        return_prepare_stage_non_answer,
-    )
-
-    with connect_orders((("2026-01-03", "North", "1200.00"),)) as connection:
-        result = workflow_runner.run_data_assistant(
-            connection,
-            canonical_question,
-            question_interpreter_provider=canonical_question_provider,
-            internal_identity=allowed_internal_identity,
-            progress_sink=seen_statuses.append,
-        )
-
-    assert result is sentinel_response
-    assert seen_statuses == EXPECTED_PROGRESS_STATUSES[:3]
-    assert len(captured_non_answers) == 1
-    assert (
-        captured_non_answers[0].reason_code
-        == contracts.NonAnswerReasonCode.NO_MATCHING_TABLE
-    )
 
 
 def test_data_assistant_returns_ambiguous_table_before_access_denial(
