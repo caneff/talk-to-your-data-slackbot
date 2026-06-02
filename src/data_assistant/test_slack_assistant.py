@@ -845,6 +845,79 @@ def test_on_user_message_logs_error_record_and_still_says_fallback(
     assert record["flags"] == []
 
 
+def test_answer_and_render_returns_id_response_blocks_and_logs_one_record(
+    tmp_path: pathlib.Path,
+    connect_orders: collections.abc.Callable[
+        ..., contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
+    ],
+) -> None:
+    """The extracted success core: id -> answer -> log -> render-with-buttons.
+
+    Both ``on_user_message`` and the Slack QA driver call this, so it must return
+    everything a caller needs to post the reply AND append exactly one record.
+    """
+    log_path = tmp_path / "interactions.jsonl"
+    set_status = RecordingStatus()
+    seen_questions: list[str] = []
+    blocks: tuple[contracts.SlackBlock, ...] = (
+        {"type": "section", "text": {"type": "mrkdwn", "text": "trust"}},
+    )
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        question: str,
+        _identity: contracts.InternalIdentity,
+        progress_sink: contracts.ProgressSink,
+    ) -> slack_assistant.SlackWorkflowResult:
+        progress_sink(EXPECTED_PROGRESS_STATUSES[0])
+        seen_questions.append(question)
+        return _final_response(text="Final answer text.", blocks=blocks)
+
+    adapter = slack_assistant.AssistantAdapter(
+        connection_factory=_connection_factory(connect_orders),
+        answer_path=answer_path,
+        model_label="gpt-4o-mini",
+        log_path=log_path,
+    )
+
+    interaction_id, final_response, reply_blocks = adapter.answer_and_render(
+        text="What was total revenue by region in January 2026?",
+        user="U123",
+        set_status=set_status,
+    )
+
+    # Progress flows through the injected status sink.
+    assert set_status.calls == [EXPECTED_PROGRESS_STATUSES[0]]
+    assert seen_questions == ["What was total revenue by region in January 2026?"]
+    # The triple lets the driver post the reply as the bot.
+    assert isinstance(interaction_id, str) and interaction_id
+    assert final_response.text == "Final answer text."
+    reply_blocks = tuple(reply_blocks)
+    assert reply_blocks[: len(blocks)] == blocks
+    assert _action_ids_in(reply_blocks) == {
+        slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
+        slack_assistant.FLAG_FORMATTING_ACTION_ID,
+        slack_assistant.FLAG_INVESTIGATE_ACTION_ID,
+    }
+    # The flag buttons carry the SAME id that was returned, so a clicked flag
+    # attaches to the record this call appended.
+    for block in reply_blocks:
+        if block.get("type") != "actions":
+            continue
+        for element in _button_elements(block):
+            assert element["value"] == interaction_id
+
+    # Exactly one record was appended, under the returned id.
+    records = _read_log_records(log_path)
+    assert len(records) == 1
+    assert records[0]["id"] == interaction_id
+    # A bare FinalResponse records as a non_answer (ADR-0016 result branching);
+    # the point here is the single record under the returned id, not its outcome.
+    assert records[0]["outcome"] == "non_answer"
+    assert records[0]["model"] == "gpt-4o-mini"
+    assert records[0]["user"] == "U123"
+
+
 def test_on_user_message_log_failure_does_not_break_user_reply(
     tmp_path: pathlib.Path,
     connect_orders: collections.abc.Callable[

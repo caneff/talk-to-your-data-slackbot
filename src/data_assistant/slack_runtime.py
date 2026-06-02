@@ -88,7 +88,7 @@ def build_openai_answer_path(
     return answer_path
 
 
-def _resolve_model_label(environ: collections_abc.Mapping[str, str]) -> str:
+def resolve_model_label(environ: collections_abc.Mapping[str, str]) -> str:
     """Resolve the OpenAI model label recorded on each Interaction Log line.
 
     Sources the same ``OPENAI_MODEL`` env var (defaulting to
@@ -100,7 +100,7 @@ def _resolve_model_label(environ: collections_abc.Mapping[str, str]) -> str:
     return environ.get("OPENAI_MODEL", openai_support.DEFAULT_OPENAI_MODEL)
 
 
-def _resolve_interaction_log_path(
+def resolve_interaction_log_path(
     environ: collections_abc.Mapping[str, str],
     *,
     explicit_path: pathlib.Path | None = None,
@@ -159,7 +159,7 @@ def _default_socket_mode_handler_factory(
     )
 
 
-def _dev_connection_factory() -> contextlib.AbstractContextManager[
+def dev_connection_factory() -> contextlib.AbstractContextManager[
     duckdb.DuckDBPyConnection
 ]:
     """Provide a tiny local DuckDB fixture for manual Slack smoke testing."""
@@ -225,8 +225,8 @@ def run_socket_mode_from_env(
             connection_factory=connection_factory,
             answer_path=active_answer_path,
             internal_identity_resolver=internal_identity_resolver,
-            model_label=_resolve_model_label(environ),
-            log_path=_resolve_interaction_log_path(
+            model_label=resolve_model_label(environ),
+            log_path=resolve_interaction_log_path(
                 environ,
                 explicit_path=interaction_log_path,
             ),
@@ -309,7 +309,7 @@ def _parse_args(argv: collections_abc.Sequence[str]) -> argparse.Namespace:
 
 def _configured_connection_factory(args: argparse.Namespace) -> ConnectionFactory:
     if args.duckdb_path is None:
-        return _dev_connection_factory
+        return dev_connection_factory
     return build_duckdb_connection_factory(
         args.duckdb_path,
         seed_sql_path=args.seed_sql_path,

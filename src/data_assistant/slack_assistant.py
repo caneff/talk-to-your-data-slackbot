@@ -530,6 +530,62 @@ class AssistantAdapter:
         say(GREETING)
         set_suggested_prompts(prompts=[dict(prompt) for prompt in SUGGESTED_PROMPTS])
 
+    def answer_and_render(
+        self,
+        *,
+        text: str,
+        user: str,
+        set_status: StatusSetter,
+    ) -> tuple[str, contracts.FinalResponse, tuple[contracts.SlackBlock, ...]]:
+        """Run the success core for one question and return it ready to post.
+
+        This is the shared ``id -> answer -> log -> render-with-buttons`` core
+        extracted from :meth:`on_user_message` so both the Slack adapter and the
+        manual QA driver (issue #128) run the SAME path -- the driver never
+        drifts from the real adapter. It:
+
+        * mints a fresh ``interaction_id`` and starts the latency clock,
+        * opens the data connection and runs the injected ``answer_path``
+          (progress flows through ``set_status``),
+        * append-first records the sanitized Interaction Log line (capture stays
+          in the adapter module; the runner stays I/O-free -- ADR-0016),
+        * renders the visible response blocks plus the flag buttons carrying the
+          same id, so a clicked flag attaches to the record appended here.
+
+        Returns ``(interaction_id, final_response, reply_blocks)``. The caller
+        owns the actual posting (``say`` for the adapter, ``chat.postMessage``
+        for the driver) and any error/fallback handling. Exceptions propagate to
+        the caller -- :meth:`on_user_message` wraps this in its Runtime Fallback
+        path.
+        """
+        internal_identity = self.internal_identity_resolver(user)
+        interaction_id = uuid.uuid4().hex
+        started_at = time.monotonic()
+        timestamp = datetime.datetime.now(datetime.UTC).isoformat()
+        with self.connection_factory() as connection:
+            result = self.answer_path(
+                connection,
+                text,
+                internal_identity,
+                set_status,
+            )
+        final_response = final_response_from_workflow_result(result)
+        self._record_interaction(
+            lambda: _interaction_record(
+                interaction_id=interaction_id,
+                timestamp=timestamp,
+                latency_ms=_latency_ms(started_at),
+                user=user,
+                question=text,
+                model=self.model_label,
+                result=result,
+            ),
+        )
+        reply_blocks = _visible_response_blocks(final_response) + flag_action_blocks(
+            interaction_id
+        )
+        return interaction_id, final_response, reply_blocks
+
     def on_user_message(
         self,
         *,
@@ -547,33 +603,14 @@ class AssistantAdapter:
         transient status auto-clears when ``say`` posts the reply (both the
         success and the fallback path), so there is no manual status clear.
         """
-        internal_identity = self.internal_identity_resolver(user)
-        interaction_id = uuid.uuid4().hex
         started_at = time.monotonic()
         timestamp = datetime.datetime.now(datetime.UTC).isoformat()
         try:
-            with self.connection_factory() as connection:
-                result = self.answer_path(
-                    connection,
-                    text,
-                    internal_identity,
-                    set_status,
-                )
-            final_response = final_response_from_workflow_result(result)
-            self._record_interaction(
-                lambda: _interaction_record(
-                    interaction_id=interaction_id,
-                    timestamp=timestamp,
-                    latency_ms=_latency_ms(started_at),
-                    user=user,
-                    question=text,
-                    model=self.model_label,
-                    result=result,
-                ),
+            _interaction_id, final_response, reply_blocks = self.answer_and_render(
+                text=text,
+                user=user,
+                set_status=set_status,
             )
-            reply_blocks = _visible_response_blocks(
-                final_response
-            ) + flag_action_blocks(interaction_id)
             say(final_response.text, blocks=reply_blocks)
         except Exception as error:
             # Bind to a stable local: `except ... as error` clears `error` at
@@ -581,6 +618,11 @@ class AssistantAdapter:
             # this name instead (the thunk runs synchronously, but this also
             # keeps it lexically valid).
             caught = error
+            # The success id is minted inside answer_and_render and is lost when
+            # it raises, so the crash reply gets its own fresh id; the error
+            # record and the fallback's flag buttons share it so the crash reply
+            # stays flaggable.
+            interaction_id = uuid.uuid4().hex
             # Bootcamp deviation: we also log the raw question text (`text`).
             # A real production Slack bot would NOT log the question text because
             # it is user-provided free text that may contain sensitive or
