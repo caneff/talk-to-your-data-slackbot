@@ -228,6 +228,7 @@ def test_on_user_message_sets_status_runs_pipeline_then_says(
     assert _action_ids_in(said_blocks) == {
         slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
         slack_assistant.FLAG_FORMATTING_ACTION_ID,
+        slack_assistant.FLAG_INVESTIGATE_ACTION_ID,
     }
 
 
@@ -278,6 +279,7 @@ def test_on_user_message_uses_pipeline_progress_sink_for_staged_status(
     assert _action_ids_in(tuple(said_blocks)) == {
         slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
         slack_assistant.FLAG_FORMATTING_ACTION_ID,
+        slack_assistant.FLAG_INVESTIGATE_ACTION_ID,
     }
 
 
@@ -325,6 +327,7 @@ def test_on_user_message_says_non_answer_without_fallback(
     assert _action_ids_in(tuple(said_blocks)) == {
         slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
         slack_assistant.FLAG_FORMATTING_ACTION_ID,
+        slack_assistant.FLAG_INVESTIGATE_ACTION_ID,
     }
     assert slack_assistant.RUNTIME_FALLBACK_MESSAGE not in [c[0] for c in say.calls]
 
@@ -368,6 +371,7 @@ def test_on_user_message_says_runtime_fallback_on_crash_without_raising(
     assert _action_ids_in(tuple(fallback_blocks)) == {
         slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
         slack_assistant.FLAG_FORMATTING_ACTION_ID,
+        slack_assistant.FLAG_INVESTIGATE_ACTION_ID,
     }
     assert "secret-value" not in fallback_text
     assert "RuntimeError" not in fallback_text
@@ -946,6 +950,7 @@ def test_flag_action_blocks_carries_interaction_id_and_action_ids() -> None:
     assert _action_ids_in(blocks) == {
         slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
         slack_assistant.FLAG_FORMATTING_ACTION_ID,
+        slack_assistant.FLAG_INVESTIGATE_ACTION_ID,
     }
     # Every button carries the interaction id in its ``value`` so the handler
     # can flag the right record.
@@ -960,6 +965,7 @@ def test_action_id_to_category_is_single_source_of_truth() -> None:
     assert slack_assistant.ACTION_ID_TO_CATEGORY == {
         slack_assistant.FLAG_CORRECTNESS_ACTION_ID: "correctness",
         slack_assistant.FLAG_FORMATTING_ACTION_ID: "formatting",
+        slack_assistant.FLAG_INVESTIGATE_ACTION_ID: "investigate",
     }
     # The mapped categories are exactly the Interaction Log flag vocabulary.
     assert set(slack_assistant.ACTION_ID_TO_CATEGORY.values()) == set(
@@ -1017,6 +1023,7 @@ def test_apply_flag_appends_status_line_and_keeps_answer_and_buttons() -> None:
     assert _action_ids_in(new_blocks) == {
         slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
         slack_assistant.FLAG_FORMATTING_ACTION_ID,
+        slack_assistant.FLAG_INVESTIGATE_ACTION_ID,
     }
     assert _status_text(new_blocks) == "✓ Flagged: correctness"
 
@@ -1048,6 +1055,44 @@ def test_apply_flag_second_category_merges_in_vocabulary_order() -> None:
         if b.get("block_id") == slack_assistant.FLAG_STATUS_BLOCK_ID
     ]
     assert len(status_blocks) == 1
+
+
+def test_apply_flag_investigate_flags_and_renders_status() -> None:
+    store = _RecordingFlagStore()
+    original = _answer_blocks()
+
+    new_blocks = slack_assistant.apply_flag(
+        action_id=slack_assistant.FLAG_INVESTIGATE_ACTION_ID,
+        interaction_id="abc123",
+        blocks=original,
+        flag_store=store,
+    )
+
+    assert store.calls == [("abc123", "investigate")]
+    assert new_blocks is not None
+    assert _status_text(new_blocks) == "✓ Flagged: investigate"
+
+
+def test_apply_flag_correctness_plus_investigate_merges_in_vocab_order() -> None:
+    store = _RecordingFlagStore()
+    after_first = slack_assistant.apply_flag(
+        action_id=slack_assistant.FLAG_INVESTIGATE_ACTION_ID,
+        interaction_id="abc123",
+        blocks=_answer_blocks(),
+        flag_store=store,
+    )
+    assert after_first is not None
+
+    after_second = slack_assistant.apply_flag(
+        action_id=slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
+        interaction_id="abc123",
+        blocks=after_first,
+        flag_store=store,
+    )
+
+    assert after_second is not None
+    # Ordered by FLAG_VOCABULARY: correctness precedes investigate.
+    assert _status_text(after_second) == "✓ Flagged: correctness, investigate"
 
 
 def test_apply_flag_duplicate_click_is_idempotent() -> None:
@@ -1088,6 +1133,7 @@ def test_apply_flag_unknown_id_leaves_blocks_unchanged() -> None:
     assert _action_ids_in(new_blocks) == {
         slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
         slack_assistant.FLAG_FORMATTING_ACTION_ID,
+        slack_assistant.FLAG_INVESTIGATE_ACTION_ID,
     }
 
 
