@@ -69,6 +69,7 @@ def build_openai_answer_path(
         connection: duckdb.DuckDBPyConnection,
         question: str,
         internal_identity: contracts.InternalIdentity,
+        progress_sink: contracts.ProgressSink,
     ) -> slack_assistant.SlackWorkflowResult:
         return workflow_runner.run_data_assistant(
             connection,
@@ -77,6 +78,7 @@ def build_openai_answer_path(
             reasoning_provider=reasoning_provider,
             internal_identity=internal_identity,
             semantic_layer=semantic_layer,
+            progress_sink=progress_sink,
         )
 
     return answer_path

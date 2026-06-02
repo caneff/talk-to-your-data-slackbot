@@ -12,6 +12,13 @@ import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
 
+EXPECTED_PROGRESS_STATUSES = [
+    "understanding your question...",
+    "finding the right data...",
+    "running the numbers...",
+    "writing it up...",
+]
+
 
 def capture_non_answer_response(
     monkeypatch: pytest.MonkeyPatch,
@@ -87,6 +94,27 @@ def test_data_assistant_runs_end_to_end(
         "1 row grouped under Unknown because region was missing.",
     )
     assert "Trust Summary:" in run.final_response.text
+
+
+def test_data_assistant_emits_staged_progress_in_order_on_happy_path(
+    canonical_question: str,
+    connect_orders: local_duckdb_fixture.OrdersConnector,
+    canonical_question_provider: question_interpreter.QuestionInterpreterProvider,
+    allowed_internal_identity: contracts.InternalIdentity,
+) -> None:
+    seen_statuses: list[str] = []
+
+    with connect_orders((("2026-01-03", "North", "1200.00"),)) as connection:
+        run = workflow_runner.run_data_assistant(
+            connection,
+            canonical_question,
+            question_interpreter_provider=canonical_question_provider,
+            internal_identity=allowed_internal_identity,
+            progress_sink=seen_statuses.append,
+        )
+
+    assert isinstance(run, contracts.DataAssistantRun)
+    assert seen_statuses == EXPECTED_PROGRESS_STATUSES
 
 
 def test_data_assistant_answers_empty_commerce_q4_result_without_crashing(
@@ -518,6 +546,36 @@ def test_data_assistant_short_circuits_question_ambiguity(
     non_answer = captured_non_answers[0]
     assert non_answer.stage == contracts.NonAnswerStage.QUESTION_INTERPRETER
     assert non_answer.reason_code == contracts.NonAnswerReasonCode.MISSING_TIME_SCOPE
+
+
+def test_data_assistant_stops_progress_after_question_interpreter_non_answer(
+    monkeypatch: pytest.MonkeyPatch,
+    connect_orders: local_duckdb_fixture.OrdersConnector,
+    missing_time_scope_provider: question_interpreter.QuestionInterpreterProvider,
+    allowed_internal_identity: contracts.InternalIdentity,
+) -> None:
+    sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
+    seen_statuses: list[str] = []
+
+    with connect_orders((("2026-01-03", "North", "1200.00"),)) as connection:
+        result = workflow_runner.run_data_assistant(
+            connection,
+            "What was total revenue by region?",
+            question_interpreter_provider=missing_time_scope_provider,
+            internal_identity=allowed_internal_identity,
+            progress_sink=seen_statuses.append,
+        )
+
+    assert result is sentinel_response
+    assert seen_statuses == [EXPECTED_PROGRESS_STATUSES[0]]
+    assert len(captured_non_answers) == 1
+    assert (
+        captured_non_answers[0].stage == contracts.NonAnswerStage.QUESTION_INTERPRETER
+    )
+    assert (
+        captured_non_answers[0].reason_code
+        == contracts.NonAnswerReasonCode.MISSING_TIME_SCOPE
+    )
 
 
 def test_data_assistant_rejects_rank_intent_before_provider_call(

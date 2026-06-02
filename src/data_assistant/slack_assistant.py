@@ -58,8 +58,6 @@ SUGGESTED_PROMPTS: tuple[dict[str, str], ...] = (
     },
 )
 
-ANALYZING_STATUS = "analyzing your data…"
-
 RUNTIME_FALLBACK_MESSAGE = (
     "Something went wrong while answering your question. Please try again in a bit."
 )
@@ -73,7 +71,12 @@ manual status clear is needed."""
 SlackWorkflowResult: typing.TypeAlias = contracts.WorkflowResult
 
 AnswerPath: typing.TypeAlias = collections_abc.Callable[
-    [duckdb.DuckDBPyConnection, str, contracts.InternalIdentity],
+    [
+        duckdb.DuckDBPyConnection,
+        str,
+        contracts.InternalIdentity,
+        contracts.ProgressSink,
+    ],
     SlackWorkflowResult,
 ]
 
@@ -171,11 +174,15 @@ class AssistantAdapter:
         transient status auto-clears when ``say`` posts the reply (both the
         success and the fallback path), so there is no manual status clear.
         """
-        set_status(ANALYZING_STATUS)
         internal_identity = self.internal_identity_resolver(user)
         try:
             with self.connection_factory() as connection:
-                result = self.answer_path(connection, text, internal_identity)
+                result = self.answer_path(
+                    connection,
+                    text,
+                    internal_identity,
+                    set_status,
+                )
             final_response = final_response_from_workflow_result(result)
             say(final_response.text, blocks=final_response.blocks or None)
         except Exception as error:
