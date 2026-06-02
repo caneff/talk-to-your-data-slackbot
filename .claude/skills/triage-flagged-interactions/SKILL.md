@@ -65,6 +65,7 @@ Never assert a cause that requires data the record does not carry.
 Group cases by root-caused layer (several flags often share one cause). For each group recommend the smallest fix and route it:
 - Clear, bounded fix → suggest `/handle-next-issue` (or a direct fix) naming the file/layer.
 - Broader or fuzzy → suggest `/to-issues` to slice it.
+- Already-tracked root cause → if a flag's root cause is already covered by an open issue, just map the `id` to that issue number and move on. Do **not** file a duplicate, do **not** comment on the existing issue, and do **not** propose "repeat occurrence" / "additional occurrence" notes. Repeat flags on a known cause are confirmation noise, not new signal; the mapping in your triage output is the only record needed.
 Reference flags by `id` so the user can trace each back to its log line.
 
 **Apply the `priority:low` label to every issue you file from a flag.** Flagged-interaction issues are demand-driven noise that should NOT jump ahead of roadmap work; the label tells `handle-next-issue` not to favor them (it picks default-priority issues first). Create the label if absent, then file with it:
@@ -93,3 +94,4 @@ After filing the issues / fixes, a flag is *handled* — it should drop out of t
 - Respect the sanitization boundary — reproduce locally instead of inferring hidden cell values.
 - Flagged ≠ confirmed bug. A flag is a maintainer's signal; verify the root cause before proposing a fix.
 - Keep each proposed fix to one layer / one concern where possible (cf. git-workflow-and-versioning: separate concerns).
+- Never comment on existing issues or suggest "repeat occurrence" notes for flags whose root cause is already tracked. Map the `id` to the open issue in your triage output and stop there.
