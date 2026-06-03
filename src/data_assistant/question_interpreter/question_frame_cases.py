@@ -101,6 +101,19 @@ def _january_net_revenue_by_store_region_proposal() -> (
     )
 
 
+def _january_gross_revenue_by_store_region_proposal() -> (
+    question_interpreter.QuestionFrameProposal
+):
+    return _proposal(
+        intent="summarize",
+        metric="total gross revenue",
+        field_operations=(
+            _group_by_store_region(),
+            _january_2026_order_date_filter(),
+        ),
+    )
+
+
 def _january_net_revenue_rank_store_region_proposal() -> (
     question_interpreter.QuestionFrameProposal
 ):
@@ -186,6 +199,11 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
         name="customer_count_by_customer_region",
         question="What was customer count by customer region in January 2026?",
         expected=_january_customer_count_by_customer_region_proposal(),
+    ),
+    SharedQuestionFrameCase(
+        name="gross_revenue_resolve",
+        question="What was total gross revenue by store region in January 2026?",
+        expected=_january_gross_revenue_by_store_region_proposal(),
     ),
     SharedQuestionFrameCase(
         name="safe_non_answer_question",
