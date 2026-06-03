@@ -6,7 +6,8 @@ Accepted
 
 ## Context
 
-The shared Question Frame cases (`question_frame_cases.SHARED_QUESTION_FRAME_CASES`)
+The shared Provider Proposal cases
+(`provider_proposal_cases.SHARED_PROVIDER_PROPOSAL_CASES`)
 include a band of cases whose `expected.intent` is an analytical intent the
 pipeline does not yet support — `trend`, `forecast`, `explain`, `prescribe`
 (issues #44–47). The model is not asked to produce a correct supported answer
@@ -34,18 +35,18 @@ starts getting a deferred case right. We want suppress-but-run, not skip.
 
 ## Decision
 
-Add a `deferred: bool = False` marker to `SharedQuestionFrameCase` (threaded
-into `LiveEvalCase`), set `deferred=True` on the four known-deferred-intent
-cases, and branch the run loop on it:
+Add a `deferred: bool = False` marker to `SharedProviderProposalCase` (threaded
+into `ProviderProposalEvalCase`), set `deferred=True` on the four
+known-deferred-intent cases, and branch the run loop on it:
 
 1. **A deferred case that still mismatches** is recorded in a separate
-   `LiveEvalReport.known_deferred` bucket. It is **not** counted in
+   `ProviderProposalEvalReport.known_deferred` bucket. It is **not** counted in
    `report.failed` and is **not** written to the failures JSONL snapshot. The
    run reports it (`Known-deferred: N`) but exits 0 when these are the only
    "failures".
 
 2. **A deferred case that now fully passes** is a **tripwire**: recorded in
-   `LiveEvalReport.tripwires`, surfaced prominently as
+   `ProviderProposalEvalReport.tripwires`, surfaced prominently as
    `[TRIPWIRE] <case> now passes — remove deferred=True`, and it makes `main`
    exit nonzero. The model improved; the marker is now lying and must be
    removed (which moves the case back into the normal pass/fail population).

@@ -13,10 +13,8 @@ import typing
 import tqdm
 
 import data_assistant.question_interpreter as question_interpreter
+import data_assistant.question_interpreter.provider_proposal_cases as proposal_cases
 import data_assistant.semantic_layer.catalog as semantic_layer_catalog
-from data_assistant.question_interpreter import (
-    provider_proposal_cases,
-)
 
 ProviderResult: typing.TypeAlias = (
     question_interpreter.ProviderProposal | question_interpreter.ProviderFailure
@@ -86,7 +84,7 @@ DEFAULT_CASES: tuple[ProviderProposalEvalCase, ...] = tuple(
         enabled=case.enabled,
         deferred=case.deferred,
     )
-    for case in provider_proposal_cases.SHARED_PROVIDER_PROPOSAL_CASES
+    for case in proposal_cases.SHARED_PROVIDER_PROPOSAL_CASES
 )
 DEFAULT_SAMPLE_COUNT = 3
 DEFAULT_FAILURES_DIR = pathlib.Path("eval_results")

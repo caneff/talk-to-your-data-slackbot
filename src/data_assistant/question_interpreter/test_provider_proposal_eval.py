@@ -1,11 +1,9 @@
 import pathlib
 
+import data_assistant.question_interpreter.provider_proposal_cases as proposal_cases
+import data_assistant.question_interpreter.provider_proposal_eval as proposal_eval
 import data_assistant.question_interpreter.test_support as test_support
 import data_assistant.semantic_layer.testing_support as semantic_layer_testing
-from data_assistant.question_interpreter import (
-    provider_proposal_cases,
-    provider_proposal_eval,
-)
 
 
 class _PassingProvider:
@@ -17,7 +15,7 @@ class _PassingProvider:
         *,
         question: str,
         semantic_layer_context: dict[str, object],
-    ) -> provider_proposal_eval.ProviderResult:
+    ) -> proposal_eval.ProviderResult:
         self.calls.append((question, semantic_layer_context))
         return test_support.question_frame_proposal()
 
@@ -25,13 +23,13 @@ class _PassingProvider:
 def test_run_provider_proposal_eval_uses_injected_provider() -> None:
     provider = _PassingProvider()
     semantic_layer = semantic_layer_testing.semantic_layer_with_table()
-    case = provider_proposal_eval.ProviderProposalEvalCase(
+    case = proposal_eval.ProviderProposalEvalCase(
         name="canonical_question",
         question="What was total revenue by region in January 2026?",
         expected=test_support.question_frame_proposal(),
     )
 
-    report = provider_proposal_eval.run_provider_proposal_eval(
+    report = proposal_eval.run_provider_proposal_eval(
         provider=provider,
         semantic_layer=semantic_layer,
         cases=(case,),
@@ -47,21 +45,21 @@ def test_run_provider_proposal_eval_uses_injected_provider() -> None:
 def test_default_cases_come_from_shared_provider_proposal_cases() -> None:
     assert (
         tuple(
-            provider_proposal_eval.ProviderProposalEvalCase(
+            proposal_eval.ProviderProposalEvalCase(
                 name=case.name,
                 question=case.question,
                 expected=case.expected,
                 enabled=case.enabled,
                 deferred=case.deferred,
             )
-            for case in provider_proposal_cases.SHARED_PROVIDER_PROPOSAL_CASES
+            for case in proposal_cases.SHARED_PROVIDER_PROPOSAL_CASES
         )
-        == provider_proposal_eval.DEFAULT_CASES
+        == proposal_eval.DEFAULT_CASES
     )
 
 
 def test_provider_proposal_cases_source_uses_provider_proposal_constructor() -> None:
-    source = pathlib.Path(provider_proposal_cases.__file__).read_text(encoding="utf-8")
+    source = pathlib.Path(proposal_cases.__file__).read_text(encoding="utf-8")
 
     assert "SharedProviderProposalCase(" in source
     assert "SharedQuestionFrameCase(" not in source

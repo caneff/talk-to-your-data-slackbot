@@ -13,11 +13,9 @@ import typing
 import dotenv
 
 import data_assistant.question_interpreter as question_interpreter
+import data_assistant.question_interpreter.provider_proposal_eval as proposal_eval
 import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.slack_runtime as slack_runtime
-from data_assistant.question_interpreter import (
-    provider_proposal_eval,
-)
 
 
 def main(
@@ -47,7 +45,7 @@ def main(
     failures_path.parent.mkdir(parents=True, exist_ok=True)
     failures_file = failures_path.open("w", encoding="utf-8")
     try:
-        report = provider_proposal_eval.run_provider_proposal_eval(
+        report = proposal_eval.run_provider_proposal_eval(
             provider=provider,
             semantic_layer=semantic_layer_loader.load_semantic_layer(
                 slack_runtime.RETAIL_SEMANTIC_LAYER_PATH
@@ -66,7 +64,7 @@ def main(
     finally:
         failures_file.close()
     _write_selection_notice(stdout=stdout, args=args, report=report)
-    provider_proposal_eval.write_provider_proposal_eval_report(
+    proposal_eval.write_provider_proposal_eval_report(
         stdout=stdout,
         report=report,
         verbose=args.verbose,
@@ -105,10 +103,10 @@ def _parse_args(argv: collections.abc.Sequence[str]) -> _CliArgs:
     parser.add_argument(
         "--samples",
         type=int,
-        default=provider_proposal_eval.DEFAULT_SAMPLE_COUNT,
+        default=proposal_eval.DEFAULT_SAMPLE_COUNT,
         help=(
             "number of provider samples per case for flake hunting "
-            f"(default {provider_proposal_eval.DEFAULT_SAMPLE_COUNT}); try "
+            f"(default {proposal_eval.DEFAULT_SAMPLE_COUNT}); try "
             "--samples 10 to surface rare flakes"
         ),
     )
@@ -117,7 +115,7 @@ def _parse_args(argv: collections.abc.Sequence[str]) -> _CliArgs:
         default=None,
         help=(
             "path for the streamed failures JSONL (default: a timestamped file "
-            f"under {provider_proposal_eval.DEFAULT_FAILURES_DIR}/); a clean run "
+            f"under {proposal_eval.DEFAULT_FAILURES_DIR}/); a clean run "
             "leaves an empty file"
         ),
     )
@@ -176,18 +174,16 @@ def _load_env_file(path: str | pathlib.Path = ".env") -> None:
 def _resolve_failures_path(failures_out: str | None) -> pathlib.Path:
     if failures_out is not None:
         return pathlib.Path(failures_out)
-    return provider_proposal_eval.resolve_default_failures_path()
+    return proposal_eval.resolve_default_failures_path()
 
 
 def _write_selection_notice(
     *,
     stdout: typing.TextIO,
     args: _CliArgs,
-    report: provider_proposal_eval.ProviderProposalEvalReport,
+    report: proposal_eval.ProviderProposalEvalReport,
 ) -> None:
-    enabled_count = sum(
-        1 for case in provider_proposal_eval.DEFAULT_CASES if case.enabled
-    )
+    enabled_count = sum(1 for case in proposal_eval.DEFAULT_CASES if case.enabled)
     if args.only_cases is not None:
         stdout.write(
             f"Ran {report.total} selected of {enabled_count} enabled (--only-cases)\n"
