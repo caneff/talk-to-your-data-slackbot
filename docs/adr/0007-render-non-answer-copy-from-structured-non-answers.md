@@ -58,7 +58,8 @@ seam where wording is produced.
   behind that seam for user-facing clarifications, with the static catalog copy
   kept as the offline fallback and the developer-facing reason codes (e.g.
   invalid provider output) staying static. Such wording would be graded by an
-  eval (the `question_interpreter.live_eval` pattern), not asserted equal.
+  eval (the `question_interpreter.live_provider_proposal_eval` pattern), not
+  asserted equal.
 
 ## Consequences
 

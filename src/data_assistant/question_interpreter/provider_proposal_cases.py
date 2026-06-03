@@ -1,4 +1,4 @@
-"""Shared provider-facing Question Frame cases for evals and demo replay.
+"""Shared Provider Proposal cases for evals and demo replay.
 
 These cases target the retail Semantic Layer
 (`examples/retail_ops_demo/semantic_layer`), the app/QA default the live eval
@@ -19,7 +19,7 @@ import data_assistant.question_interpreter as question_interpreter
 
 
 @dataclasses.dataclass(frozen=True)
-class SharedQuestionFrameCase:
+class SharedProviderProposalCase:
     """One canonical question and expected provider proposal."""
 
     name: str
@@ -139,9 +139,9 @@ def _exclude_filter(
     )
 
 
-SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
+SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
     # --- Existing pinned cases (names + questions + expected preserved) ---
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="canonical_question",
         question="What was total net revenue by store region in January 2026?",
         expected=_summarize(
@@ -150,7 +150,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("order date", JANUARY_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="show_total_net_revenue_by_store_region",
         question="Show total net revenue by store region in January 2026.",
         expected=_summarize(
@@ -159,7 +159,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("order date", JANUARY_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="summarize_total_net_revenue_by_store_region",
         question="Summarize total net revenue by store region for January 2026.",
         expected=_summarize(
@@ -168,7 +168,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("order date", JANUARY_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="rank_total_net_revenue_by_store_region",
         question=(
             "Which store region had the highest total net revenue in January 2026?"
@@ -180,7 +180,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("order date", JANUARY_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="customer_count_by_customer_region",
         question="What was customer count by customer region in January 2026?",
         expected=_summarize(
@@ -189,7 +189,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("customer created date", JANUARY_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="gross_revenue_resolve",
         question="What was total gross revenue by store region in January 2026?",
         expected=_summarize(
@@ -198,7 +198,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("order date", JANUARY_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="safe_non_answer_question",
         question="What was total net revenue by store region?",
         expected=_summarize(
@@ -206,7 +206,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _group_by("store region"),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="recurring_revenue_metric_ambiguity",
         question="What was total recurring revenue in January 2026?",
         expected=_proposal(
@@ -216,7 +216,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             field_operations=(_during("order date", JANUARY_2026),),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="all_time_net_revenue_for_channel_value",
         question="What was total net revenue for the Web order channel for all time?",
         expected=_summarize(
@@ -225,7 +225,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             all_time=True,
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="exact_date_net_revenue",
         question="What was total net revenue on 2026-01-15?",
         expected=_summarize(
@@ -233,7 +233,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _include_filter("order date", "2026-01-15"),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="multi_filter_net_revenue",
         question=(
             "What was total net revenue for the Web order channel and Shipped "
@@ -247,7 +247,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
         ),
     ),
     # --- New breadth cases: demo_orders metrics/fields ---
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="discount_amount_by_promotion_code_april",
         question="What was total discount amount by promotion code in April 2026?",
         expected=_summarize(
@@ -256,7 +256,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("order date", APRIL_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="order_count_by_fulfillment_status_may",
         question="What was order count by fulfillment status in May 2026?",
         expected=_summarize(
@@ -265,7 +265,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("order date", MAY_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="order_count_by_shipping_region_april",
         question="What was order count by shipping region in April 2026?",
         expected=_summarize(
@@ -274,7 +274,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("order date", APRIL_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="net_revenue_by_customer_segment_all_time",
         question="What was total net revenue by customer segment for all time?",
         expected=_summarize(
@@ -283,7 +283,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             all_time=True,
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="gross_revenue_by_order_channel_march",
         question="What was total gross revenue by order channel in March 2026?",
         expected=_summarize(
@@ -297,7 +297,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
     # Proposal Validation rejects 2-group shape downstream via
     # UNSUPPORTED_SHAPE (covered by validation unit tests, not here). This
     # case only checks proposal.
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="multi_group_net_revenue_by_region_and_channel",
         question=(
             "What was total net revenue by store region and order channel "
@@ -313,7 +313,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
     # Explicit top-N: the model still classifies "top 5 ..." as rank (a deferred
     # intent), unseduced by the explicit count. There is no limit/N field in the
     # schema, so the "5" is intentionally not represented.
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="top_n_store_regions_by_net_revenue",
         question=(
             "What were the top 5 store regions by total net revenue in January 2026?"
@@ -326,7 +326,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
         ),
     ),
     # --- New breadth cases: demo_order_lines metrics/fields ---
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="gross_margin_by_product_category_march",
         question="What was gross margin by product category in March 2026?",
         expected=_summarize(
@@ -335,7 +335,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("order date", MARCH_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="line_revenue_by_brand_q1",
         question="What was total line revenue by brand in Q1 2026?",
         expected=_summarize(
@@ -344,7 +344,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("order date", Q1_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="units_sold_by_product_subcategory_april",
         question="What were units sold by product subcategory in April 2026?",
         expected=_summarize(
@@ -353,7 +353,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("order date", APRIL_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="units_returned_by_product_category_may",
         question="What were units returned by product category in May 2026?",
         expected=_summarize(
@@ -362,7 +362,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("order date", MAY_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="gross_margin_by_brand_all_time",
         question="What was gross margin by brand for all time?",
         expected=_summarize(
@@ -371,7 +371,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             all_time=True,
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="line_revenue_excluding_electronics_march",
         question=(
             "What was total line revenue excluding Electronics products in March 2026?"
@@ -382,7 +382,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("order date", MARCH_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="line_revenue_for_apparel_march",
         question="What was total line revenue for Apparel products in March 2026?",
         expected=_summarize(
@@ -392,7 +392,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
         ),
     ),
     # --- New breadth cases: demo_customers metrics/fields ---
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="customer_count_by_customer_segment_all_time",
         question="What was customer count by customer segment for all time?",
         expected=_summarize(
@@ -401,7 +401,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             all_time=True,
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="customer_count_by_loyalty_tier_all_time",
         question="What was customer count by loyalty tier for all time?",
         expected=_summarize(
@@ -410,7 +410,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             all_time=True,
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="customer_count_by_acquisition_channel_2026",
         question=(
             "What was customer count by acquisition channel for customers created "
@@ -423,7 +423,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
         ),
     ),
     # --- New breadth cases: demo_products metrics/fields ---
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="product_count_by_product_category",
         question="What was product count by product category?",
         expected=_summarize(
@@ -431,7 +431,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _group_by("product category"),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="product_count_by_brand",
         question="What was product count by brand?",
         expected=_summarize(
@@ -440,7 +440,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
         ),
     ),
     # --- New breadth cases: demo_stores metrics/fields ---
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="store_count_by_store_region",
         question="What was store count by store region?",
         expected=_summarize(
@@ -448,7 +448,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _group_by("store region"),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="store_count_by_store_channel",
         question="What was store count by store channel?",
         expected=_summarize(
@@ -456,7 +456,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _group_by("store channel"),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="stores_opened_before_2024",
         question="How many stores opened before January 2024?",
         expected=_summarize(
@@ -464,7 +464,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _range_filter("store opened date", upper="2023-12-31"),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="store_count_excluding_west_region",
         question="What was store count by store region excluding the West region?",
         expected=_summarize(
@@ -474,7 +474,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
         ),
     ),
     # --- New breadth cases: demo_support_tickets metrics/fields ---
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="ticket_count_by_issue_category_april",
         question="What was support ticket count by issue category in April 2026?",
         expected=_summarize(
@@ -483,7 +483,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("ticket created date", APRIL_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="ticket_count_by_ticket_priority_may",
         question="What was support ticket count by ticket priority in May 2026?",
         expected=_summarize(
@@ -492,7 +492,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("ticket created date", MAY_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="ticket_count_by_ticket_status_all_time",
         question="What was support ticket count by ticket status for all time?",
         expected=_summarize(
@@ -501,7 +501,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             all_time=True,
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="ticket_count_excluding_resolved_status",
         question=(
             "What was support ticket count by issue category excluding the "
@@ -513,7 +513,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _exclude_filter("ticket status", "Resolved"),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="ticket_count_high_priority_april",
         question=(
             "What was support ticket count for high priority tickets in April 2026?"
@@ -525,7 +525,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
         ),
     ),
     # --- New breadth cases: demo_inventory_snapshots metrics/fields ---
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="stockout_days_by_product_category_may",
         question="What were stockout days by product category in May 2026?",
         expected=_summarize(
@@ -534,7 +534,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("inventory snapshot date", MAY_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="on_hand_units_by_product_category_may",
         question="What were on hand units by product category in May 2026?",
         expected=_summarize(
@@ -543,7 +543,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("inventory snapshot date", MAY_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="stockout_days_by_product_subcategory_april",
         question="What were stockout days by product subcategory in April 2026?",
         expected=_summarize(
@@ -552,7 +552,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("inventory snapshot date", APRIL_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="on_hand_units_by_store_may",
         question="What were on hand units by store in May 2026?",
         expected=_summarize(
@@ -561,7 +561,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("inventory snapshot date", MAY_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="stockout_days_for_outdoor_products_may",
         question="What were stockout days for Outdoor products in May 2026?",
         expected=_summarize(
@@ -571,7 +571,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
         ),
     ),
     # --- Deferred intents (Option A: metric + within-table operations set) ---
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="compare_net_revenue_by_store_region_q1",
         question="How did total net revenue compare by store region in Q1 2026?",
         expected=_deferred(
@@ -581,7 +581,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("order date", Q1_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="trend_order_count_by_order_date_q1",
         question="How did order count trend by order date in Q1 2026?",
         expected=_deferred(
@@ -592,7 +592,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
         ),
         deferred=True,
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="forecast_stockout_days_june",
         question="Forecast stockout days by product category for June 2026.",
         expected=_deferred(
@@ -603,7 +603,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
         ),
         deferred=True,
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="explain_gross_margin_by_brand_q1",
         question="Why did gross margin by brand change in Q1 2026?",
         expected=_deferred(
@@ -614,7 +614,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
         ),
         deferred=True,
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="prescribe_units_returned_by_product_category_may",
         question=(
             "What should we do to reduce units returned by product category in "
@@ -628,7 +628,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
         ),
         deferred=True,
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="diagnose_support_ticket_count_by_issue_category_april",
         question=(
             "Diagnose why support ticket count by issue category spiked in April 2026."
@@ -641,7 +641,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
         ),
     ),
     # --- Terse conversational variants ---
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="terse_net_rev_by_store_region_q1",
         question="net rev by store region q1",
         expected=_summarize(
@@ -650,7 +650,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("order date", Q1_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="terse_tickets_by_priority_may",
         question="tickets by priority may",
         expected=_summarize(
@@ -659,7 +659,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("ticket created date", MAY_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="terse_stockout_days_by_category_may",
         question="stockout days by category may",
         expected=_summarize(
@@ -668,7 +668,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("inventory snapshot date", MAY_2026),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="terse_margin_by_brand_all_time",
         question="margin by brand all time",
         expected=_summarize(
@@ -677,7 +677,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             all_time=True,
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="terse_customers_by_loyalty_tier",
         question="customers by loyalty tier",
         expected=_summarize(
@@ -685,7 +685,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _group_by("loyalty tier"),
         ),
     ),
-    SharedQuestionFrameCase(
+    SharedProviderProposalCase(
         name="terse_stores_by_channel",
         question="stores by channel",
         expected=_summarize(

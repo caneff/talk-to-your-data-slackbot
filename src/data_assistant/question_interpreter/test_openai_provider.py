@@ -290,7 +290,7 @@ def test_openai_provider_schema_rejects_empty_implicit_filters() -> None:
 # vanishes. They do NOT pin prose — content equality is checked against the file
 # itself, so rewording the guidance never false-fails. Whether the model obeys
 # the guidance (classifies rank, picks one date field, etc.) is a behavioral
-# question, guarded only by the manual live_eval suite (live_eval.py) run before
+# question, guarded only by the manual Live Provider Proposal Eval run before
 # shipping a prompt change. Do not re-add substring pins on guidance sentences:
 # they break on rephrase and guard nothing the live eval doesn't already cover.
 def _captured_input_messages() -> list[dict[str, str]]:

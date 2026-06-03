@@ -1,32 +1,20 @@
-"""Manual live eval suite for the OpenAI-backed Question Interpreter.
-
-Keep the committed sample default at ``DEFAULT_SAMPLE_COUNT`` (3). When hunting
-provider flakiness, pass ``--samples 10`` on the command line (the known
-``exact_date`` flake only surfaces at N>=10); never bump the committed default
-to chase flakes.
-"""
+"""Provider Proposal Eval harness with injected provider dependencies."""
 
 from __future__ import annotations
 
-import argparse
 import collections.abc
 import dataclasses
 import datetime
 import json
-import os
 import pathlib
-import sys
 import textwrap
 import typing
 
-import dotenv
 import tqdm
 
 import data_assistant.question_interpreter as question_interpreter
-import data_assistant.question_interpreter.question_frame_cases as question_frame_cases
+import data_assistant.question_interpreter.provider_proposal_cases as proposal_cases
 import data_assistant.semantic_layer.catalog as semantic_layer_catalog
-import data_assistant.semantic_layer.loader as semantic_layer_loader
-import data_assistant.slack_runtime as slack_runtime
 
 ProviderResult: typing.TypeAlias = (
     question_interpreter.ProviderProposal | question_interpreter.ProviderFailure
@@ -34,8 +22,8 @@ ProviderResult: typing.TypeAlias = (
 
 
 @dataclasses.dataclass(frozen=True)
-class LiveEvalCase:
-    """One manual live eval prompt with expected Question Frame meaning."""
+class ProviderProposalEvalCase:
+    """One provider proposal eval prompt with expected proposal meaning."""
 
     name: str
     question: str
@@ -45,8 +33,8 @@ class LiveEvalCase:
 
 
 @dataclasses.dataclass(frozen=True)
-class LiveEvalFailure:
-    """One failed live eval case."""
+class ProviderProposalEvalFailure:
+    """One failed provider proposal eval case."""
 
     case_name: str
     question: str
@@ -58,8 +46,8 @@ class LiveEvalFailure:
 
 
 @dataclasses.dataclass(frozen=True)
-class LiveEvalPass:
-    """One passed live eval case."""
+class ProviderProposalEvalPass:
+    """One passed provider proposal eval case."""
 
     case_name: str
     question: str
@@ -70,19 +58,14 @@ class LiveEvalPass:
 
 
 @dataclasses.dataclass(frozen=True)
-class LiveEvalReport:
-    """Aggregate live eval results."""
+class ProviderProposalEvalReport:
+    """Aggregate provider proposal eval results."""
 
     total: int
-    passes: tuple[LiveEvalPass, ...]
-    failures: tuple[LiveEvalFailure, ...]
-    # Deferred cases (known unsupported intents #44-47) that still mismatch:
-    # reported but not counted as failures and not streamed to the failures
-    # snapshot. See ADR-0020.
-    known_deferred: tuple[LiveEvalFailure, ...] = ()
-    # Deferred cases that now fully pass — the model improved, so the marker
-    # should be removed. A tripwire fails the run (see ``main``).
-    tripwires: tuple[LiveEvalPass, ...] = ()
+    passes: tuple[ProviderProposalEvalPass, ...]
+    failures: tuple[ProviderProposalEvalFailure, ...]
+    known_deferred: tuple[ProviderProposalEvalFailure, ...] = ()
+    tripwires: tuple[ProviderProposalEvalPass, ...] = ()
 
     @property
     def passed(self) -> int:
@@ -93,21 +76,21 @@ class LiveEvalReport:
         return len(self.failures)
 
 
-DEFAULT_CASES: tuple[LiveEvalCase, ...] = tuple(
-    LiveEvalCase(
+DEFAULT_CASES: tuple[ProviderProposalEvalCase, ...] = tuple(
+    ProviderProposalEvalCase(
         name=case.name,
         question=case.question,
         expected=case.expected,
         enabled=case.enabled,
         deferred=case.deferred,
     )
-    for case in question_frame_cases.SHARED_QUESTION_FRAME_CASES
+    for case in proposal_cases.SHARED_PROVIDER_PROPOSAL_CASES
 )
 DEFAULT_SAMPLE_COUNT = 3
 DEFAULT_FAILURES_DIR = pathlib.Path("eval_results")
 
 
-def compare_question_frame_meaning(
+def compare_provider_proposal_meaning(
     *,
     expected: question_interpreter.ProviderProposal,
     actual: question_interpreter.ProviderProposal,
@@ -147,19 +130,13 @@ def compare_question_frame_meaning(
 
 
 def select_cases(
-    enabled: collections.abc.Sequence[LiveEvalCase],
+    enabled: collections.abc.Sequence[ProviderProposalEvalCase],
     *,
     start_at: int = 1,
     stop_at: int | None = None,
     only_cases: tuple[str, ...] | None = None,
-) -> tuple[tuple[int, LiveEvalCase], ...]:
-    """Resolve the selected cases as ``(absolute_1_based_index, case)`` pairs.
-
-    ``start_at``/``stop_at`` are 1-based over the enabled list; ``stop_at`` is
-    inclusive. ``only_cases`` tokens are either an all-digit 1-based index or a
-    case name; the result is deduped and returned in enabled order. ``only_cases``
-    is mutually exclusive with ``start_at``/``stop_at``.
-    """
+) -> tuple[tuple[int, ProviderProposalEvalCase], ...]:
+    """Resolve selected cases as ``(absolute_1_based_index, case)`` pairs."""
     indexed = tuple(enumerate(enabled, start=1))
     if only_cases is not None:
         if start_at != 1 or stop_at is not None:
@@ -178,9 +155,9 @@ def select_cases(
 
 
 def _select_only_cases(
-    indexed: tuple[tuple[int, LiveEvalCase], ...],
+    indexed: tuple[tuple[int, ProviderProposalEvalCase], ...],
     only_cases: tuple[str, ...],
-) -> tuple[tuple[int, LiveEvalCase], ...]:
+) -> tuple[tuple[int, ProviderProposalEvalCase], ...]:
     by_name = {case.name: index for index, case in indexed}
     total = len(indexed)
     chosen: set[int] = set()
@@ -199,11 +176,11 @@ def _select_only_cases(
     return tuple(pair for pair in indexed if pair[0] in chosen)
 
 
-def run_live_question_interpreter_eval(
+def run_provider_proposal_eval(
     *,
     provider: question_interpreter.QuestionInterpreterProvider,
     semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
-    cases: collections.abc.Iterable[LiveEvalCase] = DEFAULT_CASES,
+    cases: collections.abc.Iterable[ProviderProposalEvalCase] = DEFAULT_CASES,
     sample_count: int = DEFAULT_SAMPLE_COUNT,
     progress: bool = False,
     progress_file: typing.TextIO | None = None,
@@ -211,8 +188,8 @@ def run_live_question_interpreter_eval(
     start_at: int = 1,
     stop_at: int | None = None,
     only_cases: tuple[str, ...] | None = None,
-) -> LiveEvalReport:
-    """Run the selected enabled live eval cases and aggregate failures."""
+) -> ProviderProposalEvalReport:
+    """Run selected enabled provider proposal eval cases."""
     if sample_count < 1:
         raise ValueError("sample_count must be at least 1")
     semantic_layer_context = question_interpreter.build_semantic_layer_context(
@@ -225,10 +202,10 @@ def run_live_question_interpreter_eval(
         stop_at=stop_at,
         only_cases=only_cases,
     )
-    passes: list[LiveEvalPass] = []
-    failures: list[LiveEvalFailure] = []
-    known_deferred: list[LiveEvalFailure] = []
-    tripwires: list[LiveEvalPass] = []
+    passes: list[ProviderProposalEvalPass] = []
+    failures: list[ProviderProposalEvalFailure] = []
+    known_deferred: list[ProviderProposalEvalFailure] = []
+    tripwires: list[ProviderProposalEvalPass] = []
     progress_bar = _new_case_progress_bar(
         enabled=progress,
         total=len(selected),
@@ -252,10 +229,7 @@ def run_live_question_interpreter_eval(
                     semantic_layer_context=semantic_layer_context,
                 )
                 last_actual = actual
-                reasons = _case_failure_reasons(
-                    expected=case.expected,
-                    actual=actual,
-                )
+                reasons = _case_failure_reasons(expected=case.expected, actual=actual)
                 if reasons:
                     last_failure_actual = actual
                     sample_failures.extend(
@@ -265,9 +239,11 @@ def run_live_question_interpreter_eval(
                 pass_count += 1
 
             if last_actual is None:
-                raise AssertionError("live eval must record at least one sample result")
+                raise AssertionError(
+                    "provider proposal eval must record at least one sample result"
+                )
             if sample_failures:
-                failure = LiveEvalFailure(
+                failure = ProviderProposalEvalFailure(
                     case_name=case.name,
                     question=case.question,
                     expected=case.expected,
@@ -277,9 +253,6 @@ def run_live_question_interpreter_eval(
                     sample_count=sample_count,
                 )
                 if case.deferred:
-                    # Known-deferred (unsupported, not-yet-classified intent):
-                    # report separately, do not count as a failure, and keep it
-                    # out of the failures snapshot (ADR-0020).
                     known_deferred.append(failure)
                     _update_case_progress(progress_bar)
                     continue
@@ -291,7 +264,7 @@ def run_live_question_interpreter_eval(
                 )
                 _update_case_progress(progress_bar)
                 continue
-            passed_case = LiveEvalPass(
+            passed_case = ProviderProposalEvalPass(
                 case_name=case.name,
                 question=case.question,
                 expected=case.expected,
@@ -303,8 +276,6 @@ def run_live_question_interpreter_eval(
                 sample_count=sample_count,
             )
             if case.deferred:
-                # The model now fully matches a case we marked deferred — a
-                # tripwire that the marker should be removed (ADR-0020).
                 tripwires.append(passed_case)
             else:
                 passes.append(passed_case)
@@ -312,7 +283,7 @@ def run_live_question_interpreter_eval(
     finally:
         if progress_bar is not None:
             progress_bar.close()
-    return LiveEvalReport(
+    return ProviderProposalEvalReport(
         total=len(selected),
         passes=tuple(passes),
         failures=tuple(failures),
@@ -328,14 +299,14 @@ def _case_failure_reasons(
 ) -> tuple[str, ...]:
     if isinstance(actual, question_interpreter.ProviderFailure):
         return (f"provider failure: {actual.reason}",)
-    return compare_question_frame_meaning(expected=expected, actual=actual)
+    return compare_provider_proposal_meaning(expected=expected, actual=actual)
 
 
 def _write_failure_line(
     *,
     failures_file: typing.TextIO | None,
     case_number: int,
-    failure: LiveEvalFailure,
+    failure: ProviderProposalEvalFailure,
 ) -> None:
     if failures_file is None:
         return
@@ -359,10 +330,10 @@ def _failure_actual_payload(actual: ProviderResult) -> dict[str, typing.Any]:
     return actual.model_dump()
 
 
-def write_live_eval_report(
+def write_provider_proposal_eval_report(
     *,
     stdout: typing.TextIO,
-    report: LiveEvalReport,
+    report: ProviderProposalEvalReport,
     verbose: bool = False,
 ) -> None:
     """Print aggregate results and detailed failures."""
@@ -389,14 +360,14 @@ def write_live_eval_report(
         stdout.write(_failure_report(failure))
 
 
-def _passed_case_summary_line(passed_case: LiveEvalPass) -> str:
+def _passed_case_summary_line(passed_case: ProviderProposalEvalPass) -> str:
     return (
         f"[PASS] {passed_case.case_name} "
         f"(pass rate: {passed_case.pass_count}/{passed_case.sample_count})\n"
     )
 
 
-def _passed_case_report(passed_case: LiveEvalPass) -> str:
+def _passed_case_report(passed_case: ProviderProposalEvalPass) -> str:
     return textwrap.dedent(f"""
         Question: {passed_case.question}
         Expected: {_proposal_debug_string(passed_case.expected)}
@@ -404,7 +375,7 @@ def _passed_case_report(passed_case: LiveEvalPass) -> str:
         """)
 
 
-def _failure_report(failure: LiveEvalFailure) -> str:
+def _failure_report(failure: ProviderProposalEvalFailure) -> str:
     reasons = "".join(f"Reason: {reason}\n" for reason in failure.reasons)
     pass_rate = f"{failure.pass_count}/{failure.sample_count}"
     return (
@@ -418,176 +389,9 @@ def _failure_report(failure: LiveEvalFailure) -> str:
     )
 
 
-def main(
-    *,
-    stdout: typing.TextIO = sys.stdout,
-    stderr: typing.TextIO = sys.stderr,
-    environ: collections.abc.Mapping[str, str] | None = None,
-    env_file: str | pathlib.Path = ".env",
-    argv: collections.abc.Sequence[str] = (),
-) -> int:
-    """Run manual live eval suite against real OpenAI provider config."""
-    args = _parse_args(argv)
-    active_environ = environ
-    if active_environ is None:
-        _load_env_file(env_file)
-        active_environ = os.environ
-
-    try:
-        provider = question_interpreter.build_openai_question_interpreter_provider(
-            active_environ
-        )
-    except question_interpreter.OpenAIQuestionInterpreterConfigError as error:
-        print(str(error), file=stderr)
-        return 1
-
-    failures_path = _resolve_failures_path(args.failures_out)
-    failures_path.parent.mkdir(parents=True, exist_ok=True)
-    failures_file = failures_path.open("w", encoding="utf-8")
-    try:
-        report = run_live_question_interpreter_eval(
-            provider=provider,
-            semantic_layer=semantic_layer_loader.load_semantic_layer(
-                slack_runtime.RETAIL_SEMANTIC_LAYER_PATH
-            ),
-            sample_count=args.samples,
-            progress=args.progress,
-            progress_file=stderr,
-            failures_file=failures_file,
-            start_at=args.start_at,
-            stop_at=args.stop_at,
-            only_cases=args.only_cases,
-        )
-    except ValueError as error:
-        print(str(error), file=stderr)
-        return 1
-    finally:
-        failures_file.close()
-    _write_selection_notice(stdout=stdout, args=args, report=report)
-    write_live_eval_report(stdout=stdout, report=report, verbose=args.verbose)
-    # Known-deferred mismatches alone keep exit 0; a tripwire (a deferred case
-    # that now passes) fails the run so the marker gets removed (ADR-0020).
-    if report.failed or report.tripwires:
-        return 1
-    return 0
-
-
-def _write_selection_notice(
-    *,
-    stdout: typing.TextIO,
-    args: _CliArgs,
-    report: LiveEvalReport,
-) -> None:
-    enabled_count = sum(1 for case in DEFAULT_CASES if case.enabled)
-    if args.only_cases is not None:
-        stdout.write(
-            f"Ran {report.total} selected of {enabled_count} enabled (--only-cases)\n"
-        )
-        return
-    if args.start_at != 1 or args.stop_at is not None:
-        stdout.write(
-            f"Started at case {args.start_at} "
-            f"(running {report.total} of {enabled_count} enabled)\n"
-        )
-
-
-def _resolve_failures_path(failures_out: str | None) -> pathlib.Path:
-    if failures_out is not None:
-        return pathlib.Path(failures_out)
+def resolve_default_failures_path() -> pathlib.Path:
     timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
-    return DEFAULT_FAILURES_DIR / f"live_eval_failures_{timestamp}.jsonl"
-
-
-@dataclasses.dataclass(frozen=True)
-class _CliArgs:
-    verbose: bool
-    progress: bool
-    samples: int
-    failures_out: str | None
-    start_at: int
-    stop_at: int | None
-    only_cases: tuple[str, ...] | None
-
-
-def _parse_args(argv: collections.abc.Sequence[str]) -> _CliArgs:
-    parser = argparse.ArgumentParser(
-        description="Run manual live evals for OpenAI Question Interpreter output.",
-    )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="print full expected and actual details for passed cases",
-    )
-    parser.add_argument(
-        "--no-progress",
-        action="store_true",
-        help="disable the live case progress bar",
-    )
-    parser.add_argument(
-        "--samples",
-        type=int,
-        default=DEFAULT_SAMPLE_COUNT,
-        help=(
-            "number of provider samples per case for flake hunting "
-            f"(default {DEFAULT_SAMPLE_COUNT}); try --samples 10 to surface "
-            "rare flakes"
-        ),
-    )
-    parser.add_argument(
-        "--failures-out",
-        default=None,
-        help=(
-            "path for the streamed failures JSONL (default: a timestamped file "
-            f"under {DEFAULT_FAILURES_DIR}/); a clean run leaves an empty file"
-        ),
-    )
-    parser.add_argument(
-        "--start-at",
-        type=int,
-        default=1,
-        help="1-based enabled-case index to start at (default 1)",
-    )
-    parser.add_argument(
-        "--stop-at",
-        type=int,
-        default=None,
-        help="1-based enabled-case index to stop at (inclusive; default last)",
-    )
-    parser.add_argument(
-        "--only-cases",
-        action="append",
-        default=None,
-        help=(
-            "run only these enabled cases by 1-based index or name "
-            "(comma-separated and/or repeatable); mutually exclusive with "
-            "--start-at/--stop-at"
-        ),
-    )
-    args = parser.parse_args(list(argv))
-    only_cases = _parse_only_cases(typing.cast("list[str] | None", args.only_cases))
-    start_at = typing.cast(int, args.start_at)
-    stop_at = typing.cast("int | None", args.stop_at)
-    if only_cases is not None and (start_at != 1 or stop_at is not None):
-        parser.error("--only-cases cannot be combined with --start-at or --stop-at")
-    return _CliArgs(
-        verbose=typing.cast(bool, args.verbose),
-        progress=not typing.cast(bool, args.no_progress),
-        samples=typing.cast(int, args.samples),
-        failures_out=typing.cast("str | None", args.failures_out),
-        start_at=start_at,
-        stop_at=stop_at,
-        only_cases=only_cases,
-    )
-
-
-def _parse_only_cases(raw: list[str] | None) -> tuple[str, ...] | None:
-    if raw is None:
-        return None
-    tokens = tuple(
-        token.strip() for entry in raw for token in entry.split(",") if token.strip()
-    )
-    return tokens
+    return DEFAULT_FAILURES_DIR / f"provider_proposal_eval_failures_{timestamp}.jsonl"
 
 
 def _new_case_progress_bar(
@@ -617,7 +421,7 @@ def _set_case_progress(
     if progress_bar is None:
         return
     progress_bar.set_description_str(
-        f"Live eval cases {case_index}/{total}: {case_name}",
+        f"Provider Proposal Eval cases {case_index}/{total}: {case_name}",
         refresh=True,
     )
 
@@ -626,13 +430,6 @@ def _update_case_progress(progress_bar: typing.Any | None) -> None:
     if progress_bar is None:
         return
     progress_bar.update(1)
-
-
-def _load_env_file(
-    path: str | pathlib.Path = ".env",
-) -> None:
-    """Load local dotenv values without overriding exported environment vars."""
-    dotenv.load_dotenv(dotenv_path=path, override=False)
 
 
 _FIELD_OPERATION_ATTRIBUTES: tuple[str, ...] = (
@@ -650,7 +447,6 @@ def _append_field_operations_mismatches(
     expected: tuple[question_interpreter.ProviderFieldOperation, ...],
     actual: tuple[question_interpreter.ProviderFieldOperation, ...],
 ) -> None:
-    """Report only the field operations (and attributes) that actually differ."""
     common = min(len(expected), len(actual))
     for index in range(common):
         _append_field_operation_mismatch(
@@ -684,9 +480,6 @@ def _append_field_operation_mismatch(
         expected_value = getattr(expected, attribute)
         actual_value = getattr(actual, attribute)
         if attribute == "values":
-            # Dimension-value casing is immaterial (ADR-0019): a casing-only
-            # difference in filter values is not a meaning mismatch. Order and
-            # every other attribute stay exact.
             if not _values_equal(expected_value, actual_value):
                 mismatches.append(
                     f"{field}: expected {_debug_value(expected_value)}, "
@@ -705,7 +498,6 @@ def _values_equal(
     expected: tuple[object, ...],
     actual: tuple[object, ...],
 ) -> bool:
-    """Compare filter-value tuples case-insensitively, preserving order."""
     if len(expected) != len(actual):
         return False
     return all(
@@ -715,7 +507,6 @@ def _values_equal(
 
 
 def _norm_value(value: object) -> object:
-    """Casefold string values for case-insensitive comparison; pass others."""
     if isinstance(value, str):
         return value.casefold()
     return value
@@ -735,8 +526,6 @@ def _append_scalar_mismatch(
 
 
 def _debug_value(value: object) -> str:
-    if isinstance(value, datetime.date):
-        return value.isoformat()
     return repr(value)
 
 
@@ -752,13 +541,7 @@ def _proposal_debug_string(
     return proposal.model_dump_json()
 
 
-def _provider_result_debug_string(
-    result: ProviderResult,
-) -> str:
+def _provider_result_debug_string(result: ProviderResult) -> str:
     if isinstance(result, question_interpreter.ProviderFailure):
         return f"ProviderFailure(reason={result.reason!r})"
     return _proposal_debug_string(result)
-
-
-if __name__ == "__main__":
-    raise SystemExit(main(argv=sys.argv[1:]))
