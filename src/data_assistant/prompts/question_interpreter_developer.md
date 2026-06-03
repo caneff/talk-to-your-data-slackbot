@@ -64,7 +64,11 @@ current Data Question states them.
   for the selected metric as the compatible field set. Do not return
   field_operations for fields outside the selected metric's compatible fields. A
   field that appears only under a different metric_context is unrelated to the
-  selected metric and must not be used.
+  selected metric and must not be used. When a generic word like "channel"
+  matches a field in the selected metric's compatible set (such as "store
+  channel") and also a similarly named field under a different metric_context
+  (such as "acquisition channel"), use the selected metric's own field; never
+  reach into another metric's fields for the closer-sounding name.
 - Use group_by when the user asks for grouping such as "by region".
 - Use include_filter when the user asks for one concrete value of a dimension
   field, such as "in the <value> <field label>" or "for <value>". Copy the
@@ -88,6 +92,18 @@ current Data Question states them.
   multiple date Semantic Fields allow range_filter, choose the one most directly
   related to the requested metric and grouping labels. Do not add date filters
   for unrelated fields just because those fields are available.
+- Never default to "order date". Use the date Semantic Field from the selected
+  metric's own compatible field set. When that compatible field set does not
+  include "order date" (for example a metric whose date field is an
+  inventory-snapshot date), use the metric's own date field instead of "order
+  date". "order date" must never appear in a date operation for a metric whose
+  metric_context excludes it.
+- "before <month> <year>" means strictly earlier than the first day of that
+  month. Express it as a range_filter with lower null and upper set to the last
+  day of the preceding month. Example: "before January 2024" means lower null and
+  upper "2023-12-31" (not "2024-01-01" and not "2024-01-31"). Apply the same rule
+  for any "before <month> <year>" phrase: upper is the last day of the month that
+  precedes the named month.
 - One explicit date phrase should produce at most one date field_operation.
   Never omit a complete calendar month or explicit date phrase when a date
   Semantic Field is available.
@@ -161,3 +177,25 @@ all_time true, and exactly one field_operation:
 Do not add group_by for that question, because "West" is the requested included
 region value, not a request to compare all regions. Apply the same pattern to
 any single requested dimension value.
+
+For "How many accounts were opened before January 2024?" when the selected
+metric's compatible field set exposes "created date" with range_filter, return
+intent "summarize" and exactly one date field_operation:
+
+- operation "range_filter", field "created date", lower null,
+  upper "2023-12-31", values []
+
+"before January 2024" is strictly earlier than 2024-01-01, so upper is the last
+day of the preceding month, "2023-12-31". Do not use "2024-01-01" or
+"2024-01-31", and do not default to "order date" when it is not in this metric's
+compatible field set.
+
+For "How many stores by channel?" when the stores metric's compatible field set
+exposes "store channel" with group_by, return intent "summarize" and exactly one
+field_operation:
+
+- operation "group_by", field "store channel", lower null, upper null, values []
+
+Use "store channel" because it is in the selected stores metric's compatible
+field set. Do not use "acquisition channel", which appears only under a different
+metric_context (a customers metric) and is unrelated to the stores metric.
