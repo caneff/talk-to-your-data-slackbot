@@ -478,6 +478,56 @@ def test_openai_provider_prompt_describes_dimension_value_filters() -> None:
     )
 
 
+def test_openai_provider_prompt_resolves_noncanonical_net_revenue() -> None:
+    parse_calls: list[dict[str, object]] = []
+
+    class FakeParsedResponse:
+        output_parsed = test_support.question_frame_proposal()
+
+    provider = _openai_provider_returning(
+        FakeParsedResponse(),
+        parse_calls=parse_calls,
+    )
+
+    provider.propose_question_frame(
+        question="What was total net revenue by store region?",
+        semantic_layer_context={"datasets": []},
+    )
+
+    input_messages = typing.cast(
+        list[dict[str, str]],
+        parse_calls[0]["input"],
+    )
+    developer_prompt = input_messages[0]["content"]
+    assert (
+        'For "What was total net revenue by store region?" when '
+        "available_metric_labels" in developer_prompt
+    )
+    assert (
+        "the exact qualified label resolves even though the\nData Question gives "
+        "no time" in developer_prompt
+    )
+    assert 'operation "group_by", field "store region"' in developer_prompt
+    assert (
+        "An exact available qualified label resolves regardless of phrasing or time"
+        in developer_prompt
+    )
+    assert (
+        'For "What was total net revenue for the Web order channel for all time?"'
+        in developer_prompt
+    )
+    assert (
+        "the exact qualified label\nresolves under an all-time, filtered phrasing too"
+        in developer_prompt
+    )
+    assert 'operation "include_filter", field "order channel"' in developer_prompt
+    assert 'values ["Web"]' in developer_prompt
+    assert (
+        "Never flag an exact available qualified label as ambiguous because of an"
+        in developer_prompt
+    )
+
+
 def test_openai_provider_maps_refusal_to_provider_failure() -> None:
     parse_calls: list[dict[str, object]] = []
 

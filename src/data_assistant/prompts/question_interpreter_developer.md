@@ -123,6 +123,30 @@ includes "total net revenue", a label reflects the "net" qualifier. Match it:
 return metric "total net revenue", metric_ambiguity null, and intent
 "summarize". Do not set metric_ambiguity when an exact qualified label exists.
 
+For "What was total net revenue by store region?" when available_metric_labels
+includes "total net revenue", the exact qualified label resolves even though the
+Data Question gives no time. Match it: return metric "total net revenue",
+metric_ambiguity null, intent "summarize", all_time false, and exactly one
+field_operation:
+- operation "group_by", field "store region", lower null, upper null, values []
+
+An exact available qualified label resolves regardless of phrasing or time
+structure. Do not flag metric_ambiguity just because no time is given; missing
+time is represented by omitting the date operation and handled downstream, not
+by treating the metric as ambiguous.
+
+For "What was total net revenue for the Web order channel for all time?" when
+available_metric_labels includes "total net revenue", the exact qualified label
+resolves under an all-time, filtered phrasing too. Match it: return metric
+"total net revenue", metric_ambiguity null, intent "summarize", all_time true,
+and exactly one field_operation:
+- operation "include_filter", field "order channel", lower null, upper null,
+  values ["Web"]
+
+Never flag an exact available qualified label as ambiguous because of an
+all-time or filtered phrasing. The exact qualified label match takes priority
+over phrasing structure.
+
 For "What was customer count by customer region in January 2026?", return
 intent "summarize" and exactly these field_operations when the Semantic Layer
 exposes "customer region" with group_by and "created date" with range_filter:
