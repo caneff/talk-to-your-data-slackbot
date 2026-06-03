@@ -192,6 +192,23 @@ def test_preflight_known_issues_skips_escape_hatch_unidentified_cases(
     assert not sidecar_path.exists()
 
 
+def test_preflight_known_issues_rejects_mixed_identified_and_unidentified_cases(
+    tmp_path: pathlib.Path,
+) -> None:
+    sidecar_path = _sidecar_path(tmp_path)
+
+    with pytest.raises(ValueError, match="Mixed identified and unidentified QA cases"):
+        slack_qa_driver.preflight_known_issues(
+            battery_path=tmp_path / "qa-retail-questions.md",
+            cases=[_case("case-a"), slack_qa_driver.QACase(id=None, question="legacy")],
+            known_issues_path=sidecar_path,
+            skip_prune=False,
+            is_issue_open=lambda _issue_number: True,
+        )
+
+    assert not sidecar_path.exists()
+
+
 def test_preflight_known_issues_aborts_when_prune_fails(
     tmp_path: pathlib.Path,
 ) -> None:
@@ -211,6 +228,8 @@ def test_preflight_known_issues_aborts_when_prune_fails(
     def fail_lookup(_issue_number: int) -> bool:
         raise RuntimeError("lookup failed")
 
+    original_text = sidecar_path.read_text(encoding="utf-8")
+
     with pytest.raises(known_qa_issues.KnownQAIssuePruneError, match="lookup failed"):
         slack_qa_driver.preflight_known_issues(
             battery_path=tmp_path / "qa-retail-questions.md",
@@ -219,6 +238,8 @@ def test_preflight_known_issues_aborts_when_prune_fails(
             skip_prune=False,
             is_issue_open=fail_lookup,
         )
+
+    assert sidecar_path.read_text(encoding="utf-8") == original_text
 
 
 def test_preflight_known_issues_skip_prune_keeps_existing_sidecar(
@@ -277,6 +298,67 @@ def test_preflight_known_issues_prunes_and_rewrites_sidecar(
             valid_case_ids=["case-a", "case-b"],
         ).questions
         == {}
+    )
+
+
+def test_preflight_known_issues_fetches_each_unique_issue_once(
+    tmp_path: pathlib.Path,
+) -> None:
+    sidecar_path = _sidecar_path(tmp_path)
+    _write_sidecar(
+        sidecar_path,
+        {
+            "case-a": [
+                known_qa_issues.KnownQAIssue(
+                    issue_number=165,
+                    flag_category="correctness",
+                ),
+                known_qa_issues.KnownQAIssue(
+                    issue_number=166,
+                    flag_category="formatting",
+                ),
+            ],
+            "case-b": [
+                known_qa_issues.KnownQAIssue(
+                    issue_number=165,
+                    flag_category="investigate",
+                )
+            ],
+        },
+    )
+    seen_issue_numbers: list[int] = []
+
+    def is_issue_open(issue_number: int) -> bool:
+        seen_issue_numbers.append(issue_number)
+        return issue_number == 165
+
+    slack_qa_driver.preflight_known_issues(
+        battery_path=tmp_path / "qa-retail-questions.md",
+        cases=[_case("case-a"), _case("case-b")],
+        known_issues_path=sidecar_path,
+        skip_prune=False,
+        is_issue_open=is_issue_open,
+    )
+
+    assert seen_issue_numbers == [165, 166]
+    assert _load_sidecar(sidecar_path, valid_case_ids=["case-a", "case-b"]) == (
+        known_qa_issues.KnownQAIssueSidecar(
+            version=1,
+            questions={
+                "case-a": [
+                    known_qa_issues.KnownQAIssue(
+                        issue_number=165,
+                        flag_category="correctness",
+                    )
+                ],
+                "case-b": [
+                    known_qa_issues.KnownQAIssue(
+                        issue_number=165,
+                        flag_category="investigate",
+                    )
+                ],
+            },
+        )
     )
 
 
