@@ -1,3 +1,5 @@
+import pathlib
+
 import data_assistant.question_interpreter.test_support as test_support
 import data_assistant.semantic_layer.testing_support as semantic_layer_testing
 from data_assistant.question_interpreter import (
@@ -56,3 +58,10 @@ def test_default_cases_come_from_shared_provider_proposal_cases() -> None:
         )
         == provider_proposal_eval.DEFAULT_CASES
     )
+
+
+def test_provider_proposal_cases_source_uses_provider_proposal_constructor() -> None:
+    source = pathlib.Path(provider_proposal_cases.__file__).read_text(encoding="utf-8")
+
+    assert "SharedProviderProposalCase(" in source
+    assert "SharedQuestionFrameCase(" not in source
