@@ -109,6 +109,31 @@ def record_known_issue(
     return KnownQAIssueSidecar(version=sidecar.version, questions=updated_questions)
 
 
+def record_known_issue_for_qa_record(
+    sidecar: KnownQAIssueSidecar,
+    *,
+    record: typing.Mapping[str, object],
+    issue_number: int,
+    flag_category: str,
+    valid_case_ids: typing.Iterable[str],
+) -> KnownQAIssueSidecar:
+    """Record one sidecar mapping only for eligible QA Review Mode records."""
+    if record.get("source") != "qa_review":
+        return sidecar
+
+    qa_case_id = record.get("qa_case_id")
+    if not isinstance(qa_case_id, str) or qa_case_id == "":
+        return sidecar
+
+    return record_known_issue(
+        sidecar,
+        qa_case_id=qa_case_id,
+        issue_number=issue_number,
+        flag_category=flag_category,
+        valid_case_ids=valid_case_ids,
+    )
+
+
 def prune_sidecar(
     sidecar: KnownQAIssueSidecar,
     *,
