@@ -12,6 +12,7 @@ import argparse
 import collections.abc
 import dataclasses
 import datetime
+import json
 import os
 import pathlib
 import sys
@@ -94,6 +95,7 @@ DEFAULT_CASES: tuple[LiveEvalCase, ...] = tuple(
     for case in question_frame_cases.SHARED_QUESTION_FRAME_CASES
 )
 DEFAULT_SAMPLE_COUNT = 3
+DEFAULT_FAILURES_DIR = pathlib.Path("eval_results")
 
 
 def compare_question_frame_meaning(
@@ -135,6 +137,59 @@ def compare_question_frame_meaning(
     return tuple(mismatches)
 
 
+def select_cases(
+    enabled: collections.abc.Sequence[LiveEvalCase],
+    *,
+    start_at: int = 1,
+    stop_at: int | None = None,
+    only_cases: tuple[str, ...] | None = None,
+) -> tuple[tuple[int, LiveEvalCase], ...]:
+    """Resolve the selected cases as ``(absolute_1_based_index, case)`` pairs.
+
+    ``start_at``/``stop_at`` are 1-based over the enabled list; ``stop_at`` is
+    inclusive. ``only_cases`` tokens are either an all-digit 1-based index or a
+    case name; the result is deduped and returned in enabled order. ``only_cases``
+    is mutually exclusive with ``start_at``/``stop_at``.
+    """
+    indexed = tuple(enumerate(enabled, start=1))
+    if only_cases is not None:
+        if start_at != 1 or stop_at is not None:
+            raise ValueError(
+                "--only-cases cannot be combined with --start-at or --stop-at"
+            )
+        return _select_only_cases(indexed, only_cases)
+    total = len(enabled)
+    stop = total if stop_at is None else stop_at
+    if not (1 <= start_at <= stop <= total):
+        raise ValueError(
+            f"invalid case range: require 1 <= start ({start_at}) <= "
+            f"stop ({stop}) <= enabled count ({total})"
+        )
+    return indexed[start_at - 1 : stop]
+
+
+def _select_only_cases(
+    indexed: tuple[tuple[int, LiveEvalCase], ...],
+    only_cases: tuple[str, ...],
+) -> tuple[tuple[int, LiveEvalCase], ...]:
+    by_name = {case.name: index for index, case in indexed}
+    total = len(indexed)
+    chosen: set[int] = set()
+    for token in only_cases:
+        if token.isdigit():
+            index = int(token)
+            if not (1 <= index <= total):
+                raise ValueError(
+                    f"--only-cases index out of range: {token} (enabled count {total})"
+                )
+            chosen.add(index)
+            continue
+        if token not in by_name:
+            raise ValueError(f"--only-cases unknown case name: {token}")
+        chosen.add(by_name[token])
+    return tuple(pair for pair in indexed if pair[0] in chosen)
+
+
 def run_live_question_interpreter_eval(
     *,
     provider: question_interpreter.QuestionInterpreterProvider,
@@ -143,27 +198,37 @@ def run_live_question_interpreter_eval(
     sample_count: int = DEFAULT_SAMPLE_COUNT,
     progress: bool = False,
     progress_file: typing.TextIO | None = None,
+    failures_file: typing.TextIO | None = None,
+    start_at: int = 1,
+    stop_at: int | None = None,
+    only_cases: tuple[str, ...] | None = None,
 ) -> LiveEvalReport:
-    """Run all enabled live eval cases and aggregate failures."""
+    """Run the selected enabled live eval cases and aggregate failures."""
     if sample_count < 1:
         raise ValueError("sample_count must be at least 1")
     semantic_layer_context = question_interpreter.build_semantic_layer_context(
         semantic_layer
     )
     enabled_cases = tuple(case for case in cases if case.enabled)
+    selected = select_cases(
+        enabled_cases,
+        start_at=start_at,
+        stop_at=stop_at,
+        only_cases=only_cases,
+    )
     passes: list[LiveEvalPass] = []
     failures: list[LiveEvalFailure] = []
     progress_bar = _new_case_progress_bar(
         enabled=progress,
-        total=len(enabled_cases),
+        total=len(selected),
         progress_file=progress_file,
     )
     try:
-        for case_index, case in enumerate(enabled_cases, start=1):
+        for selection_index, (case_number, case) in enumerate(selected, start=1):
             _set_case_progress(
                 progress_bar=progress_bar,
-                case_index=case_index,
-                total=len(enabled_cases),
+                case_index=selection_index,
+                total=len(selected),
                 case_name=case.name,
             )
             pass_count = 0
@@ -191,16 +256,20 @@ def run_live_question_interpreter_eval(
             if last_actual is None:
                 raise AssertionError("live eval must record at least one sample result")
             if sample_failures:
-                failures.append(
-                    LiveEvalFailure(
-                        case_name=case.name,
-                        question=case.question,
-                        expected=case.expected,
-                        actual=typing.cast(ProviderResult, last_failure_actual),
-                        reasons=tuple(sample_failures),
-                        pass_count=pass_count,
-                        sample_count=sample_count,
-                    )
+                failure = LiveEvalFailure(
+                    case_name=case.name,
+                    question=case.question,
+                    expected=case.expected,
+                    actual=typing.cast(ProviderResult, last_failure_actual),
+                    reasons=tuple(sample_failures),
+                    pass_count=pass_count,
+                    sample_count=sample_count,
+                )
+                failures.append(failure)
+                _write_failure_line(
+                    failures_file=failures_file,
+                    case_number=case_number,
+                    failure=failure,
                 )
                 _update_case_progress(progress_bar)
                 continue
@@ -222,7 +291,7 @@ def run_live_question_interpreter_eval(
         if progress_bar is not None:
             progress_bar.close()
     return LiveEvalReport(
-        total=len(enabled_cases),
+        total=len(selected),
         passes=tuple(passes),
         failures=tuple(failures),
     )
@@ -236,6 +305,34 @@ def _case_failure_reasons(
     if isinstance(actual, question_interpreter.ProviderFailure):
         return (f"provider failure: {actual.reason}",)
     return compare_question_frame_meaning(expected=expected, actual=actual)
+
+
+def _write_failure_line(
+    *,
+    failures_file: typing.TextIO | None,
+    case_number: int,
+    failure: LiveEvalFailure,
+) -> None:
+    if failures_file is None:
+        return
+    record = {
+        "case_number": case_number,
+        "case_name": failure.case_name,
+        "question": failure.question,
+        "pass_count": failure.pass_count,
+        "sample_count": failure.sample_count,
+        "reasons": list(failure.reasons),
+        "expected": failure.expected.model_dump(),
+        "actual": _failure_actual_payload(failure.actual),
+    }
+    failures_file.write(json.dumps(record) + "\n")
+    failures_file.flush()
+
+
+def _failure_actual_payload(actual: ProviderResult) -> dict[str, typing.Any]:
+    if isinstance(actual, question_interpreter.ProviderFailure):
+        return {"provider_failure": actual.reason}
+    return actual.model_dump()
 
 
 def write_live_eval_report(
@@ -308,19 +405,59 @@ def main(
         print(str(error), file=stderr)
         return 1
 
-    report = run_live_question_interpreter_eval(
-        provider=provider,
-        semantic_layer=semantic_layer_loader.load_semantic_layer(
-            slack_runtime.RETAIL_SEMANTIC_LAYER_PATH
-        ),
-        sample_count=args.samples,
-        progress=args.progress,
-        progress_file=stderr,
-    )
+    failures_path = _resolve_failures_path(args.failures_out)
+    failures_path.parent.mkdir(parents=True, exist_ok=True)
+    failures_file = failures_path.open("w", encoding="utf-8")
+    try:
+        report = run_live_question_interpreter_eval(
+            provider=provider,
+            semantic_layer=semantic_layer_loader.load_semantic_layer(
+                slack_runtime.RETAIL_SEMANTIC_LAYER_PATH
+            ),
+            sample_count=args.samples,
+            progress=args.progress,
+            progress_file=stderr,
+            failures_file=failures_file,
+            start_at=args.start_at,
+            stop_at=args.stop_at,
+            only_cases=args.only_cases,
+        )
+    except ValueError as error:
+        print(str(error), file=stderr)
+        return 1
+    finally:
+        failures_file.close()
+    _write_selection_notice(stdout=stdout, args=args, report=report)
     write_live_eval_report(stdout=stdout, report=report, verbose=args.verbose)
     if report.failed:
         return 1
     return 0
+
+
+def _write_selection_notice(
+    *,
+    stdout: typing.TextIO,
+    args: _CliArgs,
+    report: LiveEvalReport,
+) -> None:
+    enabled_count = sum(1 for case in DEFAULT_CASES if case.enabled)
+    if args.only_cases is not None:
+        stdout.write(
+            f"Ran {report.total} selected of {enabled_count} enabled (--only-cases)\n"
+        )
+        return
+    if args.start_at != 1 or args.stop_at is not None:
+        stdout.write(
+            f"Started at case {args.start_at} "
+            f"(running {report.total} of {enabled_count} enabled)\n"
+        )
+
+
+def _resolve_failures_path(failures_out: str | None) -> pathlib.Path:
+    if failures_out is not None:
+        return pathlib.Path(failures_out)
+    timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
+    return DEFAULT_FAILURES_DIR / f"live_eval_failures_{timestamp}.jsonl"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -328,6 +465,10 @@ class _CliArgs:
     verbose: bool
     progress: bool
     samples: int
+    failures_out: str | None
+    start_at: int
+    stop_at: int | None
+    only_cases: tuple[str, ...] | None
 
 
 def _parse_args(argv: collections.abc.Sequence[str]) -> _CliArgs:
@@ -355,12 +496,60 @@ def _parse_args(argv: collections.abc.Sequence[str]) -> _CliArgs:
             "rare flakes"
         ),
     )
+    parser.add_argument(
+        "--failures-out",
+        default=None,
+        help=(
+            "path for the streamed failures JSONL (default: a timestamped file "
+            f"under {DEFAULT_FAILURES_DIR}/); a clean run leaves an empty file"
+        ),
+    )
+    parser.add_argument(
+        "--start-at",
+        type=int,
+        default=1,
+        help="1-based enabled-case index to start at (default 1)",
+    )
+    parser.add_argument(
+        "--stop-at",
+        type=int,
+        default=None,
+        help="1-based enabled-case index to stop at (inclusive; default last)",
+    )
+    parser.add_argument(
+        "--only-cases",
+        action="append",
+        default=None,
+        help=(
+            "run only these enabled cases by 1-based index or name "
+            "(comma-separated and/or repeatable); mutually exclusive with "
+            "--start-at/--stop-at"
+        ),
+    )
     args = parser.parse_args(list(argv))
+    only_cases = _parse_only_cases(typing.cast("list[str] | None", args.only_cases))
+    start_at = typing.cast(int, args.start_at)
+    stop_at = typing.cast("int | None", args.stop_at)
+    if only_cases is not None and (start_at != 1 or stop_at is not None):
+        parser.error("--only-cases cannot be combined with --start-at or --stop-at")
     return _CliArgs(
         verbose=typing.cast(bool, args.verbose),
         progress=not typing.cast(bool, args.no_progress),
         samples=typing.cast(int, args.samples),
+        failures_out=typing.cast("str | None", args.failures_out),
+        start_at=start_at,
+        stop_at=stop_at,
+        only_cases=only_cases,
     )
+
+
+def _parse_only_cases(raw: list[str] | None) -> tuple[str, ...] | None:
+    if raw is None:
+        return None
+    tokens = tuple(
+        token.strip() for entry in raw for token in entry.split(",") if token.strip()
+    )
+    return tokens
 
 
 def _new_case_progress_bar(
