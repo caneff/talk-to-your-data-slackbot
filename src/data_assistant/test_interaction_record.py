@@ -68,7 +68,9 @@ def _dataset_table() -> schema.DatasetTable:
     )
 
 
-def _data_assistant_run() -> contracts.DataAssistantRun:
+def _data_assistant_run(
+    *, key_data: pd.DataFrame | None = None
+) -> contracts.DataAssistantRun:
     dataset = _curated_dataset()
     table = _dataset_table()
     metric = table.metrics[0]
@@ -115,14 +117,15 @@ def _data_assistant_run() -> contracts.DataAssistantRun:
         ),
         quality_notes=("1 row excluded because revenue was missing.",),
     )
+    default_key_data = pd.DataFrame(
+        {
+            "dimension_value": ("North", "South"),
+            "metric_value": (1200.0, 850.0),
+        }
+    )
     answer_draft = contracts.AnswerDraft(
         summary="Total revenue in January 2026 was $2,050.00.",
-        key_data=pd.DataFrame(
-            {
-                "dimension_value": ("North", "South"),
-                "metric_value": (1200.0, 850.0),
-            }
-        ),
+        key_data=default_key_data if key_data is None else key_data,
         datasets_used=("Retail Operations",),
         dataset_tables_used=("orders",),
         metric_kind=schema.MetricKind.MONEY,
@@ -235,10 +238,44 @@ def test_build_interaction_record_answer_carries_shape_and_key_data() -> None:
         {"dimension_value": "North", "metric_value": 1200.0},
         {"dimension_value": "South", "metric_value": 850.0},
     ]
-    # Sanitization: NO raw Prepared Data cell values anywhere in the line.
+
+
+def test_build_interaction_record_answer_excludes_raw_prepared_data_cells() -> None:
+    # Security contract (ADR-0016): the bulk Prepared Data frame -- including the
+    # secret North/South/Acme-Secret-Corp rows and the 99999 cell fabricated in
+    # _data_assistant_run -- must NEVER reach the serialized line. Only the tiny
+    # key_data headline frame is allowed through.
+    run = _data_assistant_run()
+
+    record = _build_record(run)
+
     serialized = json.dumps(record)
     assert "Acme-Secret-Corp" not in serialized
     assert "99999" not in serialized
+
+
+def test_build_interaction_record_coerces_non_json_native_key_data() -> None:
+    # ADR-0016: key_data must never carry pandas / NumPy / datetime types. Plain
+    # floats (np.float64) pass through unchanged, but anything else -- here a
+    # pd.Timestamp -- is coerced to a string so the line stays JSON-safe and
+    # greppable. The answer test only exercises floats, so this pins the
+    # coercion branch that actually delivers the no-pandas-types guarantee.
+    run = _data_assistant_run(
+        key_data=pd.DataFrame(
+            {
+                "dimension_value": ("North",),
+                "as_of": (pd.Timestamp("2026-01-15"),),
+            }
+        )
+    )
+
+    record = _build_record(run)
+
+    assert record["key_data"] == [
+        {"dimension_value": "North", "as_of": "2026-01-15 00:00:00"}
+    ]
+    # No pandas/NumPy types survive: the whole line round-trips through json.
+    json.dumps(record)
 
 
 def test_build_interaction_record_non_answer_carries_reason_and_stage() -> None:
