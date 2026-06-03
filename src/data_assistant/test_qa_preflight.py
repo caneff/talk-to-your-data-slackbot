@@ -12,7 +12,7 @@ import pytest
 
 import data_assistant.known_qa_issues as known_qa_issues
 import data_assistant.qa_battery as qa_battery
-import data_assistant.qa_known_issues as qa_known_issues
+import data_assistant.qa_preflight as qa_preflight
 
 
 def test_resolve_known_issues_path_honors_override() -> None:
@@ -20,7 +20,7 @@ def test_resolve_known_issues_path_honors_override() -> None:
     override_path = pathlib.Path("docs/custom-known-issues.json")
 
     assert (
-        qa_known_issues.resolve_known_issues_path(
+        qa_preflight.resolve_known_issues_path(
             battery_path=battery_path,
             known_issues_path=override_path,
         )
@@ -33,7 +33,7 @@ def test_preflight_known_issues_skips_escape_hatch_unidentified_cases(
 ) -> None:
     sidecar_path = _sidecar_path(tmp_path)
 
-    qa_known_issues.preflight_known_issues(
+    qa_preflight.preflight_known_issues(
         battery_path=tmp_path / "qa-retail-questions.md",
         cases=[qa_battery.QACase(id=None, question="legacy question")],
         known_issues_path=sidecar_path,
@@ -50,7 +50,7 @@ def test_preflight_known_issues_rejects_mixed_identified_and_unidentified_cases(
     sidecar_path = _sidecar_path(tmp_path)
 
     with pytest.raises(ValueError, match="Mixed identified and unidentified QA cases"):
-        qa_known_issues.preflight_known_issues(
+        qa_preflight.preflight_known_issues(
             battery_path=tmp_path / "qa-retail-questions.md",
             cases=[_case("case-a"), qa_battery.QACase(id=None, question="legacy")],
             known_issues_path=sidecar_path,
@@ -83,7 +83,7 @@ def test_preflight_known_issues_aborts_when_prune_fails(
     original_text = sidecar_path.read_text(encoding="utf-8")
 
     with pytest.raises(known_qa_issues.KnownQAIssuePruneError, match="lookup failed"):
-        qa_known_issues.preflight_known_issues(
+        qa_preflight.preflight_known_issues(
             battery_path=tmp_path / "qa-retail-questions.md",
             cases=[_case("case-a")],
             known_issues_path=sidecar_path,
@@ -113,7 +113,7 @@ def test_preflight_known_issues_skip_prune_keeps_existing_sidecar(
     def fail_lookup(_issue_number: int) -> bool:
         raise RuntimeError("should not be called")
 
-    qa_known_issues.preflight_known_issues(
+    qa_preflight.preflight_known_issues(
         battery_path=tmp_path / "qa-retail-questions.md",
         cases=[_case("case-a")],
         known_issues_path=sidecar_path,
@@ -136,7 +136,7 @@ def test_preflight_known_issues_prunes_and_rewrites_sidecar(
 ) -> None:
     sidecar_path = _sidecar_path(tmp_path)
 
-    qa_known_issues.preflight_known_issues(
+    qa_preflight.preflight_known_issues(
         battery_path=tmp_path / "qa-retail-questions.md",
         cases=[_case("case-a", question="Question A?"), _case("case-b")],
         known_issues_path=sidecar_path,
@@ -184,7 +184,7 @@ def test_preflight_known_issues_fetches_each_unique_issue_once(
         seen_issue_numbers.append(issue_number)
         return issue_number == 165
 
-    qa_known_issues.preflight_known_issues(
+    qa_preflight.preflight_known_issues(
         battery_path=tmp_path / "qa-retail-questions.md",
         cases=[_case("case-a"), _case("case-b")],
         known_issues_path=sidecar_path,

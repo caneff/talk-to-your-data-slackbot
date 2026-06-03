@@ -3,7 +3,7 @@
 A pure leaf module: it maps the curated QA battery markdown
 (``docs/qa-retail-questions.md``) to a list of :class:`QACase` records. No
 Slack, no OpenAI, no sidecar -- just ``re`` over the markdown. The Slack QA
-driver (and the Known QA Issue preflight in ``qa_known_issues``) consume the
+driver (and the Known QA Issue preflight in ``qa_preflight``) consume the
 parsed cases; nothing here imports either sibling, so there is no cycle.
 
 Headings (``#``), prose, and **indented** sub-bullets (``  - `` / ``\\t- ``)

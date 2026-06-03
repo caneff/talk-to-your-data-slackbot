@@ -6,11 +6,9 @@ checks each referenced GitHub issue's state, prunes entries whose issue has
 closed, and rewrites the sidecar when it changed. The driver then uses the
 returned :class:`PreflightKnownIssuesResult` to annotate or skip cases.
 
-Note the name distinction (words reversed):
-
-* ``known_qa_issues`` -- the JSONL sidecar **data store** (load/prune/write).
-* ``qa_known_issues`` (this module) -- the **orchestration** that USES that
-  store to run the preflight.
+It orchestrates, but does not own, the sidecar: the JSONL **data store**
+(load/prune/write) lives in ``known_qa_issues``; this module reads and updates
+it through that store's API.
 
 Dependency direction is one-way: this module imports ``qa_battery`` (for the
 :class:`~data_assistant.qa_battery.QACase` type) and ``known_qa_issues`` (the

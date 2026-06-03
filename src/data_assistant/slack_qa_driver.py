@@ -41,7 +41,7 @@ import data_assistant.assistant_thread_pointer as assistant_thread_pointer
 import data_assistant.interaction_record as interaction_record
 import data_assistant.known_qa_issues as known_qa_issues
 import data_assistant.qa_battery as qa_battery
-import data_assistant.qa_known_issues as qa_known_issues
+import data_assistant.qa_preflight as qa_preflight
 import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.slack_assistant as slack_assistant
 import data_assistant.slack_runtime as slack_runtime
@@ -263,7 +263,7 @@ def main(
         print(f"No questions found in battery {args.battery}.", file=sys.stderr)
         return 1
     try:
-        preflight = qa_known_issues.preflight_known_issues(
+        preflight = qa_preflight.preflight_known_issues(
             battery_path=pathlib.Path(args.battery),
             cases=cases,
             known_issues_path=args.known_issues_path,
