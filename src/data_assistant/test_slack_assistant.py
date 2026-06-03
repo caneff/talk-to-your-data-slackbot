@@ -677,28 +677,24 @@ def _data_assistant_run() -> contracts.DataAssistantRun:
         intent="summarize",
         metric="total revenue",
         time_scope=contracts.TimeScope.BOUNDED,
-        field_operations=(
-            contracts.SemanticFieldOperation(
-                operation=schema.FieldOperation.GROUP_BY,
-                field="region",
-            ),
-        ),
+        group_by_field="region",
+        field_filters=(),
         unresolved_ambiguities=(),
     )
     match = contracts.SemanticMatch(
         dataset=dataset,
         table=table,
         metric=metric,
-        group_by_fields=(region_field,),
+        group_by_field=region_field,
+        field_filters=(),
     )
     data_request = contracts.DataRequest(
         dataset=dataset,
         table=table,
         metric=metric,
-        group_by_fields=(region_field,),
-        filter_operations=(
-            contracts.ResolvedSemanticFieldOperation(
-                operation=schema.FieldOperation.RANGE_FILTER,
+        group_by_field=region_field,
+        field_filters=(
+            contracts.RangeFilter(
                 field=order_date_field,
                 lower=datetime.date(2026, 1, 1),
                 upper=datetime.date(2026, 1, 31),

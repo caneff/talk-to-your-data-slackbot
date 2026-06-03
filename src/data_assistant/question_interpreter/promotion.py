@@ -119,15 +119,16 @@ def _promote_provider_result(
             "metric",
             stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         )
-    field_operations_result = _promote_field_operations(
+    field_filters_result = _promote_field_filters(
         proposal.field_operations,
         semantic_layer,
     )
-    if isinstance(field_operations_result, contracts.NonAnswer):
-        return field_operations_result
+    if isinstance(field_filters_result, contracts.NonAnswer):
+        return field_filters_result
+    group_by_field, promoted_filters = field_filters_result
     time_scope = _derive_time_scope(
         proposal=proposal,
-        field_operations=field_operations_result,
+        field_filters=promoted_filters,
         semantic_layer=semantic_layer,
     )
     if isinstance(time_scope, contracts.NonAnswer):
@@ -137,7 +138,8 @@ def _promote_provider_result(
         contracts.QuestionFrame(
             intent=intent_value,
             metric=metric_value,
-            field_operations=field_operations_result,
+            group_by_field=group_by_field,
+            field_filters=promoted_filters,
             unresolved_ambiguities=(),
             time_scope=time_scope,
         )
@@ -155,7 +157,7 @@ def _provider_failure_context(
 def _derive_time_scope(
     *,
     proposal: QuestionFrameProposal,
-    field_operations: tuple[contracts.SemanticFieldOperation, ...],
+    field_filters: tuple[contracts.FieldFilter[str], ...],
     semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> contracts.TimeScope | contracts.NonAnswer:
     date_field_labels = {
@@ -165,9 +167,7 @@ def _derive_time_scope(
         if field.data_type == schema.DataType.DATE
     }
     has_date_filter = any(
-        operation.operation != schema.FieldOperation.GROUP_BY
-        and operation.field in date_field_labels
-        for operation in field_operations
+        field_filter.field in date_field_labels for field_filter in field_filters
     )
     if has_date_filter and proposal.all_time:
         return non_answer_catalog.non_answer(
@@ -184,15 +184,15 @@ def _derive_time_scope(
     )
 
 
-def _promote_field_operations(
+def _promote_field_filters(
     operation_proposals: tuple[FieldOperationProposal, ...],
     semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
-) -> contracts.NonAnswer | tuple[contracts.SemanticFieldOperation, ...]:
+) -> contracts.NonAnswer | tuple[str | None, tuple[contracts.FieldFilter[str], ...]]:
     fields_by_label = {
         field.label: field for table in semantic_layer.tables for field in table.fields
     }
-    promoted_operations: list[contracts.SemanticFieldOperation] = []
-    group_by_count = 0
+    promoted_filters: list[contracts.FieldFilter[str]] = []
+    group_by_field: str | None = None
     for operation_proposal in operation_proposals:
         field = fields_by_label.get(operation_proposal.field)
         if field is None:
@@ -207,18 +207,12 @@ def _promote_field_operations(
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
             )
         if operation == schema.FieldOperation.GROUP_BY:
-            group_by_count += 1
-            if group_by_count > 1:
+            if group_by_field is not None:
                 return non_answer_catalog.non_answer(
                     contracts.NonAnswerReasonCode.UNSUPPORTED_SHAPE,
                     stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
                 )
-            promoted_operations.append(
-                contracts.SemanticFieldOperation(
-                    operation=operation,
-                    field=field.label,
-                )
-            )
+            group_by_field = field.label
             continue
         if operation == schema.FieldOperation.RANGE_FILTER:
             result = _promote_range_filter(operation_proposal, field, operation)
@@ -234,16 +228,16 @@ def _promote_field_operations(
             )
         if isinstance(result, contracts.NonAnswer):
             return result
-        promoted_operations.append(result)
+        promoted_filters.append(result)
 
-    return tuple(promoted_operations)
+    return group_by_field, tuple(promoted_filters)
 
 
 def _promote_range_filter(
     operation_proposal: FieldOperationProposal,
     field: schema.SemanticField,
     operation: schema.FieldOperation,
-) -> contracts.NonAnswer | contracts.SemanticFieldOperation:
+) -> contracts.NonAnswer | contracts.RangeFilter[str]:
     if operation_proposal.lower is None and operation_proposal.upper is None:
         return non_answer_catalog.non_answer(
             contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
@@ -268,8 +262,8 @@ def _promote_range_filter(
             contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
             stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         )
-    return contracts.SemanticFieldOperation(
-        operation=operation,
+    del operation
+    return contracts.RangeFilter(
         field=field.label,
         lower=lower,
         upper=upper,
@@ -295,7 +289,7 @@ def _promote_values_filter(
     operation_proposal: FieldOperationProposal,
     field: schema.SemanticField,
     operation: schema.FieldOperation,
-) -> contracts.NonAnswer | contracts.SemanticFieldOperation:
+) -> contracts.NonAnswer | contracts.ValuesFilter[str]:
     if not operation_proposal.values:
         return non_answer_catalog.non_answer(
             contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
@@ -307,9 +301,14 @@ def _promote_values_filter(
         if isinstance(coerced_value, contracts.NonAnswer):
             return coerced_value
         coerced_values.append(coerced_value)
-    return contracts.SemanticFieldOperation(
-        operation=operation,
+    mode = (
+        contracts.FilterMode.INCLUDE
+        if operation == schema.FieldOperation.INCLUDE_FILTER
+        else contracts.FilterMode.EXCLUDE
+    )
+    return contracts.ValuesFilter(
         field=field.label,
+        mode=mode,
         values=tuple(coerced_values),
     )
 

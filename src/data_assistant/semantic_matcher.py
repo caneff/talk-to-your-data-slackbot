@@ -16,18 +16,22 @@ def find_semantic_matches(
     for dataset in semantic_layer.datasets:
         for table in semantic_layer.tables_for_dataset_id(dataset.dataset_id):
             metric = _find_metric(question_frame, table)
-            group_by_fields = _find_group_by_fields(question_frame, table)
+            group_by_field = _find_group_by_field(question_frame, table)
+            resolved_filters = _resolve_field_filters(question_frame, table)
             if (
                 metric is not None
-                and group_by_fields is not None
-                and _table_supports_filter_operations(question_frame, table)
+                and (
+                    question_frame.group_by_field is None or group_by_field is not None
+                )
+                and resolved_filters is not None
             ):
                 matches.append(
                     contracts.SemanticMatch(
                         dataset=dataset,
                         table=table,
                         metric=metric,
-                        group_by_fields=group_by_fields,
+                        group_by_field=group_by_field,
+                        field_filters=resolved_filters,
                     ),
                 )
 
@@ -44,43 +48,56 @@ def _find_metric(
     )
 
 
-def _find_group_by_fields(
+def _find_group_by_field(
     question_frame: contracts.QuestionFrame,
     table: schema.DatasetTable,
-) -> tuple[schema.SemanticField, ...] | None:
-    group_by_labels = tuple(
-        operation.field
-        for operation in question_frame.field_operations
-        if operation.operation == schema.FieldOperation.GROUP_BY
+) -> schema.SemanticField | None:
+    if question_frame.group_by_field is None:
+        return None
+    return next(
+        (
+            table_field
+            for table_field in table.fields
+            if table_field.label == question_frame.group_by_field
+            and schema.FieldOperation.GROUP_BY in table_field.operations
+        ),
+        None,
     )
-    group_by_fields: list[schema.SemanticField] = []
-    for group_by_label in group_by_labels:
-        field = next(
-            (
-                table_field
-                for table_field in table.fields
-                if table_field.label == group_by_label
-                and schema.FieldOperation.GROUP_BY in table_field.operations
-            ),
-            None,
-        )
+
+
+def _resolve_field_filters(
+    question_frame: contracts.QuestionFrame,
+    table: schema.DatasetTable,
+) -> tuple[contracts.FieldFilter[schema.SemanticField], ...] | None:
+    fields_by_label = {field.label: field for field in table.fields}
+    resolved: list[contracts.FieldFilter[schema.SemanticField]] = []
+    for field_filter in question_frame.field_filters:
+        field = fields_by_label.get(field_filter.field)
         if field is None:
             return None
-        group_by_fields.append(field)
-    return tuple(group_by_fields)
-
-
-def _table_supports_filter_operations(
-    question_frame: contracts.QuestionFrame,
-    table: schema.DatasetTable,
-) -> bool:
-    fields_by_label = {field.label: field for field in table.fields}
-    for operation in question_frame.field_operations:
-        if operation.operation == schema.FieldOperation.GROUP_BY:
+        if isinstance(field_filter, contracts.RangeFilter):
+            if schema.FieldOperation.RANGE_FILTER not in field.operations:
+                return None
+            resolved.append(
+                contracts.RangeFilter(
+                    field=field,
+                    lower=field_filter.lower,
+                    upper=field_filter.upper,
+                )
+            )
             continue
-        field = fields_by_label.get(operation.field)
-        if field is None:
-            return False
-        if operation.operation not in field.operations:
-            return False
-    return True
+        required_operation = (
+            schema.FieldOperation.INCLUDE_FILTER
+            if field_filter.mode == contracts.FilterMode.INCLUDE
+            else schema.FieldOperation.EXCLUDE_FILTER
+        )
+        if required_operation not in field.operations:
+            return None
+        resolved.append(
+            contracts.ValuesFilter(
+                field=field,
+                mode=field_filter.mode,
+                values=field_filter.values,
+            )
+        )
+    return tuple(resolved)

@@ -94,12 +94,11 @@ def prepared_revenue_by_region(*, all_time: bool = False) -> contracts.PreparedD
     """
     dataset = _commerce_revenue_dataset()
     table = _orders_table()
-    filter_operations: tuple[contracts.ResolvedSemanticFieldOperation, ...] = (
+    field_filters: tuple[contracts.FieldFilter[schema.SemanticField], ...] = (
         ()
         if all_time
         else (
-            contracts.ResolvedSemanticFieldOperation(
-                operation=schema.FieldOperation.RANGE_FILTER,
+            contracts.RangeFilter(
                 field=table.fields[1],
                 lower=datetime.date(2026, 1, 1),
                 upper=datetime.date(2026, 1, 31),
@@ -111,8 +110,8 @@ def prepared_revenue_by_region(*, all_time: bool = False) -> contracts.PreparedD
             dataset=dataset,
             table=table,
             metric=table.metrics[0],
-            group_by_fields=(table.fields[0],),
-            filter_operations=filter_operations,
+            group_by_field=table.fields[0],
+            field_filters=field_filters,
             output_shape="grouped_metric",
             result_limit=10,
         ),
@@ -135,10 +134,9 @@ def prepared_empty_revenue_by_region() -> contracts.PreparedData:
     prepared_data = prepared_revenue_by_region()
     request = dataclasses.replace(
         prepared_data.request,
-        filter_operations=(
-            contracts.ResolvedSemanticFieldOperation(
-                operation=schema.FieldOperation.RANGE_FILTER,
-                field=prepared_data.request.filter_operations[0].field,
+        field_filters=(
+            contracts.RangeFilter(
+                field=prepared_data.request.field_filters[0].field,
                 lower=datetime.date(2025, 10, 1),
                 upper=datetime.date(2025, 12, 31),
             ),
@@ -203,10 +201,9 @@ def prepared_customer_count() -> contracts.PreparedData:
             dataset=dataset,
             table=table,
             metric=table.metrics[0],
-            group_by_fields=(),
-            filter_operations=(
-                contracts.ResolvedSemanticFieldOperation(
-                    operation=schema.FieldOperation.RANGE_FILTER,
+            group_by_field=None,
+            field_filters=(
+                contracts.RangeFilter(
                     field=table.fields[0],
                     lower=datetime.date(2026, 1, 1),
                     upper=datetime.date(2026, 1, 31),

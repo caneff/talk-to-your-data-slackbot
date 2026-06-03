@@ -14,10 +14,8 @@ def prepare_data(
 ) -> contracts.PreparedData:
     """Produce bounded grouped Prepared Data from local DuckDB rows."""
     metric_source_column = data_request.metric.source_column
-    group_by_field = (
-        data_request.group_by_fields[0] if data_request.group_by_fields else None
-    )
-    filter_sql, filter_parameters = _filter_sql(data_request.filter_operations)
+    group_by_field = data_request.group_by_field
+    filter_sql, filter_parameters = _filter_sql(data_request.field_filters)
     filtered_rows_cte = f"""
         filtered_rows as (
             select *
@@ -103,7 +101,7 @@ def prepare_data(
 
 
 def _filter_sql(
-    filter_operations: tuple[contracts.ResolvedSemanticFieldOperation, ...],
+    field_filters: tuple[contracts.FieldFilter[schema.SemanticField], ...],
 ) -> tuple[str, dict[str, contracts.FieldValue]]:
     """Build a parameterized WHERE clause from validated filter operations.
 
@@ -119,25 +117,24 @@ def _filter_sql(
         parameters[name] = value
         return f"${name}"
 
-    for index, operation in enumerate(filter_operations):
-        column = operation.field.source_column
-        if operation.operation == schema.FieldOperation.RANGE_FILTER:
-            if operation.lower is not None:
-                clauses.append(f"{column} >= {bind(index, 'lower', operation.lower)}")
-            if operation.upper is not None:
-                clauses.append(f"{column} <= {bind(index, 'upper', operation.upper)}")
-        elif operation.operation in (
-            schema.FieldOperation.INCLUDE_FILTER,
-            schema.FieldOperation.EXCLUDE_FILTER,
-        ):
+    for index, field_filter in enumerate(field_filters):
+        column = field_filter.field.source_column
+        if isinstance(field_filter, contracts.RangeFilter):
+            if field_filter.lower is not None:
+                clauses.append(
+                    f"{column} >= {bind(index, 'lower', field_filter.lower)}"
+                )
+            if field_filter.upper is not None:
+                clauses.append(
+                    f"{column} <= {bind(index, 'upper', field_filter.upper)}"
+                )
+        else:
             placeholders = ", ".join(
                 bind(index, value_index, value)
-                for value_index, value in enumerate(operation.values)
+                for value_index, value in enumerate(field_filter.values)
             )
             sql_operator = (
-                "in"
-                if operation.operation == schema.FieldOperation.INCLUDE_FILTER
-                else "not in"
+                "in" if field_filter.mode == contracts.FilterMode.INCLUDE else "not in"
             )
             clauses.append(f"{column} {sql_operator} ({placeholders})")
 

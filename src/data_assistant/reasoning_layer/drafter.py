@@ -62,7 +62,7 @@ def _template_summary(
     prepared_data: contracts.PreparedData,
     slot_values: dict[str, object],
 ) -> str:
-    if prepared_data.request.group_by_fields:
+    if prepared_data.request.group_by_field is not None:
         template = (
             "{metric} in {time_range} was {metric_total}, grouped across "
             "{dimension_count} {dimension}."
@@ -91,7 +91,7 @@ def _answer_draft(
         freshness=request.dataset.freshness.description,
         caveats=prepared_data.quality_notes,
         group_by_label=(
-            request.group_by_fields[0].label if request.group_by_fields else None
+            request.group_by_field.label if request.group_by_field else None
         ),
     )
 

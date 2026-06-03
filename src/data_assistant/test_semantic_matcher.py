@@ -1,7 +1,6 @@
 import datetime
 
 import data_assistant.semantic_layer.catalog as semantic_layer_catalog
-import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_matcher as semantic_matcher
 import data_assistant.workflow.contracts as contracts
 
@@ -19,7 +18,8 @@ def test_semantic_matcher_resolves_canonical_table_level_match(
     assert match.dataset.dataset_id == "commerce"
     assert match.table.table_id == "orders"
     assert match.metric.metric_id == "total_revenue"
-    assert match.group_by_fields[0].field_id == "region"
+    assert match.group_by_field is not None
+    assert match.group_by_field.field_id == "region"
 
 
 def test_semantic_matcher_requires_metric_and_dimension_on_same_table(
@@ -53,13 +53,9 @@ def _question_frame(
         intent="summarize",
         metric=metric,
         time_scope=contracts.TimeScope.BOUNDED,
-        field_operations=(
-            contracts.SemanticFieldOperation(
-                operation=schema.FieldOperation.GROUP_BY,
-                field=field,
-            ),
-            contracts.SemanticFieldOperation(
-                operation=schema.FieldOperation.RANGE_FILTER,
+        group_by_field=field,
+        field_filters=(
+            contracts.RangeFilter(
                 field="order date",
                 lower=datetime.date(2026, 1, 1),
                 upper=datetime.date(2026, 1, 31),
