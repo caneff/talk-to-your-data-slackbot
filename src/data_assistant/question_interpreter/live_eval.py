@@ -642,12 +642,45 @@ def _append_field_operation_mismatch(
     actual: question_interpreter.FieldOperationProposal,
 ) -> None:
     for attribute in _FIELD_OPERATION_ATTRIBUTES:
+        field = f"field_operations[{index}].{attribute}"
+        expected_value = getattr(expected, attribute)
+        actual_value = getattr(actual, attribute)
+        if attribute == "values":
+            # Dimension-value casing is immaterial (ADR-0019): a casing-only
+            # difference in filter values is not a meaning mismatch. Order and
+            # every other attribute stay exact.
+            if not _values_equal(expected_value, actual_value):
+                mismatches.append(
+                    f"{field}: expected {_debug_value(expected_value)}, "
+                    f"got {_debug_value(actual_value)}"
+                )
+            continue
         _append_scalar_mismatch(
             mismatches=mismatches,
-            field=f"field_operations[{index}].{attribute}",
-            expected=getattr(expected, attribute),
-            actual=getattr(actual, attribute),
+            field=field,
+            expected=expected_value,
+            actual=actual_value,
         )
+
+
+def _values_equal(
+    expected: tuple[object, ...],
+    actual: tuple[object, ...],
+) -> bool:
+    """Compare filter-value tuples case-insensitively, preserving order."""
+    if len(expected) != len(actual):
+        return False
+    return all(
+        _norm_value(expected_value) == _norm_value(actual_value)
+        for expected_value, actual_value in zip(expected, actual, strict=True)
+    )
+
+
+def _norm_value(value: object) -> object:
+    """Casefold string values for case-insensitive comparison; pass others."""
+    if isinstance(value, str):
+        return value.casefold()
+    return value
 
 
 def _append_scalar_mismatch(

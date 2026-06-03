@@ -119,14 +119,23 @@ def _filter_sql(
                     f"{column} <= {bind(index, 'upper', field_filter.upper)}"
                 )
         else:
+            # Dimension-value casing is immaterial (ADR-0019): match STRING
+            # fields case-insensitively by lowering both column and each bound
+            # value. Date/decimal fields stay exact. Values remain bound
+            # parameters; only lower() is interpolated, never the value.
+            is_string = field_filter.field.data_type == schema.DataType.STRING
             placeholders = ", ".join(
-                bind(index, value_index, value)
-                for value_index, value in enumerate(field_filter.values)
+                f"lower({placeholder})" if is_string else placeholder
+                for placeholder in (
+                    bind(index, value_index, value)
+                    for value_index, value in enumerate(field_filter.values)
+                )
             )
+            sql_column = f"lower({column})" if is_string else column
             sql_operator = (
                 "in" if field_filter.mode == contracts.FilterMode.INCLUDE else "not in"
             )
-            clauses.append(f"{column} {sql_operator} ({placeholders})")
+            clauses.append(f"{sql_column} {sql_operator} ({placeholders})")
 
     if not clauses:
         return "", {}
