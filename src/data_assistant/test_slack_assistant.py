@@ -1929,50 +1929,40 @@ def test_qa_action_blocks_include_done_but_flag_blocks_do_not() -> None:
 
 
 def test_build_qa_review_note_modal_prefills_existing_note_and_metadata() -> None:
-    original_blocks: list[contracts.SlackBlock] = [
-        {
-            "type": "context",
-            "elements": [{"type": "mrkdwn", "text": "QA 1/1 • Case `case-a`"}],
-        },
-        {"type": "context", "elements": [{"type": "mrkdwn", "text": "❓ QA?"}]},
-        {"type": "section", "text": {"type": "mrkdwn", "text": "Answer body"}},
-        *slack_assistant.qa_action_blocks("interaction-123"),
-    ]
-
     view = slack_assistant.build_qa_review_note_modal(
         interaction_id="interaction-123",
         existing_note="Existing note",
-        original_blocks=original_blocks,
+        channel_id="C123",
+        message_ts="1748880000.123456",
+        message_text="QA answer text",
     )
 
     assert view["callback_id"] == slack_assistant.QA_REVIEW_NOTE_CALLBACK_ID
     assert view["private_metadata"]
     metadata = json.loads(str(view["private_metadata"]))
     assert metadata["interaction_id"] == "interaction-123"
-    assert metadata["original_blocks"] == original_blocks
+    assert metadata["channel_id"] == "C123"
+    assert metadata["message_ts"] == "1748880000.123456"
+    assert metadata["message_text"] == "QA answer text"
+    assert "original_blocks" not in metadata
     view_blocks = typing.cast("list[dict[str, object]]", view["blocks"])
     state = typing.cast("dict[str, object]", view_blocks[0]["element"])
     assert state["action_id"] == slack_assistant.QA_REVIEW_NOTE_ACTION_ID
     assert state["initial_value"] == "Existing note"
 
 
-def test_apply_qa_review_note_save_updates_note_and_rerenders_header() -> None:
+def test_apply_qa_review_note_save_persists_note_and_returns_small_update_target() -> (
+    None
+):
     note_store = _RecordingNoteStore()
-    original_blocks: list[contracts.SlackBlock] = [
-        {
-            "type": "context",
-            "elements": [{"type": "mrkdwn", "text": "QA 1/3 • Case `case-a`"}],
-        },
-        {"type": "context", "elements": [{"type": "mrkdwn", "text": "❓ QA?"}]},
-        {"type": "section", "text": {"type": "mrkdwn", "text": "Answer body"}},
-        *slack_assistant.qa_action_blocks("interaction-123"),
-    ]
     body = {
         "view": {
             "private_metadata": json.dumps(
                 {
                     "interaction_id": "interaction-123",
-                    "original_blocks": original_blocks,
+                    "channel_id": "C123",
+                    "message_ts": "1748880000.123456",
+                    "message_text": "QA answer text",
                 }
             ),
             "state": _qa_note_view_state("Saved note"),
@@ -1986,7 +1976,25 @@ def test_apply_qa_review_note_save_updates_note_and_rerenders_header() -> None:
 
     assert result is not None
     assert note_store.calls == [("interaction-123", "Saved note")]
-    result_blocks = typing.cast("list[contracts.SlackBlock]", result["blocks"])
+    assert result["interaction_id"] == "interaction-123"
+    assert result["channel_id"] == "C123"
+    assert result["message_ts"] == "1748880000.123456"
+    assert result["message_text"] == "QA answer text"
+
+
+def test_render_note_saved_blocks_preserves_body_and_actions() -> None:
+    original_blocks: list[contracts.SlackBlock] = [
+        {
+            "type": "context",
+            "elements": [{"type": "mrkdwn", "text": "QA 1/3 • Case `case-a`"}],
+        },
+        {"type": "context", "elements": [{"type": "mrkdwn", "text": "❓ QA?"}]},
+        {"type": "section", "text": {"type": "mrkdwn", "text": "Answer body"}},
+        *slack_assistant.qa_action_blocks("interaction-123"),
+    ]
+
+    result_blocks = slack_assistant.render_note_saved_blocks(original_blocks)
+
     assert "Note saved" in _context_text(result_blocks[0])
     assert result_blocks[1:] == original_blocks[1:]
 
@@ -1998,7 +2006,8 @@ def test_apply_qa_review_note_save_unknown_id_returns_none() -> None:
             "private_metadata": json.dumps(
                 {
                     "interaction_id": "missing",
-                    "original_blocks": [],
+                    "channel_id": "C123",
+                    "message_ts": "1748880000.123456",
                 }
             ),
             "state": _qa_note_view_state("Saved note"),

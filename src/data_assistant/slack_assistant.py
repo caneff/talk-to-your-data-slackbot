@@ -327,14 +327,12 @@ def build_qa_review_note_modal(
     *,
     interaction_id: str,
     existing_note: str,
-    original_blocks: collections_abc.Sequence[contracts.SlackBlock],
     channel_id: str = "",
     message_ts: str = "",
     message_text: str = "",
 ) -> dict[str, object]:
     metadata: dict[str, object] = {
         "interaction_id": interaction_id,
-        "original_blocks": list(original_blocks),
     }
     if channel_id:
         metadata["channel_id"] = channel_id
@@ -384,9 +382,7 @@ def apply_qa_review_note_save(
     changed = note_store(interaction_id, note)
     if not changed:
         return None
-    original_blocks = metadata.get("original_blocks")
-    blocks = _render_note_saved_blocks(original_blocks)
-    result: dict[str, object] = {"blocks": blocks}
+    result: dict[str, object] = {"interaction_id": interaction_id}
     for field in ("channel_id", "message_ts", "message_text"):
         value = metadata.get(field)
         if isinstance(value, str) and value:
@@ -424,7 +420,7 @@ def _qa_review_note_value(state: object) -> str | None:
     return value if isinstance(value, str) else ""
 
 
-def _render_note_saved_blocks(
+def render_note_saved_blocks(
     blocks: object,
 ) -> list[contracts.SlackBlock]:
     if not isinstance(blocks, list):
@@ -1273,12 +1269,6 @@ def _register_message_actions(
             )
         else:
             message_dict = {}
-        raw_blocks = message_dict.get("blocks")
-        original_blocks: collections_abc.Sequence[contracts.SlackBlock] = (
-            typing.cast("list[contracts.SlackBlock]", raw_blocks)
-            if isinstance(raw_blocks, list)
-            else []
-        )
         record = interaction_log.find_interaction(interaction_id, path=adapter.log_path)
         existing_note = ""
         if record is not None:
@@ -1291,7 +1281,6 @@ def _register_message_actions(
             view=build_qa_review_note_modal(
                 interaction_id=interaction_id,
                 existing_note=existing_note,
-                original_blocks=original_blocks,
                 channel_id=channel_id,
                 message_ts=message_ts,
                 message_text=_string_field(message_dict, "text"),
@@ -1320,10 +1309,26 @@ def _register_message_actions(
         message_ts = typing.cast("str | None", result.get("message_ts"))
         if not channel_id or not message_ts:
             return
+        history = client.conversations_history(
+            channel=channel_id,
+            latest=message_ts,
+            oldest=message_ts,
+            inclusive=True,
+            limit=1,
+        )
+        messages = history.get("messages")
+        if not isinstance(messages, list) or not messages:
+            return
+        first_message = typing.cast("list[object]", messages)[0]
+        if not isinstance(first_message, dict):
+            return
+        message = typing.cast("dict[str, object]", first_message)
+        raw_blocks = message.get("blocks")
+        blocks = render_note_saved_blocks(raw_blocks)
         kwargs: dict[str, object] = {
             "channel": channel_id,
             "ts": message_ts,
-            "blocks": result["blocks"],
+            "blocks": blocks,
         }
         message_text = result.get("message_text")
         if isinstance(message_text, str) and message_text:
