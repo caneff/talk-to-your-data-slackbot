@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import typing
 
 import data_assistant.semantic_layer.catalog as semantic_layer_catalog
@@ -53,11 +54,24 @@ def build_semantic_layer_context(
             }
         )
 
-    return {
+    context: dict[str, object] = {
         "datasets": datasets,
         "all_metric_labels": sorted(set(metric_labels(semantic_layer))),
         "supported_intents": sorted(_SUPPORTED_PROVIDER_INTENTS),
     }
+    as_of_date = _as_of_date(semantic_layer)
+    if as_of_date is not None:
+        context["as_of_date"] = as_of_date.isoformat()
+    return context
+
+
+def _as_of_date(
+    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
+) -> datetime.date | None:
+    for dataset in semantic_layer.datasets:
+        if dataset.as_of_date is not None:
+            return dataset.as_of_date
+    return None
 
 
 def metric_labels(

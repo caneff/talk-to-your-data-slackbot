@@ -1,5 +1,6 @@
 dataset_id: retail_ops
 name: Retail Operations
+as_of_date: 2026-06-30
 tables:
   - demo_orders
   - demo_order_lines

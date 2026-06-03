@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import enum
 import typing
 
@@ -26,6 +27,7 @@ class CuratedDataset(_SemanticLayerModel):
     tables: tuple[str, ...]
     information_types: tuple[str, ...]
     example_questions: tuple[str, ...]
+    as_of_date: datetime.date | None = None
     dataset_access: DatasetAccess = DatasetAccess(allowed_identity_ids=())
 
 

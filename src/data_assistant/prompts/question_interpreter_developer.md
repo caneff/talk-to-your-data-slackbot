@@ -97,6 +97,13 @@ current Data Question states them.
   whose date field is an inventory-snapshot date), use the metric's own date
   field instead. "order date" must not appear in a date operation for a metric
   whose metric_context excludes it.
+- If the Data Question names a month with no year, resolve it to the most recent
+  occurrence on-or-before `as_of_date` (supplied in semantic_layer_context): if
+  the named month is less than or equal to as_of_date's month, use as_of_date's
+  year; if it is a later month, use the prior year. Then emit a full-month
+  range_filter on the selected metric's compatible date field, exactly as for an
+  explicit month and year. With `as_of_date` "2026-06-30", a bare "may" resolves
+  to "2026-05-01"..."2026-05-31".
 - "before <month> <year>" means strictly earlier than the first day of that
   month: emit a range_filter with lower null and upper set to the last day of the
   preceding month. "before January 2024" → upper "2023-12-31" (not "2024-01-01",
@@ -185,6 +192,20 @@ metric's compatible set exposes "created date" with range_filter, return intent
 "before January 2024" is strictly earlier than 2024-01-01, so upper is
 "2023-12-31"; do not use "2024-01-01" or "2024-01-31", and do not fall back to
 "order date".
+
+For "tickets by priority may" when `as_of_date` is "2026-06-30" and the support
+ticket count metric's compatible set exposes "ticket priority" with group_by and
+"ticket created date" with range_filter, return intent "summarize", metric
+"support ticket count", and exactly these field_operations:
+
+- operation "group_by", field "ticket priority", lower null, upper null,
+  values []
+- operation "range_filter", field "ticket created date", lower "2026-05-01",
+  upper "2026-05-31", values []
+
+"may" carries no year; because May (month 5) is on-or-before as_of_date's month
+(June, month 6), it resolves to as_of_date's year 2026, then becomes the full
+month 2026-05-01..2026-05-31 on the metric's own date field.
 
 For "How many stores by channel?" when the stores metric's compatible set exposes
 "store channel" with group_by, return intent "summarize" and one field_operation:
