@@ -45,6 +45,7 @@ import data_assistant.known_qa_issues as known_qa_issues
 import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.slack_assistant as slack_assistant
 import data_assistant.slack_runtime as slack_runtime
+import data_assistant.workflow.contracts as contracts
 
 DEFAULT_BATTERY_PATH: typing.Final[str] = "docs/qa-retail-questions.md"
 
@@ -61,6 +62,19 @@ _IDENTIFIED_CASE_PATTERN: typing.Final[re.Pattern[str]] = re.compile(
 class QACase:
     id: str | None
     question: str
+
+
+class ReplayAdapter(typing.Protocol):
+    def answer_and_render(
+        self,
+        *,
+        text: str,
+        user: str,
+        qa_case_id: str | None = None,
+        set_status: slack_assistant.StatusSetter,
+    ) -> tuple[str, contracts.FinalResponse, tuple[contracts.SlackBlock, ...]]:
+        """Run one QA case through shared assistant path and return render data."""
+        ...
 
 
 def parse_battery_cases(
@@ -183,6 +197,36 @@ def _quietly_set_status(status: str) -> None:
     del status
 
 
+def replay_cases(
+    *,
+    cases: collections_abc.Sequence[QACase],
+    adapter: ReplayAdapter,
+    channel: str,
+    thread_ts: str,
+    post_message: collections_abc.Callable[..., object],
+    pause: collections_abc.Callable[[str], str],
+) -> None:
+    """Replay parsed cases through shared adapter path and post each reply."""
+    for index, case in enumerate(cases, start=1):
+        case_label = (
+            f"{case.question} ({case.id})" if case.id is not None else case.question
+        )
+        print(f"[{index}/{len(cases)}] {case_label}")
+        _interaction_id, final_response, reply_blocks = adapter.answer_and_render(
+            text=case.question,
+            user="qa_driver",
+            qa_case_id=case.id,
+            set_status=_quietly_set_status,
+        )
+        post_message(
+            channel=channel,
+            thread_ts=thread_ts,
+            text=final_response.text,
+            blocks=list(reply_blocks),
+        )
+        pause("  posted. Press Enter for the next question... ")
+
+
 def _build_web_client(token: str) -> typing.Any:
     # Typed as Any: slack_sdk's WebClient methods are loosely typed and would
     # otherwise leak "partially unknown" through this manual driver, the same
@@ -260,23 +304,14 @@ def main(
         f"into channel={channel} thread_ts={thread_ts} as the bot.\n"
         "The bot must be running to own the flag buttons and share the log.\n"
     )
-    for index, case in enumerate(cases, start=1):
-        case_label = (
-            f"{case.question} ({case.id})" if case.id is not None else case.question
-        )
-        print(f"[{index}/{len(cases)}] {case_label}")
-        _interaction_id, final_response, reply_blocks = adapter.answer_and_render(
-            text=case.question,
-            user="qa_driver",
-            set_status=_quietly_set_status,
-        )
-        client.chat_postMessage(
-            channel=channel,
-            thread_ts=thread_ts,
-            text=final_response.text,
-            blocks=list(reply_blocks),
-        )
-        input("  posted. Press Enter for the next question... ")
+    replay_cases(
+        cases=cases,
+        adapter=adapter,
+        channel=channel,
+        thread_ts=thread_ts,
+        post_message=client.chat_postMessage,
+        pause=input,
+    )
 
     return 0
 

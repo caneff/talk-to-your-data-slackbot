@@ -1045,6 +1045,42 @@ def test_answer_and_render_returns_id_response_blocks_and_logs_one_record(
     assert records[0]["user"] == "U123"
 
 
+def test_answer_and_render_logs_optional_qa_case_id_without_changing_question(
+    tmp_path: pathlib.Path,
+    connect_orders: collections.abc.Callable[
+        ..., contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
+    ],
+) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        _question: str,
+        _identity: contracts.InternalIdentity,
+        _progress_sink: contracts.ProgressSink,
+    ) -> slack_assistant.SlackWorkflowResult:
+        return _final_response(text="Final answer text.")
+
+    adapter = slack_assistant.AssistantAdapter(
+        connection_factory=_connection_factory(connect_orders),
+        answer_path=answer_path,
+        log_path=log_path,
+    )
+
+    interaction_id, _final_response_out, _reply_blocks = adapter.answer_and_render(
+        text="What was total revenue by region in January 2026?",
+        user="qa_driver",
+        qa_case_id="orders-net-revenue-by-store-region-q1-2026",
+        set_status=RecordingStatus(),
+    )
+
+    records = _read_log_records(log_path)
+    assert len(records) == 1
+    assert records[0]["id"] == interaction_id
+    assert records[0]["question"] == "What was total revenue by region in January 2026?"
+    assert records[0]["qa_case_id"] == "orders-net-revenue-by-store-region-q1-2026"
+
+
 def test_answer_and_render_truncates_long_question_in_echo_block(
     tmp_path: pathlib.Path,
     connect_orders: collections.abc.Callable[

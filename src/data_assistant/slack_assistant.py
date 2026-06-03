@@ -402,6 +402,7 @@ def _interaction_record(
     latency_ms: int,
     user: str,
     question: str,
+    qa_case_id: str | None,
     model: str,
     result: SlackWorkflowResult,
 ) -> dict[str, object]:
@@ -423,6 +424,8 @@ def _interaction_record(
         "model": model,
         "flags": [],
     }
+    if qa_case_id is not None:
+        record["qa_case_id"] = qa_case_id
     if isinstance(result, contracts.DataAssistantRun):
         record["outcome"] = "answer"
         record.update(_answer_fields(result))
@@ -586,6 +589,7 @@ class AssistantAdapter:
         *,
         text: str,
         user: str,
+        qa_case_id: str | None = None,
         set_status: StatusSetter,
     ) -> tuple[str, contracts.FinalResponse, tuple[contracts.SlackBlock, ...]]:
         """Run the success core for one question and return it ready to post.
@@ -628,6 +632,7 @@ class AssistantAdapter:
                 latency_ms=_latency_ms(started_at),
                 user=user,
                 question=text,
+                qa_case_id=qa_case_id,
                 model=self.model_label,
                 result=result,
             ),
