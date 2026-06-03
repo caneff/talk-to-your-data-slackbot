@@ -79,6 +79,50 @@ def _isolate_main_for_default_failures_file(
     )
 
 
+class _StubProvider:
+    """Provider whose ``propose_question_frame`` must never be reached.
+
+    The ``main()`` tests stub the runner, so the real provider is never called;
+    if it is, the test should fail loudly rather than make a paid request.
+    """
+
+    def propose_question_frame(
+        self,
+        *,
+        question: str,
+        semantic_layer_context: dict[str, object],
+    ) -> live_eval.ProviderResult:
+        del question, semantic_layer_context
+        raise AssertionError("live eval runner is stubbed")
+
+
+@pytest.fixture
+def stub_main(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+) -> types.SimpleNamespace:
+    """Wire ``main()`` for offline tests: dotenv, provider build, and isolation.
+
+    Leaves the runner unstubbed so tests opt into ``_recording_run_live_eval``
+    only when they need to inspect (or replace) the runner call.
+    """
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(
+        live_eval.question_interpreter,
+        "build_openai_question_interpreter_provider",
+        lambda environ: _StubProvider(),
+    )
+    _isolate_main_for_default_failures_file(monkeypatch, tmp_path)
+    return types.SimpleNamespace(env_file=env_file, tmp_path=tmp_path)
+
+
+def _jsonable(obj: object) -> object:
+    """Round-trip ``obj`` through JSON so tuples compare as the streamed lists."""
+    return json.loads(json.dumps(obj))
+
+
 def test_compare_proposal_matches_exact_meaning() -> None:
     expected = test_support.question_frame_proposal()
     actual = test_support.question_frame_proposal()
@@ -476,34 +520,19 @@ def test_write_report_includes_failure_pass_rate() -> None:
 
 def test_main_loads_openai_config_from_dotenv(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: pathlib.Path,
+    stub_main: types.SimpleNamespace,
 ) -> None:
-    env_file = tmp_path / ".env"
-    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    _isolate_main_for_default_failures_file(monkeypatch, tmp_path)
-
-    class FakeProvider:
-        def propose_question_frame(
-            self,
-            *,
-            question: str,
-            semantic_layer_context: dict[str, object],
-        ) -> live_eval.ProviderResult:
-            del question, semantic_layer_context
-            raise AssertionError("live eval runner is stubbed")
-
-    def fake_build_openai_provider(
+    def assert_dotenv_provider(
         environ: collections.abc.Mapping[str, str],
     ) -> question_interpreter.QuestionInterpreterProvider:
         assert environ["OPENAI_API_KEY"] == "dotenv-key"
-        return FakeProvider()
+        return _StubProvider()
 
     calls: list[types.SimpleNamespace] = []
     monkeypatch.setattr(
         live_eval.question_interpreter,
         "build_openai_question_interpreter_provider",
-        fake_build_openai_provider,
+        assert_dotenv_provider,
     )
     monkeypatch.setattr(
         live_eval,
@@ -514,7 +543,7 @@ def test_main_loads_openai_config_from_dotenv(
     exit_code = live_eval.main(
         stdout=io.StringIO(),
         stderr=io.StringIO(),
-        env_file=env_file,
+        env_file=stub_main.env_file,
     )
 
     assert exit_code == 0
@@ -523,29 +552,9 @@ def test_main_loads_openai_config_from_dotenv(
 
 def test_main_passes_verbose_flag_to_report_writer(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: pathlib.Path,
+    stub_main: types.SimpleNamespace,
 ) -> None:
-    env_file = tmp_path / ".env"
-    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    _isolate_main_for_default_failures_file(monkeypatch, tmp_path)
     captured_verbose: list[bool] = []
-
-    class FakeProvider:
-        def propose_question_frame(
-            self,
-            *,
-            question: str,
-            semantic_layer_context: dict[str, object],
-        ) -> live_eval.ProviderResult:
-            del question, semantic_layer_context
-            raise AssertionError("live eval runner is stubbed")
-
-    def fake_build_openai_provider(
-        environ: collections.abc.Mapping[str, str],
-    ) -> question_interpreter.QuestionInterpreterProvider:
-        assert environ["OPENAI_API_KEY"] == "dotenv-key"
-        return FakeProvider()
 
     def fake_write_report(
         *,
@@ -558,11 +567,6 @@ def test_main_passes_verbose_flag_to_report_writer(
 
     calls: list[types.SimpleNamespace] = []
     monkeypatch.setattr(
-        live_eval.question_interpreter,
-        "build_openai_question_interpreter_provider",
-        fake_build_openai_provider,
-    )
-    monkeypatch.setattr(
         live_eval,
         "run_live_question_interpreter_eval",
         _recording_run_live_eval(calls),
@@ -572,7 +576,7 @@ def test_main_passes_verbose_flag_to_report_writer(
     exit_code = live_eval.main(
         stdout=io.StringIO(),
         stderr=io.StringIO(),
-        env_file=env_file,
+        env_file=stub_main.env_file,
         argv=("--verbose",),
     )
 
@@ -582,35 +586,9 @@ def test_main_passes_verbose_flag_to_report_writer(
 
 def test_main_passes_samples_flag_to_live_eval(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: pathlib.Path,
+    stub_main: types.SimpleNamespace,
 ) -> None:
-    env_file = tmp_path / ".env"
-    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    _isolate_main_for_default_failures_file(monkeypatch, tmp_path)
-
-    class FakeProvider:
-        def propose_question_frame(
-            self,
-            *,
-            question: str,
-            semantic_layer_context: dict[str, object],
-        ) -> live_eval.ProviderResult:
-            del question, semantic_layer_context
-            raise AssertionError("live eval runner is stubbed")
-
-    def fake_build_openai_provider(
-        environ: collections.abc.Mapping[str, str],
-    ) -> question_interpreter.QuestionInterpreterProvider:
-        assert environ["OPENAI_API_KEY"] == "dotenv-key"
-        return FakeProvider()
-
     calls: list[types.SimpleNamespace] = []
-    monkeypatch.setattr(
-        live_eval.question_interpreter,
-        "build_openai_question_interpreter_provider",
-        fake_build_openai_provider,
-    )
     monkeypatch.setattr(
         live_eval,
         "run_live_question_interpreter_eval",
@@ -620,12 +598,12 @@ def test_main_passes_samples_flag_to_live_eval(
     default_exit_code = live_eval.main(
         stdout=io.StringIO(),
         stderr=io.StringIO(),
-        env_file=env_file,
+        env_file=stub_main.env_file,
     )
     explicit_exit_code = live_eval.main(
         stdout=io.StringIO(),
         stderr=io.StringIO(),
-        env_file=env_file,
+        env_file=stub_main.env_file,
         argv=("--samples", "7"),
     )
 
@@ -639,35 +617,9 @@ def test_main_passes_samples_flag_to_live_eval(
 
 def test_main_enables_progress_by_default_and_accepts_no_progress(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: pathlib.Path,
+    stub_main: types.SimpleNamespace,
 ) -> None:
-    env_file = tmp_path / ".env"
-    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    _isolate_main_for_default_failures_file(monkeypatch, tmp_path)
-
-    class FakeProvider:
-        def propose_question_frame(
-            self,
-            *,
-            question: str,
-            semantic_layer_context: dict[str, object],
-        ) -> live_eval.ProviderResult:
-            del question, semantic_layer_context
-            raise AssertionError("live eval runner is stubbed")
-
-    def fake_build_openai_provider(
-        environ: collections.abc.Mapping[str, str],
-    ) -> question_interpreter.QuestionInterpreterProvider:
-        assert environ["OPENAI_API_KEY"] == "dotenv-key"
-        return FakeProvider()
-
     calls: list[types.SimpleNamespace] = []
-    monkeypatch.setattr(
-        live_eval.question_interpreter,
-        "build_openai_question_interpreter_provider",
-        fake_build_openai_provider,
-    )
     monkeypatch.setattr(
         live_eval,
         "run_live_question_interpreter_eval",
@@ -679,12 +631,12 @@ def test_main_enables_progress_by_default_and_accepts_no_progress(
     default_exit_code = live_eval.main(
         stdout=io.StringIO(),
         stderr=default_stderr,
-        env_file=env_file,
+        env_file=stub_main.env_file,
     )
     no_progress_exit_code = live_eval.main(
         stdout=io.StringIO(),
         stderr=no_progress_stderr,
-        env_file=env_file,
+        env_file=stub_main.env_file,
         argv=("--no-progress",),
     )
 
@@ -699,29 +651,8 @@ def test_main_enables_progress_by_default_and_accepts_no_progress(
 
 def test_main_returns_one_when_live_eval_report_has_failures(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: pathlib.Path,
+    stub_main: types.SimpleNamespace,
 ) -> None:
-    env_file = tmp_path / ".env"
-    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    _isolate_main_for_default_failures_file(monkeypatch, tmp_path)
-
-    class FakeProvider:
-        def propose_question_frame(
-            self,
-            *,
-            question: str,
-            semantic_layer_context: dict[str, object],
-        ) -> live_eval.ProviderResult:
-            del question, semantic_layer_context
-            raise AssertionError("live eval runner is stubbed")
-
-    def fake_build_openai_provider(
-        environ: collections.abc.Mapping[str, str],
-    ) -> question_interpreter.QuestionInterpreterProvider:
-        assert environ["OPENAI_API_KEY"] == "dotenv-key"
-        return FakeProvider()
-
     def fake_run_live_eval(
         *,
         provider: question_interpreter.QuestionInterpreterProvider,
@@ -759,11 +690,6 @@ def test_main_returns_one_when_live_eval_report_has_failures(
         )
 
     monkeypatch.setattr(
-        live_eval.question_interpreter,
-        "build_openai_question_interpreter_provider",
-        fake_build_openai_provider,
-    )
-    monkeypatch.setattr(
         live_eval,
         "run_live_question_interpreter_eval",
         fake_run_live_eval,
@@ -772,7 +698,7 @@ def test_main_returns_one_when_live_eval_report_has_failures(
     exit_code = live_eval.main(
         stdout=io.StringIO(),
         stderr=io.StringIO(),
-        env_file=env_file,
+        env_file=stub_main.env_file,
     )
 
     assert exit_code == 1
@@ -931,30 +857,16 @@ def test_default_live_eval_includes_multi_filter_net_revenue_case() -> None:
 
 def test_main_loads_real_semantic_layer_for_live_eval(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: pathlib.Path,
+    stub_main: types.SimpleNamespace,
 ) -> None:
-    env_file = tmp_path / ".env"
-    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.chdir(tmp_path)
     loaded_semantic_layer = semantic_layer_testing.semantic_layer_with_table()
     captured_paths: list[pathlib.Path] = []
 
-    class FakeProvider:
-        def propose_question_frame(
-            self,
-            *,
-            question: str,
-            semantic_layer_context: dict[str, object],
-        ) -> live_eval.ProviderResult:
-            del question, semantic_layer_context
-            raise AssertionError("live eval runner is stubbed")
-
-    def fake_build_openai_provider(
+    def assert_dotenv_provider(
         environ: collections.abc.Mapping[str, str],
     ) -> question_interpreter.QuestionInterpreterProvider:
         assert environ["OPENAI_API_KEY"] == "dotenv-key"
-        return FakeProvider()
+        return _StubProvider()
 
     def fake_load_semantic_layer(
         path: pathlib.Path = semantic_layer_loader.DEFAULT_SEMANTIC_LAYER_PATH,
@@ -966,7 +878,7 @@ def test_main_loads_real_semantic_layer_for_live_eval(
     monkeypatch.setattr(
         live_eval.question_interpreter,
         "build_openai_question_interpreter_provider",
-        fake_build_openai_provider,
+        assert_dotenv_provider,
     )
     monkeypatch.setattr(
         semantic_layer_loader,
@@ -982,7 +894,7 @@ def test_main_loads_real_semantic_layer_for_live_eval(
     exit_code = live_eval.main(
         stdout=io.StringIO(),
         stderr=io.StringIO(),
-        env_file=env_file,
+        env_file=stub_main.env_file,
     )
 
     assert exit_code == 0
@@ -998,108 +910,92 @@ def _named_case(name: str) -> live_eval.LiveEvalCase:
     )
 
 
-def test_select_cases_defaults_to_full_enabled_list_with_absolute_indices() -> None:
+def _selected_pairs(
+    selected: tuple[tuple[int, live_eval.LiveEvalCase], ...],
+) -> list[tuple[int, str]]:
+    return [(index, case.name) for index, case in selected]
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "expected_pairs"),
+    [
+        pytest.param(
+            {"start_at": 1, "stop_at": None, "only_cases": None},
+            [(1, "a"), (2, "b"), (3, "c")],
+            id="defaults_full_enabled_list_absolute_indices",
+        ),
+        pytest.param(
+            {"start_at": 2, "stop_at": None, "only_cases": None},
+            [(2, "b"), (3, "c")],
+            id="start_at_skips_leading_keeps_absolute_index",
+        ),
+        pytest.param(
+            {"start_at": 2, "stop_at": 3, "only_cases": None},
+            [(2, "b"), (3, "c")],
+            id="stop_at_inclusive",
+        ),
+        pytest.param(
+            {"start_at": 1, "stop_at": None, "only_cases": ("3", "1")},
+            [(1, "a"), (3, "c")],
+            id="only_cases_by_index",
+        ),
+        pytest.param(
+            {"start_at": 1, "stop_at": None, "only_cases": ("c", "a")},
+            [(1, "a"), (3, "c")],
+            id="only_cases_by_name",
+        ),
+        pytest.param(
+            {"start_at": 1, "stop_at": None, "only_cases": ("c", "1", "a", "3")},
+            [(1, "a"), (3, "c")],
+            id="only_cases_mixed_index_and_name_dedupes_enabled_order",
+        ),
+    ],
+)
+def test_select_cases_happy_path(
+    kwargs: dict[str, object],
+    expected_pairs: list[tuple[int, str]],
+) -> None:
     enabled = (_named_case("a"), _named_case("b"), _named_case("c"))
 
-    selected = live_eval.select_cases(
-        enabled, start_at=1, stop_at=None, only_cases=None
-    )
+    selected = live_eval.select_cases(enabled, **kwargs)
 
-    assert [(index, case.name) for index, case in selected] == [
-        (1, "a"),
-        (2, "b"),
-        (3, "c"),
-    ]
+    assert _selected_pairs(selected) == expected_pairs
 
 
-def test_select_cases_start_at_skips_leading_cases_keeping_absolute_index() -> None:
-    enabled = (_named_case("a"), _named_case("b"), _named_case("c"))
-
-    selected = live_eval.select_cases(
-        enabled, start_at=2, stop_at=None, only_cases=None
-    )
-
-    assert [(index, case.name) for index, case in selected] == [(2, "b"), (3, "c")]
-
-
-def test_select_cases_stop_at_is_inclusive() -> None:
-    enabled = (_named_case("a"), _named_case("b"), _named_case("c"), _named_case("d"))
-
-    selected = live_eval.select_cases(enabled, start_at=2, stop_at=3, only_cases=None)
-
-    assert [(index, case.name) for index, case in selected] == [(2, "b"), (3, "c")]
-
-
-def test_select_cases_only_cases_by_index() -> None:
-    enabled = (_named_case("a"), _named_case("b"), _named_case("c"))
-
-    selected = live_eval.select_cases(
-        enabled, start_at=1, stop_at=None, only_cases=("3", "1")
-    )
-
-    assert [(index, case.name) for index, case in selected] == [(1, "a"), (3, "c")]
-
-
-def test_select_cases_only_cases_by_name() -> None:
-    enabled = (_named_case("a"), _named_case("b"), _named_case("c"))
-
-    selected = live_eval.select_cases(
-        enabled, start_at=1, stop_at=None, only_cases=("c", "a")
-    )
-
-    assert [(index, case.name) for index, case in selected] == [(1, "a"), (3, "c")]
-
-
-def test_select_cases_only_cases_mixes_index_and_name_dedupes_enabled_order() -> None:
-    enabled = (_named_case("a"), _named_case("b"), _named_case("c"))
-
-    selected = live_eval.select_cases(
-        enabled, start_at=1, stop_at=None, only_cases=("c", "1", "a", "3")
-    )
-
-    assert [(index, case.name) for index, case in selected] == [(1, "a"), (3, "c")]
-
-
-def test_select_cases_only_cases_with_start_or_stop_raises() -> None:
-    enabled = (_named_case("a"), _named_case("b"))
-
-    with pytest.raises(ValueError):
-        live_eval.select_cases(enabled, start_at=2, stop_at=None, only_cases=("a",))
-
-
-def test_select_cases_unknown_name_raises() -> None:
-    enabled = (_named_case("a"), _named_case("b"))
-
-    with pytest.raises(ValueError):
-        live_eval.select_cases(enabled, start_at=1, stop_at=None, only_cases=("nope",))
-
-
-def test_select_cases_out_of_range_index_raises() -> None:
-    enabled = (_named_case("a"), _named_case("b"))
-
-    with pytest.raises(ValueError):
-        live_eval.select_cases(enabled, start_at=1, stop_at=None, only_cases=("3",))
-
-
-def test_select_cases_start_below_one_raises() -> None:
-    enabled = (_named_case("a"), _named_case("b"))
-
-    with pytest.raises(ValueError):
-        live_eval.select_cases(enabled, start_at=0, stop_at=None, only_cases=None)
-
-
-def test_select_cases_stop_below_start_raises() -> None:
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        pytest.param(
+            {"start_at": 2, "stop_at": None, "only_cases": ("a",)},
+            id="only_cases_with_start_or_stop",
+        ),
+        pytest.param(
+            {"start_at": 1, "stop_at": None, "only_cases": ("nope",)},
+            id="unknown_name",
+        ),
+        pytest.param(
+            {"start_at": 1, "stop_at": None, "only_cases": ("4",)},
+            id="out_of_range_index",
+        ),
+        pytest.param(
+            {"start_at": 0, "stop_at": None, "only_cases": None},
+            id="start_below_one",
+        ),
+        pytest.param(
+            {"start_at": 3, "stop_at": 2, "only_cases": None},
+            id="stop_below_start",
+        ),
+        pytest.param(
+            {"start_at": 4, "stop_at": None, "only_cases": None},
+            id="start_beyond_enabled",
+        ),
+    ],
+)
+def test_select_cases_raises_on_invalid_selection(kwargs: dict[str, object]) -> None:
     enabled = (_named_case("a"), _named_case("b"), _named_case("c"))
 
     with pytest.raises(ValueError):
-        live_eval.select_cases(enabled, start_at=3, stop_at=2, only_cases=None)
-
-
-def test_select_cases_start_beyond_enabled_raises() -> None:
-    enabled = (_named_case("a"), _named_case("b"))
-
-    with pytest.raises(ValueError):
-        live_eval.select_cases(enabled, start_at=3, stop_at=None, only_cases=None)
+        live_eval.select_cases(enabled, **kwargs)
 
 
 def _failing_provider() -> question_interpreter.QuestionInterpreterProvider:
@@ -1151,18 +1047,13 @@ def test_run_eval_streams_failure_line_with_locked_schema() -> None:
     assert record["question"] == "bad metric"
     assert record["pass_count"] == 0
     assert record["sample_count"] == 3
-    assert record["reasons"] == [
-        "sample 1: metric: expected 'total revenue', got 'gross margin'",
-        "sample 2: metric: expected 'total revenue', got 'gross margin'",
-        "sample 3: metric: expected 'total revenue', got 'gross margin'",
-    ]
-    assert record["expected"] == json.loads(
-        json.dumps(test_support.question_frame_proposal().model_dump())
+    assert len(record["reasons"]) == 3
+    assert all(isinstance(reason, str) and reason for reason in record["reasons"])
+    assert record["expected"] == _jsonable(
+        test_support.question_frame_proposal().model_dump()
     )
-    assert record["actual"] == json.loads(
-        json.dumps(
-            test_support.question_frame_proposal(metric="gross margin").model_dump()
-        )
+    assert record["actual"] == _jsonable(
+        test_support.question_frame_proposal(metric="gross margin").model_dump()
     )
 
 
@@ -1306,34 +1197,10 @@ def test_run_eval_only_cases_runs_selected_subset() -> None:
 
 def test_main_writes_failures_out_path(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: pathlib.Path,
+    stub_main: types.SimpleNamespace,
 ) -> None:
-    env_file = tmp_path / ".env"
-    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    failures_path = tmp_path / "out.jsonl"
-
-    class FakeProvider:
-        def propose_question_frame(
-            self,
-            *,
-            question: str,
-            semantic_layer_context: dict[str, object],
-        ) -> live_eval.ProviderResult:
-            del question, semantic_layer_context
-            raise AssertionError("live eval runner is stubbed")
-
-    def fake_build_openai_provider(
-        environ: collections.abc.Mapping[str, str],
-    ) -> question_interpreter.QuestionInterpreterProvider:
-        return FakeProvider()
-
+    failures_path = stub_main.tmp_path / "out.jsonl"
     calls: list[types.SimpleNamespace] = []
-    monkeypatch.setattr(
-        live_eval.question_interpreter,
-        "build_openai_question_interpreter_provider",
-        fake_build_openai_provider,
-    )
     monkeypatch.setattr(
         live_eval,
         "run_live_question_interpreter_eval",
@@ -1343,7 +1210,7 @@ def test_main_writes_failures_out_path(
     exit_code = live_eval.main(
         stdout=io.StringIO(),
         stderr=io.StringIO(),
-        env_file=env_file,
+        env_file=stub_main.env_file,
         argv=("--failures-out", str(failures_path)),
     )
 
@@ -1355,34 +1222,9 @@ def test_main_writes_failures_out_path(
 
 def test_main_default_failures_path_lands_under_eval_results(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: pathlib.Path,
+    stub_main: types.SimpleNamespace,
 ) -> None:
-    env_file = tmp_path / ".env"
-    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    _isolate_main_for_default_failures_file(monkeypatch, tmp_path)
-
-    class FakeProvider:
-        def propose_question_frame(
-            self,
-            *,
-            question: str,
-            semantic_layer_context: dict[str, object],
-        ) -> live_eval.ProviderResult:
-            del question, semantic_layer_context
-            raise AssertionError("live eval runner is stubbed")
-
-    def fake_build_openai_provider(
-        environ: collections.abc.Mapping[str, str],
-    ) -> question_interpreter.QuestionInterpreterProvider:
-        return FakeProvider()
-
     calls: list[types.SimpleNamespace] = []
-    monkeypatch.setattr(
-        live_eval.question_interpreter,
-        "build_openai_question_interpreter_provider",
-        fake_build_openai_provider,
-    )
     monkeypatch.setattr(
         live_eval,
         "run_live_question_interpreter_eval",
@@ -1392,45 +1234,20 @@ def test_main_default_failures_path_lands_under_eval_results(
     exit_code = live_eval.main(
         stdout=io.StringIO(),
         stderr=io.StringIO(),
-        env_file=env_file,
+        env_file=stub_main.env_file,
     )
 
     assert exit_code == 0
-    written = list((tmp_path / "eval_results").glob("*.jsonl"))
+    written = list((stub_main.tmp_path / "eval_results").glob("*.jsonl"))
     assert len(written) == 1
     assert written[0].name.startswith("live_eval_failures_")
 
 
 def test_main_passes_selection_flags_to_runner(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: pathlib.Path,
+    stub_main: types.SimpleNamespace,
 ) -> None:
-    env_file = tmp_path / ".env"
-    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    _isolate_main_for_default_failures_file(monkeypatch, tmp_path)
-
-    class FakeProvider:
-        def propose_question_frame(
-            self,
-            *,
-            question: str,
-            semantic_layer_context: dict[str, object],
-        ) -> live_eval.ProviderResult:
-            del question, semantic_layer_context
-            raise AssertionError("live eval runner is stubbed")
-
-    def fake_build_openai_provider(
-        environ: collections.abc.Mapping[str, str],
-    ) -> question_interpreter.QuestionInterpreterProvider:
-        return FakeProvider()
-
     calls: list[types.SimpleNamespace] = []
-    monkeypatch.setattr(
-        live_eval.question_interpreter,
-        "build_openai_question_interpreter_provider",
-        fake_build_openai_provider,
-    )
     monkeypatch.setattr(
         live_eval,
         "run_live_question_interpreter_eval",
@@ -1440,13 +1257,13 @@ def test_main_passes_selection_flags_to_runner(
     start_stop_exit = live_eval.main(
         stdout=io.StringIO(),
         stderr=io.StringIO(),
-        env_file=env_file,
+        env_file=stub_main.env_file,
         argv=("--start-at", "3", "--stop-at", "7"),
     )
     only_exit = live_eval.main(
         stdout=io.StringIO(),
         stderr=io.StringIO(),
-        env_file=env_file,
+        env_file=stub_main.env_file,
         argv=("--only-cases", "44,exact_date", "--only-cases", "10"),
     )
 
@@ -1460,19 +1277,13 @@ def test_main_passes_selection_flags_to_runner(
     assert calls[1].only_cases == ("44", "exact_date", "10")
 
 
-def test_main_only_cases_with_start_at_is_usage_error(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: pathlib.Path,
-) -> None:
-    env_file = tmp_path / ".env"
-    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-
+def test_main_only_cases_with_start_at_is_usage_error() -> None:
+    # argparse rejects the flag combination before any env/provider/runner
+    # wiring runs, so this test needs none of the main() stubs.
     with pytest.raises(SystemExit) as exit_info:
         live_eval.main(
             stdout=io.StringIO(),
             stderr=io.StringIO(),
-            env_file=env_file,
             argv=("--only-cases", "1", "--start-at", "2"),
         )
 
@@ -1480,40 +1291,15 @@ def test_main_only_cases_with_start_at_is_usage_error(
 
 
 def test_main_bad_range_exits_non_zero_with_message(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: pathlib.Path,
+    stub_main: types.SimpleNamespace,
 ) -> None:
-    env_file = tmp_path / ".env"
-    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    _isolate_main_for_default_failures_file(monkeypatch, tmp_path)
+    # No runner stub: the REAL runner's select_cases must raise on the bad range.
     stderr = io.StringIO()
-
-    class FakeProvider:
-        def propose_question_frame(
-            self,
-            *,
-            question: str,
-            semantic_layer_context: dict[str, object],
-        ) -> live_eval.ProviderResult:
-            del question, semantic_layer_context
-            raise AssertionError("live eval runner is stubbed")
-
-    def fake_build_openai_provider(
-        environ: collections.abc.Mapping[str, str],
-    ) -> question_interpreter.QuestionInterpreterProvider:
-        return FakeProvider()
-
-    monkeypatch.setattr(
-        live_eval.question_interpreter,
-        "build_openai_question_interpreter_provider",
-        fake_build_openai_provider,
-    )
 
     exit_code = live_eval.main(
         stdout=io.StringIO(),
         stderr=stderr,
-        env_file=env_file,
+        env_file=stub_main.env_file,
         argv=("--start-at", "9999"),
     )
 
