@@ -6,8 +6,6 @@ same seed-requires-duckdb guard, and build their connection factory from those
 args the same way. This module owns that plumbing. It depends one-directionally
 on ``composition`` (for the retail constants + the connection-factory builder);
 ``composition`` never imports back.
-
-Flat layout for now -- this moves into ``slack/`` in a later issue (I5).
 """
 
 from __future__ import annotations
@@ -15,7 +13,7 @@ from __future__ import annotations
 import argparse
 import pathlib
 
-import data_assistant.composition as composition
+import data_assistant.slack.composition as composition
 
 
 def add_data_source_args(parser: argparse.ArgumentParser) -> None:

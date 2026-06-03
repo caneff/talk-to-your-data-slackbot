@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 # ``final_response_from_workflow_result`` are imported above from
 # ``interaction_record`` (their natural owner -- it reads the workflow result and
 # writes the canonical fallback ``response_text``). They are re-exported here so
-# this edge's block/adapter sites and ``slack_qa_driver`` keep using them.
+# this edge's block/adapter sites and ``slack_qa.driver`` keep using them.
 SlackWorkflowResult: typing.TypeAlias = contracts.WorkflowResult
 
 AnswerPath: typing.TypeAlias = collections_abc.Callable[
@@ -119,7 +119,7 @@ class AssistantAdapter:
     answer_path: AnswerPath
     internal_identity_resolver: AssistantIdentityResolver = default_identity
     # Model label recorded on every Interaction Log line (ADR-0016). Threaded
-    # from slack_runtime.py where the OpenAI model is configured; empty by
+    # from slack/runtime_main.py where the OpenAI model is configured; empty by
     # default so the adapter stays test-constructible without live config.
     model_label: str = ""
     # Injectable so tests write to tmp_path and never touch the real gitignored

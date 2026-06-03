@@ -13,8 +13,8 @@ import pathlib
 
 import pytest
 
-import data_assistant.cli_common as cli_common
-import data_assistant.composition as composition
+import data_assistant.slack.cli_common as cli_common
+import data_assistant.slack.composition as composition
 
 
 def _parser_with_data_source_args() -> argparse.ArgumentParser:

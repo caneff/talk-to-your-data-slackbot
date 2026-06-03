@@ -22,4 +22,4 @@ COPY --from=builder /app/.venv /app/.venv
 COPY src ./src
 COPY examples/retail_ops_demo ./examples/retail_ops_demo
 
-CMD ["python", "-m", "data_assistant.slack_runtime"]
+CMD ["python", "-m", "data_assistant.slack.runtime_main"]

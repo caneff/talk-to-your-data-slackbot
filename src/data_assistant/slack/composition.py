@@ -1,13 +1,12 @@
 """Shared startup composition for the Slack entrypoints.
 
-Both Slack entrypoints -- the Socket Mode runtime (``slack_runtime``) and the
-manual QA driver (``slack_qa_driver``) -- construct the same runtime objects:
-the OpenAI-backed answer path, a DuckDB connection factory, the env-derived
-model label + Interaction Log path, and the ``AssistantAdapter`` itself. This
-module owns that construction so there is exactly one source of truth; the
-entrypoints keep only their own startup shape (Socket Mode vs replay loop).
-
-Flat layout for now -- this moves into ``slack/`` in a later issue (I5).
+Both Slack entrypoints -- the Socket Mode runtime (``slack.runtime_main``) and
+the manual QA driver (``slack_qa.driver``) -- construct the same runtime
+objects: the OpenAI-backed answer path, a DuckDB connection factory, the
+env-derived model label + Interaction Log path, and the ``AssistantAdapter``
+itself. This module owns that construction so there is exactly one source of
+truth; the entrypoints keep only their own startup shape (Socket Mode vs replay
+loop).
 """
 
 from __future__ import annotations

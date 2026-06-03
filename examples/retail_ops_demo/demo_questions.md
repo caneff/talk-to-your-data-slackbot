@@ -7,7 +7,7 @@ Layer and seed data.
 ## Runtime Command
 
 ```bash
-uv run python -m data_assistant.slack_runtime --semantic-layer-path examples/retail_ops_demo/semantic_layer --duckdb-path :memory: --seed-sql-path examples/retail_ops_demo/seeds/retail_ops_seed.sql
+uv run python -m data_assistant.slack.runtime_main --semantic-layer-path examples/retail_ops_demo/semantic_layer --duckdb-path :memory: --seed-sql-path examples/retail_ops_demo/seeds/retail_ops_seed.sql
 ```
 
 Do not run live Slack or live OpenAI as part of this artifact. Manual live

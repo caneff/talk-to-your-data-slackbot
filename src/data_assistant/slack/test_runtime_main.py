@@ -16,12 +16,12 @@ import typing
 import duckdb
 import pytest
 
-import data_assistant.composition as composition
 import data_assistant.interaction_log as interaction_log
 import data_assistant.openai_support as openai_support
 import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.slack as slack_assistant
-import data_assistant.slack_runtime as slack_runtime
+import data_assistant.slack.composition as composition
+import data_assistant.slack.runtime_main as slack_runtime
 import data_assistant.workflow.contracts as contracts
 
 VALID_SLACK_ENV = {
