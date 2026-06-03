@@ -12,10 +12,10 @@ import typing
 
 import dotenv
 
+import data_assistant.composition as composition
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.question_interpreter.provider_proposal_eval as proposal_eval
 import data_assistant.semantic_layer.loader as semantic_layer_loader
-import data_assistant.slack_runtime as slack_runtime
 
 
 def main(
@@ -48,7 +48,7 @@ def main(
         report = proposal_eval.run_provider_proposal_eval(
             provider=provider,
             semantic_layer=semantic_layer_loader.load_semantic_layer(
-                slack_runtime.RETAIL_SEMANTIC_LAYER_PATH
+                composition.RETAIL_SEMANTIC_LAYER_PATH
             ),
             sample_count=args.samples,
             progress=args.progress,
