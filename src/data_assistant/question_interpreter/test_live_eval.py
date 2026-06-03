@@ -17,6 +17,12 @@ import data_assistant.semantic_layer.testing_support as semantic_layer_testing
 import data_assistant.slack_runtime as slack_runtime
 
 
+class _SelectCasesKwargs(typing.TypedDict):
+    start_at: int
+    stop_at: int | None
+    only_cases: tuple[str, ...] | None
+
+
 def _recording_run_live_eval(
     calls: list[types.SimpleNamespace],
 ) -> collections.abc.Callable[..., live_eval.LiveEvalReport]:
@@ -60,6 +66,13 @@ def _recording_run_live_eval(
     return _fake
 
 
+def _stub_load_semantic_layer(
+    path: pathlib.Path = semantic_layer_loader.DEFAULT_SEMANTIC_LAYER_PATH,
+) -> semantic_layer_catalog.SemanticLayerCatalog:
+    del path
+    return semantic_layer_testing.semantic_layer_with_table()
+
+
 def _isolate_main_for_default_failures_file(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: pathlib.Path,
@@ -75,7 +88,7 @@ def _isolate_main_for_default_failures_file(
     monkeypatch.setattr(
         semantic_layer_loader,
         "load_semantic_layer",
-        lambda path=None: semantic_layer_testing.semantic_layer_with_table(),
+        _stub_load_semantic_layer,
     )
 
 
@@ -96,6 +109,13 @@ class _StubProvider:
         raise AssertionError("live eval runner is stubbed")
 
 
+def _build_stub_provider(
+    environ: collections.abc.Mapping[str, str],
+) -> _StubProvider:
+    del environ
+    return _StubProvider()
+
+
 @pytest.fixture
 def stub_main(
     monkeypatch: pytest.MonkeyPatch,
@@ -112,7 +132,7 @@ def stub_main(
     monkeypatch.setattr(
         live_eval.question_interpreter,
         "build_openai_question_interpreter_provider",
-        lambda environ: _StubProvider(),
+        _build_stub_provider,
     )
     _isolate_main_for_default_failures_file(monkeypatch, tmp_path)
     return types.SimpleNamespace(env_file=env_file, tmp_path=tmp_path)
@@ -952,7 +972,7 @@ def _selected_pairs(
     ],
 )
 def test_select_cases_happy_path(
-    kwargs: dict[str, object],
+    kwargs: _SelectCasesKwargs,
     expected_pairs: list[tuple[int, str]],
 ) -> None:
     enabled = (_named_case("a"), _named_case("b"), _named_case("c"))
@@ -991,7 +1011,9 @@ def test_select_cases_happy_path(
         ),
     ],
 )
-def test_select_cases_raises_on_invalid_selection(kwargs: dict[str, object]) -> None:
+def test_select_cases_raises_on_invalid_selection(
+    kwargs: _SelectCasesKwargs,
+) -> None:
     enabled = (_named_case("a"), _named_case("b"), _named_case("c"))
 
     with pytest.raises(ValueError):
