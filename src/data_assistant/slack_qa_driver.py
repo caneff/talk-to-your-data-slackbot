@@ -30,15 +30,18 @@ from __future__ import annotations
 import argparse
 import collections.abc as collections_abc
 import dataclasses
+import json
 import os
 import pathlib
 import re
+import subprocess
 import sys
 import typing
 
 import dotenv
 
 import data_assistant.assistant_thread_pointer as assistant_thread_pointer
+import data_assistant.known_qa_issues as known_qa_issues
 import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.slack_assistant as slack_assistant
 import data_assistant.slack_runtime as slack_runtime
@@ -105,6 +108,51 @@ def parse_battery(markdown: str) -> list[str]:
     ]
 
 
+def resolve_known_issues_path(
+    *,
+    battery_path: pathlib.Path,
+    known_issues_path: pathlib.Path | None,
+) -> pathlib.Path:
+    """Resolve the Known QA Issue sidecar path for one battery."""
+    if known_issues_path is not None:
+        return known_issues_path
+    return known_qa_issues.default_sidecar_path(battery_path)
+
+
+def preflight_known_issues(
+    *,
+    battery_path: pathlib.Path,
+    cases: collections_abc.Sequence[QACase],
+    known_issues_path: pathlib.Path | None,
+    skip_prune: bool,
+    is_issue_open: collections_abc.Callable[[int], bool] | None = None,
+) -> None:
+    """Create, validate, and optionally prune the Known QA Issue sidecar."""
+    if any(case.id is None for case in cases):
+        return
+
+    sidecar_path = resolve_known_issues_path(
+        battery_path=battery_path,
+        known_issues_path=known_issues_path,
+    )
+    case_ids = [typing.cast("str", case.id) for case in cases]
+    sidecar = known_qa_issues.load_sidecar(
+        sidecar_path,
+        valid_case_ids=case_ids,
+        create_if_missing=True,
+    )
+    if skip_prune:
+        return
+    issue_is_open = is_issue_open or _github_issue_is_open
+    pruned = known_qa_issues.prune_sidecar(
+        sidecar,
+        valid_case_ids=case_ids,
+        is_issue_open=issue_is_open,
+    )
+    if pruned != sidecar:
+        known_qa_issues.write_sidecar(sidecar_path, pruned)
+
+
 def resolve_thread_target(
     *,
     channel: str | None,
@@ -161,17 +209,6 @@ def main(
     dotenv.load_dotenv(dotenv_path=args.env_file or env_file, override=False)
     environ = os.environ
 
-    bot_token = environ.get("SLACK_BOT_TOKEN")
-    if not bot_token:
-        print("Missing required environment variable: SLACK_BOT_TOKEN", file=sys.stderr)
-        return 1
-
-    target = resolve_thread_target(channel=args.channel, thread_ts=args.thread_ts)
-    if isinstance(target, str):
-        print(target, file=sys.stderr)
-        return 1
-    channel, thread_ts = target
-
     battery_text = pathlib.Path(args.battery).read_text(encoding="utf-8")
     try:
         cases = parse_battery_cases(
@@ -184,6 +221,27 @@ def main(
     if not cases:
         print(f"No questions found in battery {args.battery}.", file=sys.stderr)
         return 1
+    try:
+        preflight_known_issues(
+            battery_path=pathlib.Path(args.battery),
+            cases=cases,
+            known_issues_path=args.known_issues_path,
+            skip_prune=args.skip_known_issue_prune,
+        )
+    except (ValueError, known_qa_issues.KnownQAIssuePruneError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    bot_token = environ.get("SLACK_BOT_TOKEN")
+    if not bot_token:
+        print("Missing required environment variable: SLACK_BOT_TOKEN", file=sys.stderr)
+        return 1
+
+    target = resolve_thread_target(channel=args.channel, thread_ts=args.thread_ts)
+    if isinstance(target, str):
+        print(target, file=sys.stderr)
+        return 1
+    channel, thread_ts = target
 
     client = _build_web_client(bot_token)
     semantic_layer = semantic_layer_loader.load_semantic_layer(args.semantic_layer_path)
@@ -239,6 +297,19 @@ def _connection_factory(args: argparse.Namespace) -> slack_runtime.ConnectionFac
     )
 
 
+def _github_issue_is_open(issue_number: int) -> bool:
+    """Return whether one GitHub issue is still open via ``gh issue view``."""
+    completed = subprocess.run(
+        ["gh", "issue", "view", str(issue_number), "--json", "state"],
+        capture_output=True,
+        check=True,
+        cwd=pathlib.Path(__file__).resolve().parents[2],
+        text=True,
+    )
+    payload = typing.cast("dict[str, object]", json.loads(completed.stdout))
+    return payload.get("state") == "OPEN"
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -276,6 +347,23 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help=(
             "Allow legacy top-level '- Question text' bullets without "
             "stable QA case ids."
+        ),
+    )
+    parser.add_argument(
+        "--known-issues-path",
+        type=pathlib.Path,
+        default=None,
+        help=(
+            "Known QA Issue sidecar path. Defaults to the battery path with "
+            "its suffix replaced by .known-issues.json."
+        ),
+    )
+    parser.add_argument(
+        "--skip-known-issue-prune",
+        action="store_true",
+        help=(
+            "Skip preflight pruning of closed or stale Known QA Issue entries "
+            "before posting any Slack messages."
         ),
     )
     parser.add_argument(

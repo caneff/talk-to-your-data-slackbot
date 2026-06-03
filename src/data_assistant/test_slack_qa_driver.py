@@ -14,6 +14,7 @@ import textwrap
 import pytest
 
 import data_assistant.assistant_thread_pointer as assistant_thread_pointer
+import data_assistant.known_qa_issues as known_qa_issues
 import data_assistant.slack_qa_driver as slack_qa_driver
 
 
@@ -66,6 +67,19 @@ def test_parse_args_accepts_allow_unidentified_cases_flag() -> None:
     args = slack_qa_driver.build_arg_parser().parse_args(["--allow-unidentified-cases"])
 
     assert args.allow_unidentified_cases is True
+
+
+def test_parse_args_accepts_known_issue_flags() -> None:
+    args = slack_qa_driver.build_arg_parser().parse_args(
+        [
+            "--known-issues-path",
+            "docs/custom.known-issues.json",
+            "--skip-known-issue-prune",
+        ]
+    )
+
+    assert args.known_issues_path == pathlib.Path("docs/custom.known-issues.json")
+    assert args.skip_known_issue_prune is True
 
 
 def test_curated_qa_battery_parses_in_strict_mode() -> None:
@@ -145,6 +159,134 @@ def test_parse_battery_strips_surrounding_whitespace() -> None:
     markdown = "-   What was total revenue?   \n"
 
     assert slack_qa_driver.parse_battery(markdown) == ["What was total revenue?"]
+
+
+def test_resolve_known_issues_path_uses_default_sidecar_name() -> None:
+    battery_path = pathlib.Path("docs/qa-retail-questions.md")
+
+    assert slack_qa_driver.resolve_known_issues_path(
+        battery_path=battery_path,
+        known_issues_path=None,
+    ) == pathlib.Path("docs/qa-retail-questions.known-issues.json")
+
+
+def test_resolve_known_issues_path_honors_override() -> None:
+    battery_path = pathlib.Path("docs/qa-retail-questions.md")
+    override_path = pathlib.Path("docs/custom-known-issues.json")
+
+    assert (
+        slack_qa_driver.resolve_known_issues_path(
+            battery_path=battery_path,
+            known_issues_path=override_path,
+        )
+        == override_path
+    )
+
+
+def test_preflight_known_issues_skips_escape_hatch_unidentified_cases(
+    tmp_path: pathlib.Path,
+) -> None:
+    sidecar_path = tmp_path / "qa-retail-questions.known-issues.json"
+
+    slack_qa_driver.preflight_known_issues(
+        battery_path=tmp_path / "qa-retail-questions.md",
+        cases=[slack_qa_driver.QACase(id=None, question="legacy question")],
+        known_issues_path=sidecar_path,
+        skip_prune=False,
+        is_issue_open=lambda _issue_number: True,
+    )
+
+    assert not sidecar_path.exists()
+
+
+def test_preflight_known_issues_aborts_when_prune_fails(
+    tmp_path: pathlib.Path,
+) -> None:
+    sidecar_path = tmp_path / "qa-retail-questions.known-issues.json"
+    sidecar_path.write_text(
+        textwrap.dedent(
+            """\
+            {
+              "version": 1,
+              "questions": {
+                "case-a": [
+                  {
+                    "issue_number": 165,
+                    "flag_category": "correctness"
+                  }
+                ]
+              }
+            }
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(known_qa_issues.KnownQAIssuePruneError, match="lookup failed"):
+        slack_qa_driver.preflight_known_issues(
+            battery_path=tmp_path / "qa-retail-questions.md",
+            cases=[slack_qa_driver.QACase(id="case-a", question="Question?")],
+            known_issues_path=sidecar_path,
+            skip_prune=False,
+            is_issue_open=lambda _issue_number: (_ for _ in ()).throw(
+                RuntimeError("lookup failed")
+            ),
+        )
+
+
+def test_preflight_known_issues_skip_prune_keeps_existing_sidecar(
+    tmp_path: pathlib.Path,
+) -> None:
+    sidecar_path = tmp_path / "qa-retail-questions.known-issues.json"
+    original_text = textwrap.dedent(
+        """\
+        {
+          "version": 1,
+          "questions": {
+            "case-a": [
+              {
+                "issue_number": 165,
+                "flag_category": "correctness"
+              }
+            ]
+          }
+        }
+        """
+    )
+    sidecar_path.write_text(original_text, encoding="utf-8")
+
+    slack_qa_driver.preflight_known_issues(
+        battery_path=tmp_path / "qa-retail-questions.md",
+        cases=[slack_qa_driver.QACase(id="case-a", question="Question?")],
+        known_issues_path=sidecar_path,
+        skip_prune=True,
+        is_issue_open=lambda _issue_number: (_ for _ in ()).throw(
+            RuntimeError("should not be called")
+        ),
+    )
+
+    assert sidecar_path.read_text(encoding="utf-8") == original_text
+
+
+def test_preflight_known_issues_prunes_and_rewrites_sidecar(
+    tmp_path: pathlib.Path,
+) -> None:
+    sidecar_path = tmp_path / "qa-retail-questions.known-issues.json"
+
+    slack_qa_driver.preflight_known_issues(
+        battery_path=tmp_path / "qa-retail-questions.md",
+        cases=[
+            slack_qa_driver.QACase(id="case-a", question="Question A?"),
+            slack_qa_driver.QACase(id="case-b", question="Question B?"),
+        ],
+        known_issues_path=sidecar_path,
+        skip_prune=False,
+        is_issue_open=lambda issue_number: issue_number == 165,
+    )
+
+    assert sidecar_path.read_text(encoding="utf-8") == (
+        '{\n  "version": 1,\n  "questions": {}\n}\n'
+    )
 
 
 def test_resolve_thread_target_uses_explicit_args_over_pointer(
