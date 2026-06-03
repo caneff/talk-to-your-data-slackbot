@@ -388,13 +388,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Pause for Enter between posted QA cases.",
     )
-    # The driver defaults --semantic-layer-path directly to the retail path
-    # (unlike the runtime, which defaults to None and resolves the retail layer
-    # later). cli_common parameterizes that default so both entrypoints keep
-    # their existing behavior while sharing the rest of the data-source args.
-    cli_common.add_data_source_args(
-        parser, semantic_layer_default=composition.RETAIL_SEMANTIC_LAYER_PATH
-    )
+    cli_common.add_data_source_args(parser)
     return parser
 
 

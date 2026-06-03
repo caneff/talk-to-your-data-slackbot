@@ -18,19 +18,12 @@ import pathlib
 import data_assistant.composition as composition
 
 
-def add_data_source_args(
-    parser: argparse.ArgumentParser,
-    *,
-    semantic_layer_default: pathlib.Path | None = None,
-) -> None:
+def add_data_source_args(parser: argparse.ArgumentParser) -> None:
     """Add the data-source arg group both Slack entrypoints share.
 
-    The ``--semantic-layer-path`` default is parameterized to preserve each
-    entrypoint's existing behavior: the Socket Mode runtime defaults to ``None``
-    (resolved later to the retail layer in ``_configured_answer_path``), while
-    the QA driver defaults directly to ``RETAIL_SEMANTIC_LAYER_PATH``. Unifying
-    them here would silently change one entrypoint, so the caller supplies its
-    own default and the remaining args stay identical across both.
+    ``--semantic-layer-path`` defaults to the retail app-run layer for both
+    entrypoints. A no-flag run loads retail either way, so there is no
+    behavioral difference to parameterize.
     """
     parser.add_argument(
         "--env-file",
@@ -41,7 +34,7 @@ def add_data_source_args(
     parser.add_argument(
         "--semantic-layer-path",
         type=pathlib.Path,
-        default=semantic_layer_default,
+        default=composition.RETAIL_SEMANTIC_LAYER_PATH,
         help=(
             "Semantic Layer directory to load. Defaults to the retail app-run "
             "layer (examples/retail_ops_demo/semantic_layer/)."

@@ -17,37 +17,22 @@ import data_assistant.cli_common as cli_common
 import data_assistant.composition as composition
 
 
-def _parser_with_data_source_args(
-    *, semantic_layer_default: pathlib.Path | None = None
-) -> argparse.ArgumentParser:
+def _parser_with_data_source_args() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
-    cli_common.add_data_source_args(
-        parser, semantic_layer_default=semantic_layer_default
-    )
+    cli_common.add_data_source_args(parser)
     return parser
 
 
-def test_add_data_source_args_defaults_with_none_semantic_layer() -> None:
-    """Runtime keeps a None semantic-layer default (resolved later)."""
-    parser = _parser_with_data_source_args(semantic_layer_default=None)
+def test_add_data_source_args_defaults_to_retail_semantic_layer() -> None:
+    """Both entrypoints default --semantic-layer-path to the retail layer."""
+    parser = _parser_with_data_source_args()
 
     args = parser.parse_args([])
 
     assert args.env_file is None
-    assert args.semantic_layer_path is None
+    assert args.semantic_layer_path == composition.RETAIL_SEMANTIC_LAYER_PATH
     assert args.duckdb_path is None
     assert args.seed_sql_path is None
-
-
-def test_add_data_source_args_defaults_with_retail_semantic_layer() -> None:
-    """Driver keeps the retail semantic-layer path as its default."""
-    parser = _parser_with_data_source_args(
-        semantic_layer_default=composition.RETAIL_SEMANTIC_LAYER_PATH
-    )
-
-    args = parser.parse_args([])
-
-    assert args.semantic_layer_path == composition.RETAIL_SEMANTIC_LAYER_PATH
 
 
 def test_add_data_source_args_parses_explicit_values(

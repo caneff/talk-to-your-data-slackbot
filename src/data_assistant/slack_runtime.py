@@ -111,13 +111,14 @@ def run_socket_mode_from_env(
 ) -> SocketModeHandler:
     """Build and start the local Slack Runtime Adapter from environment config."""
     config = load_slack_runtime_config(environ)
-    active_answer_path = answer_path
-    if connection_factory is not None and active_answer_path is None:
-        active_answer_path = composition.build_openai_answer_path(environ)
-    app = app_factory(token=config.bot_token)
+    # Build the adapter (and validate OpenAI config) before constructing the
+    # Slack Bolt app, so a misconfigured run fails before any runtime objects
+    # exist. The adapter needs no app, so only handler registration waits on it.
+    adapter: slack_assistant.AssistantAdapter | None = None
     if connection_factory is not None:
-        if active_answer_path is None:
-            raise AssertionError("answer path should be configured")
+        active_answer_path = answer_path or composition.build_openai_answer_path(
+            environ
+        )
         adapter = composition.build_adapter(
             connection_factory=connection_factory,
             answer_path=active_answer_path,
@@ -125,6 +126,8 @@ def run_socket_mode_from_env(
             environ=environ,
             interaction_log_path=interaction_log_path,
         )
+    app = app_factory(token=config.bot_token)
+    if adapter is not None:
         slack_assistant.register_assistant_handlers(app=app, adapter=adapter)
     handler = socket_mode_handler_factory(app_token=config.app_token, app=app)
     handler.start()
@@ -162,11 +165,7 @@ def main(
 
 def _parse_args(argv: collections_abc.Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the local Slack adapter.")
-    # Runtime keeps a None semantic-layer default: a no-flag run resolves the
-    # retail layer later in _configured_answer_path. (The QA driver defaults the
-    # same arg directly to the retail path; cli_common parameterizes the default
-    # so both entrypoints keep their existing behavior.)
-    cli_common.add_data_source_args(parser, semantic_layer_default=None)
+    cli_common.add_data_source_args(parser)
     parser.add_argument(
         "--interaction-log-path",
         type=pathlib.Path,
@@ -186,13 +185,8 @@ def _configured_answer_path(
     args: argparse.Namespace,
 ) -> slack_assistant.AnswerPath | None:
     # No flag: load the retail app-run layer (retail is the single dataset; the
-    # loader default points at the same retail layer).
-    layer_path = (
-        args.semantic_layer_path
-        if args.semantic_layer_path is not None
-        else composition.RETAIL_SEMANTIC_LAYER_PATH
-    )
-    semantic_layer = semantic_layer_loader.load_semantic_layer(layer_path)
+    # data-source args default --semantic-layer-path to the retail layer).
+    semantic_layer = semantic_layer_loader.load_semantic_layer(args.semantic_layer_path)
     return composition.build_openai_answer_path(environ, semantic_layer=semantic_layer)
 
 
