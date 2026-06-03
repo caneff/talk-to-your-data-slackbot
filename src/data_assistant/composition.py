@@ -24,7 +24,7 @@ import data_assistant.openai_support as openai_support
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.reasoning_layer as reasoning_layer
 import data_assistant.semantic_layer.catalog as semantic_layer_catalog
-import data_assistant.slack_assistant as slack_assistant
+import data_assistant.slack as slack_assistant
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
 

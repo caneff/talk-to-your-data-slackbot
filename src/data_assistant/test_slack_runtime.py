@@ -1,7 +1,7 @@
 """Tests for the local Slack Runtime Adapter startup wiring.
 
 The Slack edge behavior (greeting, status, pipeline, fallback) lives in
-``slack_assistant`` and is tested in ``test_slack_assistant``. These tests cover
+the ``slack`` package and is tested in ``slack/test_adapter``. These tests cover
 runtime startup: config loading, the OpenAI answer path, the DuckDB connection
 factory, Assistant-handler registration before startup, and the ``main`` CLI.
 """
@@ -20,7 +20,7 @@ import data_assistant.composition as composition
 import data_assistant.interaction_log as interaction_log
 import data_assistant.openai_support as openai_support
 import data_assistant.semantic_layer.catalog as semantic_layer_catalog
-import data_assistant.slack_assistant as slack_assistant
+import data_assistant.slack as slack_assistant
 import data_assistant.slack_runtime as slack_runtime
 import data_assistant.workflow.contracts as contracts
 
