@@ -532,7 +532,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
         question="What were stockout days for Outdoor products in May 2026?",
         expected=_summarize(
             "stockout days",
-            _include_filter("inventory product", "Outdoor"),
+            _include_filter("product category", "Outdoor"),
             _during("inventory snapshot date", MAY_2026),
         ),
     ),
