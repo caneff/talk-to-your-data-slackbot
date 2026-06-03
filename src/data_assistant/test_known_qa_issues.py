@@ -55,6 +55,30 @@ def test_load_sidecar_rejects_unknown_future_version(tmp_path: pathlib.Path) -> 
         )
 
 
+def test_load_sidecar_rejects_unknown_top_level_fields(
+    tmp_path: pathlib.Path,
+) -> None:
+    sidecar_path = tmp_path / "qa-retail-questions.known-issues.json"
+    sidecar_path.write_text(
+        textwrap.dedent(
+            """\
+            {
+              "version": 1,
+              "questions": {},
+              "notes": "secret"
+            }
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Unknown top-level field"):
+        known_qa_issues.load_sidecar(
+            sidecar_path,
+            valid_case_ids=["case-a"],
+        )
+
+
 def test_load_sidecar_rejects_unknown_question_keys(tmp_path: pathlib.Path) -> None:
     sidecar_path = tmp_path / "qa-retail-questions.known-issues.json"
     sidecar_path.write_text(
@@ -111,6 +135,37 @@ def test_load_sidecar_rejects_invalid_issue_numbers_and_flag_categories(
     )
 
     with pytest.raises(ValueError, match="issue_number"):
+        known_qa_issues.load_sidecar(
+            sidecar_path,
+            valid_case_ids=["case-a"],
+        )
+
+
+def test_load_sidecar_rejects_unknown_issue_entry_fields(
+    tmp_path: pathlib.Path,
+) -> None:
+    sidecar_path = tmp_path / "qa-retail-questions.known-issues.json"
+    sidecar_path.write_text(
+        textwrap.dedent(
+            """\
+            {
+              "version": 1,
+              "questions": {
+                "case-a": [
+                  {
+                    "issue_number": 165,
+                    "flag_category": "correctness",
+                    "response_text": "leak"
+                  }
+                ]
+              }
+            }
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Unknown entry field"):
         known_qa_issues.load_sidecar(
             sidecar_path,
             valid_case_ids=["case-a"],

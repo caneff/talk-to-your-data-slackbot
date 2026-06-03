@@ -11,6 +11,12 @@ import data_assistant.interaction_log as interaction_log
 
 SIDE_CAR_VERSION: typing.Final[int] = 1
 VALID_FLAG_CATEGORIES: typing.Final[tuple[str, ...]] = interaction_log.FLAG_VOCABULARY
+_ALLOWED_TOP_LEVEL_FIELDS: typing.Final[frozenset[str]] = frozenset(
+    {"version", "questions"}
+)
+_ALLOWED_ENTRY_FIELDS: typing.Final[frozenset[str]] = frozenset(
+    {"issue_number", "flag_category"}
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -113,6 +119,12 @@ def _validate_sidecar(
             "Malformed Known QA Issue sidecar: top-level JSON object required."
         )
     payload_map = typing.cast("dict[str, object]", payload)
+    _reject_unknown_keys(
+        payload_map,
+        allowed_keys=_ALLOWED_TOP_LEVEL_FIELDS,
+        error_prefix="Malformed Known QA Issue sidecar",
+        field_noun="top-level field",
+    )
 
     version = payload_map.get("version")
     if version != SIDE_CAR_VERSION:
@@ -156,6 +168,12 @@ def _validate_issue_entry(entry: object, *, question_id: str) -> KnownQAIssue:
             f"{question_id}: object required."
         )
     entry_map = typing.cast("dict[str, object]", entry)
+    _reject_unknown_keys(
+        entry_map,
+        allowed_keys=_ALLOWED_ENTRY_FIELDS,
+        error_prefix=f"Malformed Known QA Issue sidecar entry for {question_id}",
+        field_noun="entry field",
+    )
 
     issue_number = entry_map.get("issue_number")
     if not isinstance(issue_number, int) or issue_number <= 0:
@@ -175,3 +193,15 @@ def _validate_issue_entry(entry: object, *, question_id: str) -> KnownQAIssue:
         issue_number=issue_number,
         flag_category=typing.cast("str", flag_category),
     )
+
+
+def _reject_unknown_keys(
+    payload_map: dict[str, object],
+    *,
+    allowed_keys: frozenset[str],
+    error_prefix: str,
+    field_noun: str,
+) -> None:
+    unknown_keys = sorted(set(payload_map) - allowed_keys)
+    if unknown_keys:
+        raise ValueError(f"{error_prefix}: Unknown {field_noun} {unknown_keys[0]!r}.")
