@@ -167,6 +167,8 @@ def _grouped_dimension_sql(group_by_field: schema.SemanticField) -> str:
     column = group_by_field.source_column
     if group_by_field.data_type == schema.DataType.STRING:
         return f"coalesce(nullif(trim({column}), ''), 'Unknown')"
+    if group_by_field.data_type == schema.DataType.DATE:
+        return f"cast({column} as varchar)"
     return column
 
 

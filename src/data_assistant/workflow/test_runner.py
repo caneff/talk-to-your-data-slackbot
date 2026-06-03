@@ -275,13 +275,15 @@ def test_data_assistant_runs_order_date_grouping_end_to_end(
     assert run.question_frame.group_by_field == "order date"
     assert run.data_request.group_by_field is not None
     assert run.data_request.group_by_field.label == "order date"
-    assert tuple(str(value) for value in run.prepared_data.data["dimension_value"]) == (
-        "2026-01-03 00:00:00",
-        "2026-01-08 00:00:00",
-        "2026-01-15 00:00:00",
+    assert tuple(run.prepared_data.data["dimension_value"]) == (
+        "2026-01-03",
+        "2026-01-08",
+        "2026-01-15",
     )
     assert tuple(run.prepared_data.data["metric_value"]) == (300.0, 200.0, 100.0)
     assert "All" not in set(run.prepared_data.data["dimension_value"])
+    assert "- 2026-01-03: $300.00" in run.final_response.text
+    assert "2026-01-03 00:00:00" not in run.final_response.text
 
 
 def test_data_assistant_runs_all_time_grouped_revenue_end_to_end(
