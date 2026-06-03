@@ -33,13 +33,17 @@ import typing
 import uuid
 
 import duckdb
-import pandas as pd
 
 import data_assistant.access_controller as access_controller
 import data_assistant.assistant_thread_pointer as assistant_thread_pointer
 import data_assistant.interaction_log as interaction_log
-import data_assistant.known_qa_issues as known_qa_issues
+import data_assistant.interaction_record as interaction_record
 import data_assistant.workflow.contracts as contracts
+from data_assistant.interaction_record import (
+    RUNTIME_FALLBACK_MESSAGE,
+    QAReviewContext,
+    final_response_from_workflow_result,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -497,16 +501,11 @@ def _log_flagged_interaction_for_triage(
         logger.exception("Failed to mirror flagged Interaction Log record.")
 
 
-RUNTIME_FALLBACK_MESSAGE = (
-    "Something went wrong while answering your question. Please try again in a bit."
-)
-"""Adapter-level last-resort reply posted when an unexpected exception crashes
-the answer path. This is a Runtime Fallback Message, NOT a Non-Answer Response:
-it never routes through the Non-Answer Catalog and carries no reason or next
-step. The Assistant transient status auto-clears when this reply is sent, so no
-manual status clear is needed."""
-
-
+# ``RUNTIME_FALLBACK_MESSAGE``, ``QAReviewContext`` and
+# ``final_response_from_workflow_result`` are imported above from
+# ``interaction_record`` (their natural owner -- it reads the workflow result and
+# writes the canonical fallback ``response_text``). They are re-exported here so
+# this edge's block/adapter sites and ``slack_qa_driver`` keep using them.
 SlackWorkflowResult: typing.TypeAlias = contracts.WorkflowResult
 
 AnswerPath: typing.TypeAlias = collections_abc.Callable[
@@ -526,17 +525,6 @@ ConnectionFactory: typing.TypeAlias = collections_abc.Callable[
 AssistantIdentityResolver: typing.TypeAlias = collections_abc.Callable[
     [str], contracts.InternalIdentity
 ]
-KnownIssueReference = known_qa_issues.KnownQAIssue
-
-
-@dataclasses.dataclass(frozen=True)
-class QAReviewContext:
-    battery_path: str
-    qa_case_id: str | None
-    known_issues: tuple[KnownIssueReference, ...] = ()
-    position: int | None = None
-    total: int | None = None
-    note_saved: bool = False
 
 
 class StatusSetter(typing.Protocol):
@@ -576,19 +564,6 @@ def dev_identity(user: str) -> contracts.InternalIdentity:
     return access_controller.DEFAULT_LOCAL_ALLOWED_IDENTITY
 
 
-def final_response_from_workflow_result(
-    result: SlackWorkflowResult,
-) -> contracts.FinalResponse:
-    """Return the core workflow result's user-facing Final Response.
-
-    Renders both real answers and Non-Answers to a ``FinalResponse`` (text +
-    Trust-Summary blocks); the adapter just ``say``s whatever this returns.
-    """
-    if isinstance(result, contracts.FinalResponse):
-        return result
-    return result.final_response
-
-
 def _visible_response_blocks(
     final_response: contracts.FinalResponse,
 ) -> tuple[contracts.SlackBlock, ...]:
@@ -606,98 +581,6 @@ def _visible_response_blocks(
 
 def _latency_ms(started_at: float) -> int:
     return int((time.monotonic() - started_at) * 1000)
-
-
-def _interaction_record(
-    *,
-    interaction_id: str,
-    timestamp: str,
-    latency_ms: int,
-    user: str,
-    question: str,
-    qa_case_id: str | None,
-    qa_review_context: QAReviewContext | None,
-    model: str,
-    result: SlackWorkflowResult,
-) -> dict[str, object]:
-    """Build the sanitized Interaction Log record for a successful run.
-
-    SUCCESS branches on the result type (ADR-0016): a ``DataAssistantRun`` is an
-    answer; a bare ``FinalResponse`` is a Non-Answer. Either way the record
-    carries the always-fields plus outcome-specific detail. It NEVER carries raw
-    Prepared Data cell values (see ``_answer_fields``).
-    """
-    final_response = final_response_from_workflow_result(result)
-    record: dict[str, object] = {
-        "id": interaction_id,
-        "timestamp": timestamp,
-        "user": user,
-        "question": question,
-        "latency_ms": latency_ms,
-        "response_text": final_response.text,
-        "model": model,
-        "flags": [],
-    }
-    if qa_case_id is not None:
-        record["qa_case_id"] = qa_case_id
-    _apply_qa_review_context(record, qa_review_context=qa_review_context)
-    if isinstance(result, contracts.DataAssistantRun):
-        record["outcome"] = "answer"
-        record.update(_answer_fields(result))
-    else:
-        record["outcome"] = "non_answer"
-        record.update(_non_answer_fields(final_response.non_answer))
-    return record
-
-
-def _error_record(
-    *,
-    interaction_id: str,
-    timestamp: str,
-    latency_ms: int,
-    user: str,
-    question: str,
-    model: str,
-    error: BaseException,
-    qa_review_context: QAReviewContext | None = None,
-) -> dict[str, object]:
-    """Build the Interaction Log record for a crashed answer path."""
-    record: dict[str, object] = {
-        "id": interaction_id,
-        "timestamp": timestamp,
-        "user": user,
-        "question": question,
-        "latency_ms": latency_ms,
-        "response_text": RUNTIME_FALLBACK_MESSAGE,
-        "model": model,
-        "flags": [],
-        "outcome": "error",
-        "error_type": type(error).__name__,
-        "error_message": str(error),
-    }
-    _apply_qa_review_context(record, qa_review_context=qa_review_context)
-    return record
-
-
-def _apply_qa_review_context(
-    record: dict[str, object],
-    *,
-    qa_review_context: QAReviewContext | None,
-) -> None:
-    if qa_review_context is None:
-        return
-    record["source"] = "qa_review"
-    record["battery_path"] = qa_review_context.battery_path
-    if qa_review_context.qa_case_id is None:
-        return
-    record["qa_case_id"] = qa_review_context.qa_case_id
-    record["known_issues"] = [
-        {
-            "issue_number": issue.issue_number,
-            "flag_category": issue.flag_category,
-        }
-        for issue in qa_review_context.known_issues
-    ]
 
 
 def build_runtime_fallback_blocks(
@@ -770,84 +653,6 @@ def _reply_blocks(
         + tuple(response_blocks)
         + action_blocks
     )
-
-
-def _answer_fields(run: contracts.DataAssistantRun) -> dict[str, object]:
-    """Sanitized answer-specific fields from a successful run trace.
-
-    Includes the Question Frame summary, the routed Data Request, the
-    prepared-data SHAPE (rows x columns) + quality notes, and the tiny
-    ``key_data`` headline numbers -- the ONE deliberate inclusion of cell values
-    (ADR-0016). Bulk Prepared Data cell values are excluded by design.
-    """
-    data_request = run.data_request
-    prepared = run.prepared_data
-    rows, columns = prepared.data.shape
-    return {
-        "intent": run.question_frame.intent,
-        "question_frame": _question_frame_summary(run.question_frame),
-        "dataset": data_request.dataset.name,
-        "metric": data_request.metric.label,
-        "metric_expression": data_request.metric.expression,
-        "group_by": (
-            []
-            if data_request.group_by_field is None
-            else [data_request.group_by_field.label]
-        ),
-        "filters": list(data_request.filter_labels),
-        "result_limit": data_request.result_limit,
-        "prepared_data_shape": {"rows": int(rows), "columns": int(columns)},
-        "quality_notes": list(prepared.quality_notes),
-        "key_data": _key_data_records(run.answer_draft.key_data),
-    }
-
-
-def _non_answer_fields(non_answer: contracts.NonAnswer | None) -> dict[str, object]:
-    """Non-Answer-specific fields read from FinalResponse.non_answer."""
-    if non_answer is None:
-        return {}
-    return {
-        "stage": str(non_answer.stage),
-        "reason_code": str(non_answer.reason_code),
-        "context": list(non_answer.context),
-    }
-
-
-def _question_frame_summary(
-    question_frame: contracts.QuestionFrame,
-) -> dict[str, object]:
-    return {
-        "intent": question_frame.intent,
-        "metric": question_frame.metric,
-        "time_scope": str(question_frame.time_scope),
-        "group_by": []
-        if question_frame.group_by_field is None
-        else [question_frame.group_by_field],
-        "filters": list(question_frame.filter_labels),
-        "unresolved_ambiguities": list(question_frame.unresolved_ambiguities),
-    }
-
-
-def _key_data_records(key_data: pd.DataFrame) -> list[dict[str, object]]:
-    """Serialize the small ``key_data`` headline frame to JSON-safe records.
-
-    ``key_data`` is a tiny ``pd.DataFrame`` (the headline rows). We turn it into
-    a list of ``{column: value}`` dicts, coercing each value to a JSON-safe
-    scalar so the line is greppable and never carries pandas/NumPy types. This
-    is the deliberate, documented inclusion of cell values (ADR-0016); the bulk
-    Prepared Data frame is never serialized.
-    """
-    records: list[dict[typing.Hashable, object]] = key_data.to_dict(orient="records")
-    return [
-        {str(column): _json_safe(value) for column, value in record.items()}
-        for record in records
-    ]
-
-
-def _json_safe(value: object) -> object:
-    if isinstance(value, bool | int | float | str) or value is None:
-        return value
-    return str(value)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -938,7 +743,7 @@ class AssistantAdapter:
             )
         final_response = final_response_from_workflow_result(result)
         self._record_interaction(
-            lambda: _interaction_record(
+            lambda: interaction_record.build_interaction_record(
                 interaction_id=interaction_id,
                 timestamp=timestamp,
                 latency_ms=_latency_ms(started_at),
@@ -1084,7 +889,7 @@ class AssistantAdapter:
         qa_review_context: QAReviewContext | None = None,
     ) -> None:
         self._record_interaction(
-            lambda: _error_record(
+            lambda: interaction_record.build_error_record(
                 interaction_id=interaction_id,
                 timestamp=timestamp,
                 latency_ms=latency_ms,
