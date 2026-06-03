@@ -45,36 +45,36 @@ _DEFINITIONS: dict[contracts.NonAnswerReasonCode, _NonAnswerDefinition] = {
     ),
     contracts.NonAnswerReasonCode.AMBIGUOUS_DATASET: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.CLARIFICATION_NEEDED,
-        reason="Multiple Curated Datasets match the Question Frame.",
+        reason="More than one approved dataset could answer that.",
         context=("curated dataset",),
-        next_step="Ask which Curated Dataset should be used.",
+        next_step="Tell me which dataset to use.",
     ),
     contracts.NonAnswerReasonCode.AMBIGUOUS_METRIC: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.CLARIFICATION_NEEDED,
-        reason="The Data Question's metric wording is ambiguous against the "
-        "available metrics.",
+        reason="I couldn't tell which measure you meant.",
         context=("semantic metric",),
         next_step=(
-            "Ask which metric was meant, naming an available Semantic Layer metric."
+            "Tell me which measure to use, such as total net revenue or total "
+            "gross revenue."
         ),
     ),
     contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.CLARIFICATION_NEEDED,
-        reason="Multiple Dataset Tables can satisfy the Question Frame.",
+        reason="More than one table could answer that.",
         context=("dataset table",),
-        next_step="Ask which Dataset Table should be used.",
+        next_step="Tell me which table to use.",
     ),
     contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,
-        reason="The Question Interpreter provider returned invalid output.",
+        reason="Something went wrong reading your question.",
         context=("provider output",),
-        next_step="Fix the provider contract before retrying.",
+        next_step="Try rephrasing it, or try again shortly.",
     ),
     contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.CLARIFICATION_NEEDED,
-        reason="The Data Question is missing required interpretation details.",
+        reason="I need a bit more detail to answer that.",
         context=(),
-        next_step="Ask a clarification question before selecting data.",
+        next_step="Tell me which measure, grouping, or time period to use.",
     ),
     contracts.NonAnswerReasonCode.MISSING_TIME_SCOPE: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.CLARIFICATION_NEEDED,
@@ -87,29 +87,30 @@ _DEFINITIONS: dict[contracts.NonAnswerReasonCode, _NonAnswerDefinition] = {
     ),
     contracts.NonAnswerReasonCode.NO_MATCHING_DATASET: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,
-        reason="No Curated Dataset safely matches the Question Frame.",
+        reason="I couldn't find an approved dataset that matches that request.",
         context=("curated dataset",),
-        next_step="Ask which approved business data should be used.",
+        next_step="Try asking about a different approved business dataset.",
     ),
     contracts.NonAnswerReasonCode.NO_MATCHING_TABLE: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,
-        reason="No Dataset Table can satisfy the Question Frame.",
+        reason="I couldn't find a table that matches that request.",
         context=("dataset table",),
-        next_step="Ask which table-level metric or dimension should be used.",
+        next_step="Try naming a different measure or grouping.",
     ),
     contracts.NonAnswerReasonCode.PROVIDER_FAILURE: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,
-        reason="The Question Interpreter provider could not produce a proposal.",
+        reason="Something went wrong while reading your question.",
         context=("provider failure",),
-        next_step="Retry after the provider is available again.",
+        next_step="Try again shortly.",
     ),
     contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,
-        reason=(
-            "The Data Assistant could not match the requested Semantic Layer labels."
-        ),
+        reason="I couldn't match part of your request to the available data.",
         context=(),
-        next_step="Use exact Semantic Layer metric and dimension labels.",
+        next_step=(
+            "Try naming the measure or grouping more plainly, such as total "
+            "revenue by region."
+        ),
     ),
     contracts.NonAnswerReasonCode.UNSUPPORTED_AVAILABILITY: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,
@@ -124,36 +125,34 @@ _DEFINITIONS: dict[contracts.NonAnswerReasonCode, _NonAnswerDefinition] = {
         response_kind=contracts.ResponseKind.UNSUPPORTED,
         reason="User-provided CSV files are not supported data sources.",
         context=("unsupported data",),
-        next_step=(
-            "Ask about an approved Curated Dataset in the Semantic Layer instead."
-        ),
+        next_step="Ask about an approved dataset instead.",
     ),
     contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,
-        reason="The Semantic Layer does not allow that operation for the field.",
+        reason="That breakdown or filter isn't available for that field.",
         context=("semantic field operation",),
-        next_step="Use only operations listed for the Semantic Field.",
+        next_step="Try a different grouping.",
     ),
     contracts.NonAnswerReasonCode.UNSUPPORTED_FILTER: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,
         reason="The Data Assistant does not support that filter yet.",
         context=("supported filter",),
-        next_step="Use only supported filters for approved Semantic Fields.",
+        next_step="Try a different filter.",
     ),
     contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,
-        reason="The Data Assistant does not support that Data Question intent yet.",
+        reason="I can't answer that kind of question yet.",
         context=("supported intent",),
         next_step=(
-            "Ask: What was total revenue by region in January 2026? "
-            "Or: What was customer count by customer region in January 2026?"
+            "Try asking for a measure by a grouping and time period, such as "
+            "total revenue by region in January 2026."
         ),
     ),
     contracts.NonAnswerReasonCode.UNSUPPORTED_SHAPE: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,
-        reason="The Data Assistant cannot handle that Question Frame shape yet.",
+        reason="I can't answer that question shape yet.",
         context=("question shape",),
-        next_step="Ask for one grouping field or a scalar aggregate.",
+        next_step="Try asking for one grouping or a single total.",
     ),
 }
 
