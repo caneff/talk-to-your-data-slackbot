@@ -99,27 +99,25 @@ _GOLDEN_WORDING: tuple[
     (
         non_answer_catalog.access_denied_non_answer("commerce", stage=_STAGE),
         non_answer_catalog.NonAnswerWording(
-            reason="You do not have access to the commerce Curated Dataset.",
-            next_step=(
-                "Ask a data owner to grant Dataset Access or ask about available data."
-            ),
+            reason="You do not have access to commerce.",
+            next_step="Ask a data owner for access, or ask about data you can use.",
         ),
     ),
     (
         non_answer_catalog.missing_required_field_non_answer("metric", stage=_STAGE),
         non_answer_catalog.NonAnswerWording(
-            reason="The Data Question is missing required interpretation details.",
-            next_step="Ask a clarification question before selecting data.",
+            reason="I need a bit more detail to answer that.",
+            next_step="Tell me which measure, grouping, or time period to use.",
         ),
     ),
     (
         non_answer_catalog.unknown_semantic_label_non_answer("field", stage=_STAGE),
         non_answer_catalog.NonAnswerWording(
-            reason=(
-                "The Data Assistant could not match the requested Semantic Layer "
-                "labels."
+            reason="I couldn't match part of your request to the available data.",
+            next_step=(
+                "Try naming the measure or grouping more plainly, such as total "
+                "revenue by region."
             ),
-            next_step="Use exact Semantic Layer metric and dimension labels.",
         ),
     ),
     (
@@ -127,8 +125,8 @@ _GOLDEN_WORDING: tuple[
             contracts.NonAnswerReasonCode.AMBIGUOUS_DATASET, stage=_STAGE
         ),
         non_answer_catalog.NonAnswerWording(
-            reason="Multiple Curated Datasets match the Question Frame.",
-            next_step="Ask which Curated Dataset should be used.",
+            reason="More than one approved dataset could answer that.",
+            next_step="Tell me which dataset to use.",
         ),
     ),
     (
@@ -136,12 +134,10 @@ _GOLDEN_WORDING: tuple[
             contracts.NonAnswerReasonCode.AMBIGUOUS_METRIC, stage=_STAGE
         ),
         non_answer_catalog.NonAnswerWording(
-            reason=(
-                "The Data Question's metric wording is ambiguous against the "
-                "available metrics."
-            ),
+            reason="I couldn't tell which measure you meant.",
             next_step=(
-                "Ask which metric was meant, naming an available Semantic Layer metric."
+                "Tell me which measure to use, such as total net revenue or total "
+                "gross revenue."
             ),
         ),
     ),
@@ -150,8 +146,8 @@ _GOLDEN_WORDING: tuple[
             contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE, stage=_STAGE
         ),
         non_answer_catalog.NonAnswerWording(
-            reason="Multiple Dataset Tables can satisfy the Question Frame.",
-            next_step="Ask which Dataset Table should be used.",
+            reason="More than one table could answer that.",
+            next_step="Tell me which table to use.",
         ),
     ),
     (
@@ -159,8 +155,8 @@ _GOLDEN_WORDING: tuple[
             contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT, stage=_STAGE
         ),
         non_answer_catalog.NonAnswerWording(
-            reason="The Question Interpreter provider returned invalid output.",
-            next_step="Fix the provider contract before retrying.",
+            reason="Something went wrong reading your question.",
+            next_step=("Try rephrasing it, or try again shortly."),
         ),
     ),
     (
@@ -168,11 +164,10 @@ _GOLDEN_WORDING: tuple[
             contracts.NonAnswerReasonCode.MISSING_TIME_SCOPE, stage=_STAGE
         ),
         non_answer_catalog.NonAnswerWording(
-            reason=(
-                "The Data Question must specify a time period or explicitly ask "
-                "for all time."
+            reason="I need a time period before I can answer that.",
+            next_step=(
+                "Tell me the time period to use, or say that you want all time."
             ),
-            next_step="Ask which time period should be used, or confirm all time.",
         ),
     ),
     (
@@ -180,8 +175,8 @@ _GOLDEN_WORDING: tuple[
             contracts.NonAnswerReasonCode.NO_MATCHING_DATASET, stage=_STAGE
         ),
         non_answer_catalog.NonAnswerWording(
-            reason="No Curated Dataset safely matches the Question Frame.",
-            next_step="Ask which approved business data should be used.",
+            reason="I couldn't find an approved dataset that matches that request.",
+            next_step="Try asking about a different approved business dataset.",
         ),
     ),
     (
@@ -189,8 +184,8 @@ _GOLDEN_WORDING: tuple[
             contracts.NonAnswerReasonCode.NO_MATCHING_TABLE, stage=_STAGE
         ),
         non_answer_catalog.NonAnswerWording(
-            reason="No Dataset Table can satisfy the Question Frame.",
-            next_step="Ask which table-level metric or dimension should be used.",
+            reason="I couldn't find a table that matches that request.",
+            next_step="Try naming a different measure or grouping.",
         ),
     ),
     (
@@ -198,8 +193,8 @@ _GOLDEN_WORDING: tuple[
             contracts.NonAnswerReasonCode.PROVIDER_FAILURE, stage=_STAGE
         ),
         non_answer_catalog.NonAnswerWording(
-            reason="The Question Interpreter provider could not produce a proposal.",
-            next_step="Retry after the provider is available again.",
+            reason="Something went wrong while reading your question.",
+            next_step="Try again shortly.",
         ),
     ),
     (
@@ -222,9 +217,7 @@ _GOLDEN_WORDING: tuple[
         ),
         non_answer_catalog.NonAnswerWording(
             reason="User-provided CSV files are not supported data sources.",
-            next_step=(
-                "Ask about an approved Curated Dataset in the Semantic Layer instead."
-            ),
+            next_step="Ask about an approved dataset instead.",
         ),
     ),
     (
@@ -233,7 +226,7 @@ _GOLDEN_WORDING: tuple[
         ),
         non_answer_catalog.NonAnswerWording(
             reason="The Data Assistant does not support that filter yet.",
-            next_step="Use only supported filters for approved Semantic Fields.",
+            next_step="Try a different filter.",
         ),
     ),
     (
@@ -241,8 +234,8 @@ _GOLDEN_WORDING: tuple[
             contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION, stage=_STAGE
         ),
         non_answer_catalog.NonAnswerWording(
-            reason="The Semantic Layer does not allow that operation for the field.",
-            next_step="Use only operations listed for the Semantic Field.",
+            reason="That breakdown or filter isn't available for that field.",
+            next_step="Try a different grouping.",
         ),
     ),
     (
@@ -250,12 +243,10 @@ _GOLDEN_WORDING: tuple[
             contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT, stage=_STAGE
         ),
         non_answer_catalog.NonAnswerWording(
-            reason=(
-                "The Data Assistant does not support that Data Question intent yet."
-            ),
+            reason="I can't answer that kind of question yet.",
             next_step=(
-                "Ask: What was total revenue by region in January 2026? "
-                "Or: What was customer count by customer region in January 2026?"
+                "Try asking for a measure by a grouping and time period, such as "
+                "total revenue by region in January 2026."
             ),
         ),
     ),
@@ -264,8 +255,8 @@ _GOLDEN_WORDING: tuple[
             contracts.NonAnswerReasonCode.UNSUPPORTED_SHAPE, stage=_STAGE
         ),
         non_answer_catalog.NonAnswerWording(
-            reason="The Data Assistant cannot handle that Question Frame shape yet.",
-            next_step="Ask for one grouping field or a scalar aggregate.",
+            reason="I can't answer that question shape yet.",
+            next_step="Try asking for one grouping or a single total.",
         ),
     ),
 )
