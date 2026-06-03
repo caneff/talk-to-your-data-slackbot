@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import collections.abc as collections_abc
-import contextlib
 import dataclasses
 import logging
 import os
@@ -13,36 +12,17 @@ import sys
 import typing
 
 import dotenv
-import duckdb
 
-import data_assistant.interaction_log as interaction_log
-import data_assistant.openai_support as openai_support
+import data_assistant.cli_common as cli_common
+import data_assistant.composition as composition
 import data_assistant.question_interpreter as question_interpreter
-import data_assistant.reasoning_layer as reasoning_layer
-import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.slack_assistant as slack_assistant
-import data_assistant.workflow.contracts as contracts
-import data_assistant.workflow.runner as workflow_runner
 
 if typing.TYPE_CHECKING:
     from slack_bolt import App as SlackBoltApp
 
 logger = logging.getLogger(__name__)
-
-INTERACTION_LOG_PATH_ENV_VAR: typing.Final[str] = "DATA_ASSISTANT_INTERACTION_LOG_PATH"
-
-# App-run defaults (one source of truth shared with slack_qa_driver). A no-flag
-# app run loads the retail layer + retail seed in :memory: (ADR-0001). Retail is
-# now the single dataset, so the loader's DEFAULT_SEMANTIC_LAYER_PATH points at
-# the same retail layer; these constants just pin the seed + :memory: app run.
-RETAIL_SEMANTIC_LAYER_PATH: typing.Final[pathlib.Path] = pathlib.Path(
-    "examples/retail_ops_demo/semantic_layer"
-)
-RETAIL_SEED_SQL_PATH: typing.Final[pathlib.Path] = pathlib.Path(
-    "examples/retail_ops_demo/seeds/retail_ops_seed.sql"
-)
-RETAIL_DUCKDB_PATH: typing.Final[str] = ":memory:"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -68,61 +48,6 @@ AppFactory: typing.TypeAlias = collections_abc.Callable[..., object]
 SocketModeHandlerFactory: typing.TypeAlias = collections_abc.Callable[
     ..., SocketModeHandler
 ]
-ConnectionFactory: typing.TypeAlias = slack_assistant.ConnectionFactory
-
-
-def build_openai_answer_path(
-    environ: collections_abc.Mapping[str, str],
-    *,
-    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog | None = None,
-) -> slack_assistant.AnswerPath:
-    """Build the Slack answer path using the live OpenAI Question Interpreter."""
-    provider = question_interpreter.build_openai_question_interpreter_provider(environ)
-    reasoning_provider = reasoning_layer.build_openai_reasoning_provider(environ)
-
-    def answer_path(
-        connection: duckdb.DuckDBPyConnection,
-        question: str,
-        internal_identity: contracts.InternalIdentity,
-        progress_sink: contracts.ProgressSink,
-    ) -> slack_assistant.SlackWorkflowResult:
-        return workflow_runner.run_data_assistant(
-            connection,
-            question,
-            question_interpreter_provider=provider,
-            reasoning_provider=reasoning_provider,
-            internal_identity=internal_identity,
-            semantic_layer=semantic_layer,
-            progress_sink=progress_sink,
-        )
-
-    return answer_path
-
-
-def resolve_model_label(environ: collections_abc.Mapping[str, str]) -> str:
-    """Resolve the OpenAI model label recorded on each Interaction Log line.
-
-    Sources the same ``OPENAI_MODEL`` env var (defaulting to
-    ``openai_support.DEFAULT_OPENAI_MODEL``) that the live Question Interpreter
-    provider uses, so the logged model matches the model actually invoked. Kept
-    as a plain string rather than a live client to keep the adapter
-    test-constructible without OpenAI configuration.
-    """
-    return environ.get("OPENAI_MODEL", openai_support.DEFAULT_OPENAI_MODEL)
-
-
-def resolve_interaction_log_path(
-    environ: collections_abc.Mapping[str, str],
-    *,
-    explicit_path: pathlib.Path | None = None,
-) -> pathlib.Path:
-    """Resolve the Interaction Log path for local, Docker, and Render runs."""
-    if explicit_path is not None:
-        return explicit_path
-    configured_path = environ.get(INTERACTION_LOG_PATH_ENV_VAR)
-    if configured_path:
-        return pathlib.Path(configured_path)
-    return interaction_log.DEFAULT_LOG_PATH
 
 
 def _load_env_file(
@@ -170,32 +95,6 @@ def _default_socket_mode_handler_factory(
     )
 
 
-def build_duckdb_connection_factory(
-    duckdb_path: str | pathlib.Path,
-    *,
-    seed_sql_path: str | pathlib.Path | None = None,
-) -> ConnectionFactory:
-    """Build a runtime connection factory for a configured DuckDB database."""
-    duckdb_location = str(duckdb_path)
-    seed_sql = (
-        pathlib.Path(seed_sql_path).read_text(encoding="utf-8")
-        if seed_sql_path is not None
-        else None
-    )
-
-    @contextlib.contextmanager
-    def connect() -> collections_abc.Generator[duckdb.DuckDBPyConnection]:
-        connection = duckdb.connect(duckdb_location)
-        try:
-            if seed_sql is not None:
-                connection.execute(seed_sql)
-            yield connection
-        finally:
-            connection.close()
-
-    return connect
-
-
 def run_socket_mode_from_env(
     environ: collections_abc.Mapping[str, str] = os.environ,
     *,
@@ -203,7 +102,7 @@ def run_socket_mode_from_env(
     socket_mode_handler_factory: SocketModeHandlerFactory = (
         _default_socket_mode_handler_factory
     ),
-    connection_factory: ConnectionFactory | None = None,
+    connection_factory: composition.ConnectionFactory | None = None,
     internal_identity_resolver: slack_assistant.AssistantIdentityResolver = (
         slack_assistant.default_identity
     ),
@@ -214,20 +113,17 @@ def run_socket_mode_from_env(
     config = load_slack_runtime_config(environ)
     active_answer_path = answer_path
     if connection_factory is not None and active_answer_path is None:
-        active_answer_path = build_openai_answer_path(environ)
+        active_answer_path = composition.build_openai_answer_path(environ)
     app = app_factory(token=config.bot_token)
     if connection_factory is not None:
         if active_answer_path is None:
             raise AssertionError("answer path should be configured")
-        adapter = slack_assistant.AssistantAdapter(
+        adapter = composition.build_adapter(
             connection_factory=connection_factory,
             answer_path=active_answer_path,
             internal_identity_resolver=internal_identity_resolver,
-            model_label=resolve_model_label(environ),
-            log_path=resolve_interaction_log_path(
-                environ,
-                explicit_path=interaction_log_path,
-            ),
+            environ=environ,
+            interaction_log_path=interaction_log_path,
         )
         slack_assistant.register_assistant_handlers(app=app, adapter=adapter)
     handler = socket_mode_handler_factory(app_token=config.app_token, app=app)
@@ -245,7 +141,7 @@ def main(
         args = _parse_args(argv)
         active_env_file = args.env_file or env_file
         _load_env_file(active_env_file)
-        connection_factory = _configured_connection_factory(args)
+        connection_factory = cli_common.connection_factory_from_args(args)
         answer_path = _configured_answer_path(os.environ, args)
         run_socket_mode_from_env(
             connection_factory=connection_factory,
@@ -266,67 +162,23 @@ def main(
 
 def _parse_args(argv: collections_abc.Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the local Slack adapter.")
-    parser.add_argument(
-        "--env-file",
-        type=pathlib.Path,
-        default=None,
-        help="dotenv file to load before startup. Defaults to .env.",
-    )
-    parser.add_argument(
-        "--semantic-layer-path",
-        type=pathlib.Path,
-        default=None,
-        help=(
-            "Semantic Layer directory to load. Defaults to the retail app-run "
-            "layer (examples/retail_ops_demo/semantic_layer/)."
-        ),
-    )
-    parser.add_argument(
-        "--duckdb-path",
-        type=str,
-        default=None,
-        help=(
-            "DuckDB database location. Defaults to an in-memory database seeded "
-            "with the retail demo data."
-        ),
-    )
-    parser.add_argument(
-        "--seed-sql-path",
-        type=pathlib.Path,
-        default=None,
-        help=(
-            "SQL file to run whenever the DuckDB connection opens. Defaults to "
-            "the retail demo seed (only when --duckdb-path is also unset)."
-        ),
-    )
+    # Runtime keeps a None semantic-layer default: a no-flag run resolves the
+    # retail layer later in _configured_answer_path. (The QA driver defaults the
+    # same arg directly to the retail path; cli_common parameterizes the default
+    # so both entrypoints keep their existing behavior.)
+    cli_common.add_data_source_args(parser, semantic_layer_default=None)
     parser.add_argument(
         "--interaction-log-path",
         type=pathlib.Path,
         default=None,
         help=(
             "Interaction Log JSONL path. Defaults to "
-            f"{INTERACTION_LOG_PATH_ENV_VAR} or logs/interactions.jsonl."
+            f"{composition.INTERACTION_LOG_PATH_ENV_VAR} or logs/interactions.jsonl."
         ),
     )
     args = parser.parse_args(argv)
-    if args.seed_sql_path is not None and args.duckdb_path is None:
-        parser.error("--seed-sql-path requires --duckdb-path")
+    cli_common.enforce_seed_requires_duckdb(parser, args)
     return args
-
-
-def _configured_connection_factory(args: argparse.Namespace) -> ConnectionFactory:
-    # No flags: build the retail app-run default (retail seed in :memory:). An
-    # explicit --duckdb-path opts out of the retail seed unless --seed-sql-path
-    # is also given (the parser guard enforces seed-requires-duckdb).
-    if args.duckdb_path is None:
-        return build_duckdb_connection_factory(
-            RETAIL_DUCKDB_PATH,
-            seed_sql_path=RETAIL_SEED_SQL_PATH,
-        )
-    return build_duckdb_connection_factory(
-        args.duckdb_path,
-        seed_sql_path=args.seed_sql_path,
-    )
 
 
 def _configured_answer_path(
@@ -338,10 +190,10 @@ def _configured_answer_path(
     layer_path = (
         args.semantic_layer_path
         if args.semantic_layer_path is not None
-        else RETAIL_SEMANTIC_LAYER_PATH
+        else composition.RETAIL_SEMANTIC_LAYER_PATH
     )
     semantic_layer = semantic_layer_loader.load_semantic_layer(layer_path)
-    return build_openai_answer_path(environ, semantic_layer=semantic_layer)
+    return composition.build_openai_answer_path(environ, semantic_layer=semantic_layer)
 
 
 if __name__ == "__main__":

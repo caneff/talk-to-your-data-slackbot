@@ -16,6 +16,8 @@ import typing
 import duckdb
 import pytest
 
+import data_assistant.composition as composition
+import data_assistant.interaction_log as interaction_log
 import data_assistant.openai_support as openai_support
 import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.slack_assistant as slack_assistant
@@ -62,89 +64,6 @@ def test_load_slack_runtime_config_names_all_missing_env_vars() -> None:
     )
 
 
-def test_build_openai_answer_path_uses_openai_provider_without_fallback(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    captured_providers: list[object] = []
-    captured_reasoning_providers: list[object] = []
-
-    class FakeProvider:
-        pass
-
-    class FakeReasoningProvider:
-        pass
-
-    def fake_build_openai_provider(
-        environ: collections.abc.Mapping[str, str],
-        *,
-        client: object | None = None,
-    ) -> FakeProvider:
-        del client
-        assert environ["OPENAI_API_KEY"] == "test-key"
-        return FakeProvider()
-
-    def fake_build_openai_reasoning_provider(
-        environ: collections.abc.Mapping[str, str],
-        *,
-        client: object | None = None,
-    ) -> FakeReasoningProvider:
-        del client
-        assert environ["OPENAI_API_KEY"] == "test-key"
-        return FakeReasoningProvider()
-
-    def fake_run_data_assistant(
-        connection: duckdb.DuckDBPyConnection,
-        question: str,
-        internal_identity: contracts.InternalIdentity,
-        progress_sink: contracts.ProgressSink,
-        semantic_layer: object | None = None,
-        question_interpreter_provider: object | None = None,
-        reasoning_provider: object | None = None,
-    ) -> contracts.FinalResponse:
-        del connection, question, internal_identity, progress_sink, semantic_layer
-        captured_providers.append(question_interpreter_provider)
-        captured_reasoning_providers.append(reasoning_provider)
-        return contracts.FinalResponse(
-            text="openai answer path",
-            trust_summary=contracts.TrustSummary(),
-            response_kind=contracts.ResponseKind.ANSWER,
-        )
-
-    monkeypatch.setattr(
-        slack_runtime.question_interpreter,
-        "build_openai_question_interpreter_provider",
-        fake_build_openai_provider,
-    )
-    monkeypatch.setattr(
-        slack_runtime.reasoning_layer,
-        "build_openai_reasoning_provider",
-        fake_build_openai_reasoning_provider,
-    )
-    monkeypatch.setattr(
-        slack_runtime.workflow_runner,
-        "run_data_assistant",
-        fake_run_data_assistant,
-    )
-    answer_path = slack_runtime.build_openai_answer_path(
-        VALID_SLACK_ENV | {"OPENAI_API_KEY": "test-key"}
-    )
-
-    with duckdb.connect(":memory:") as connection:
-        result = answer_path(
-            connection,
-            "What was total revenue by region in January 2026?",
-            contracts.InternalIdentity(identity_id="slack_user:U123"),
-            lambda status: None,
-        )
-
-    assert isinstance(result, contracts.FinalResponse)
-    assert result.response_kind == contracts.ResponseKind.ANSWER
-    assert len(captured_providers) == 1
-    assert isinstance(captured_providers[0], FakeProvider)
-    assert len(captured_reasoning_providers) == 1
-    assert isinstance(captured_reasoning_providers[0], FakeReasoningProvider)
-
-
 @pytest.mark.parametrize(
     ("environ", "connection_factory", "expected_error"),
     [
@@ -164,7 +83,7 @@ def test_build_openai_answer_path_uses_openai_provider_without_fallback(
 )
 def test_run_socket_mode_from_env_fails_before_constructing_runtime_objects(
     environ: collections.abc.Mapping[str, str],
-    connection_factory: slack_runtime.ConnectionFactory | None,
+    connection_factory: composition.ConnectionFactory | None,
     expected_error: type[Exception],
 ) -> None:
     """Validate config before constructing Slack Bolt runtime objects."""
@@ -282,7 +201,7 @@ def test_run_socket_mode_from_env_registers_assistant_before_startup(
     # The default OpenAI model label is sourced from the environ onto the
     # adapter so the Interaction Log records a real model (ADR-0016).
     assert registered_adapter.model_label == openai_support.DEFAULT_OPENAI_MODEL
-    assert registered_adapter.log_path == slack_runtime.interaction_log.DEFAULT_LOG_PATH
+    assert registered_adapter.log_path == interaction_log.DEFAULT_LOG_PATH
     assert len(runtime_factories.created_handlers) == 1
     assert handler is runtime_factories.created_handlers[0]
     assert handler.app is app
@@ -358,7 +277,7 @@ def test_run_socket_mode_from_env_threads_interaction_log_path_env(
         raise AssertionError("startup should register handlers without opening data")
 
     slack_runtime.run_socket_mode_from_env(
-        VALID_SLACK_ENV | {slack_runtime.INTERACTION_LOG_PATH_ENV_VAR: str(log_path)},
+        VALID_SLACK_ENV | {composition.INTERACTION_LOG_PATH_ENV_VAR: str(log_path)},
         app_factory=runtime_factories.app_factory,
         socket_mode_handler_factory=runtime_factories.socket_mode_handler_factory,
         connection_factory=connection_factory,
@@ -366,23 +285,6 @@ def test_run_socket_mode_from_env_threads_interaction_log_path_env(
     )
 
     assert registered[0].log_path == log_path
-
-
-def test_build_duckdb_connection_factory_runs_seed_sql(tmp_path: pathlib.Path) -> None:
-    seed_sql_path = tmp_path / "seed.sql"
-    seed_sql_path.write_text(
-        "create table demo_value (value integer); insert into demo_value values (42);",
-        encoding="utf-8",
-    )
-    connection_factory = slack_runtime.build_duckdb_connection_factory(
-        ":memory:",
-        seed_sql_path=seed_sql_path,
-    )
-
-    with connection_factory() as connection:
-        row = connection.execute("select value from demo_value").fetchone()
-
-    assert row == (42,)
 
 
 def test_main_uses_configured_semantic_layer_and_duckdb_paths(
@@ -401,7 +303,7 @@ def test_main_uses_configured_semantic_layer_and_duckdb_paths(
     )
     loaded_paths: list[pathlib.Path] = []
     built_answer_paths: list[slack_assistant.AnswerPath] = []
-    received_connection_factories: list[slack_runtime.ConnectionFactory | None] = []
+    received_connection_factories: list[composition.ConnectionFactory | None] = []
 
     def fake_load_semantic_layer(
         path: pathlib.Path,
@@ -426,7 +328,7 @@ def test_main_uses_configured_semantic_layer_and_duckdb_paths(
         socket_mode_handler_factory: (
             slack_runtime.SocketModeHandlerFactory | None
         ) = None,
-        connection_factory: slack_runtime.ConnectionFactory | None = None,
+        connection_factory: composition.ConnectionFactory | None = None,
         internal_identity_resolver: (
             slack_assistant.AssistantIdentityResolver | None
         ) = None,
@@ -449,7 +351,7 @@ def test_main_uses_configured_semantic_layer_and_duckdb_paths(
         fake_load_semantic_layer,
     )
     monkeypatch.setattr(
-        slack_runtime,
+        composition,
         "build_openai_answer_path",
         fake_build_openai_answer_path,
     )
@@ -491,7 +393,7 @@ def test_main_no_flags_wires_retail_default(
         slack_assistant.dev_identity
     )
     loaded_paths: list[pathlib.Path] = []
-    received_connection_factory: list[slack_runtime.ConnectionFactory | None] = []
+    received_connection_factory: list[composition.ConnectionFactory | None] = []
     received_identity_resolver: list[
         slack_assistant.AssistantIdentityResolver | None
     ] = []
@@ -518,7 +420,7 @@ def test_main_no_flags_wires_retail_default(
         socket_mode_handler_factory: (
             slack_runtime.SocketModeHandlerFactory | None
         ) = None,
-        connection_factory: slack_runtime.ConnectionFactory | None = None,
+        connection_factory: composition.ConnectionFactory | None = None,
         internal_identity_resolver: (
             slack_assistant.AssistantIdentityResolver | None
         ) = None,
@@ -537,7 +439,7 @@ def test_main_no_flags_wires_retail_default(
         fake_load_semantic_layer,
     )
     monkeypatch.setattr(
-        slack_runtime,
+        composition,
         "build_openai_answer_path",
         fake_build_openai_answer_path,
     )
@@ -551,7 +453,7 @@ def test_main_no_flags_wires_retail_default(
 
     assert exit_code == 0
     # The no-flag app run resolves to the shared retail layer constant.
-    assert loaded_paths == [slack_runtime.RETAIL_SEMANTIC_LAYER_PATH]
+    assert loaded_paths == [composition.RETAIL_SEMANTIC_LAYER_PATH]
     assert received_identity_resolver == [dev_identity_resolver]
     # The wired connection factory seeds the retail schema into :memory:.
     assert len(received_connection_factory) == 1
@@ -577,7 +479,7 @@ def test_main_threads_explicit_interaction_log_path(
         socket_mode_handler_factory: (
             slack_runtime.SocketModeHandlerFactory | None
         ) = None,
-        connection_factory: slack_runtime.ConnectionFactory | None = None,
+        connection_factory: composition.ConnectionFactory | None = None,
         internal_identity_resolver: (
             slack_assistant.AssistantIdentityResolver | None
         ) = None,
@@ -609,7 +511,7 @@ def test_main_threads_explicit_interaction_log_path(
         fake_load_semantic_layer,
     )
     monkeypatch.setattr(
-        slack_runtime,
+        composition,
         "build_openai_answer_path",
         fake_build_openai_answer_path,
     )
