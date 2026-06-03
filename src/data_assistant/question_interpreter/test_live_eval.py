@@ -539,7 +539,9 @@ def test_write_report_hides_passed_case_details_by_default() -> None:
     live_eval.write_live_eval_report(stdout=stdout, report=report)
 
     assert stdout.getvalue() == (
-        "Total cases: 1\nPassed: 1\nFailed: 0\n[PASS] passing_case (pass rate: 1/1)\n"
+        "Total cases: 1\nPassed: 1\nFailed: 0\n"
+        "Known-deferred: 0 (expected not-yet-supported)\n"
+        "[PASS] passing_case (pass rate: 1/1)\n"
     )
 
 
@@ -562,7 +564,9 @@ def test_write_report_verbose_prints_passed_case_details() -> None:
 
     output = stdout.getvalue()
     assert (
-        "Total cases: 1\nPassed: 1\nFailed: 0\n[PASS] passing_case (pass rate: 1/1)\n"
+        "Total cases: 1\nPassed: 1\nFailed: 0\n"
+        "Known-deferred: 0 (expected not-yet-supported)\n"
+        "[PASS] passing_case (pass rate: 1/1)\n"
     ) in output
     assert "Question: passing" in output
     assert 'Expected: {"intent":"summarize"' in output
@@ -790,6 +794,7 @@ def test_default_live_eval_cases_come_from_shared_question_frame_cases() -> None
                 question=case.question,
                 expected=case.expected,
                 enabled=case.enabled,
+                deferred=case.deferred,
             )
             for case in question_frame_cases.SHARED_QUESTION_FRAME_CASES
         )
@@ -1385,3 +1390,184 @@ def test_main_bad_range_exits_non_zero_with_message(
 
     assert exit_code == 1
     assert stderr.getvalue().strip() != ""
+
+
+def test_failing_deferred_case_goes_to_known_deferred_not_failures() -> None:
+    cases = (
+        live_eval.LiveEvalCase(
+            name="deferred_case",
+            question="bad metric",
+            expected=test_support.question_frame_proposal(),
+            deferred=True,
+        ),
+    )
+    failures_file = io.StringIO()
+
+    report = live_eval.run_live_question_interpreter_eval(
+        provider=_failing_provider(),
+        semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
+        cases=cases,
+        sample_count=1,
+        failures_file=failures_file,
+    )
+
+    assert report.total == 1
+    assert report.failed == 0
+    assert report.failures == ()
+    assert [item.case_name for item in report.known_deferred] == ["deferred_case"]
+    assert report.tripwires == ()
+    # A failing deferred case must NOT pollute the failures snapshot.
+    assert failures_file.getvalue() == ""
+
+
+def test_passing_deferred_case_becomes_tripwire() -> None:
+    cases = (
+        live_eval.LiveEvalCase(
+            name="deferred_case",
+            question="passing",
+            expected=test_support.question_frame_proposal(),
+            deferred=True,
+        ),
+    )
+    failures_file = io.StringIO()
+
+    report = live_eval.run_live_question_interpreter_eval(
+        provider=_failing_provider(),
+        semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
+        cases=cases,
+        sample_count=1,
+        failures_file=failures_file,
+    )
+
+    assert report.total == 1
+    assert report.failed == 0
+    assert report.known_deferred == ()
+    assert [item.case_name for item in report.tripwires] == ["deferred_case"]
+    assert failures_file.getvalue() == ""
+
+
+def test_main_exits_zero_when_only_known_deferred(
+    monkeypatch: pytest.MonkeyPatch,
+    stub_main: types.SimpleNamespace,
+) -> None:
+    def fake_run_live_eval(
+        **kwargs: typing.Any,
+    ) -> live_eval.LiveEvalReport:
+        del kwargs
+        return live_eval.LiveEvalReport(
+            total=1,
+            passes=(),
+            failures=(),
+            known_deferred=(
+                live_eval.LiveEvalFailure(
+                    case_name="deferred_case",
+                    question="deferred",
+                    expected=test_support.question_frame_proposal(),
+                    actual=test_support.question_frame_proposal(metric="gross margin"),
+                    reasons=("sample 1: metric mismatch",),
+                    pass_count=0,
+                    sample_count=1,
+                ),
+            ),
+        )
+
+    monkeypatch.setattr(
+        live_eval,
+        "run_live_question_interpreter_eval",
+        fake_run_live_eval,
+    )
+
+    exit_code = live_eval.main(
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+        env_file=stub_main.env_file,
+    )
+
+    assert exit_code == 0
+
+
+def test_main_exits_nonzero_on_tripwire_and_prints_tripwire_line(
+    monkeypatch: pytest.MonkeyPatch,
+    stub_main: types.SimpleNamespace,
+) -> None:
+    def fake_run_live_eval(
+        **kwargs: typing.Any,
+    ) -> live_eval.LiveEvalReport:
+        del kwargs
+        return live_eval.LiveEvalReport(
+            total=1,
+            passes=(),
+            failures=(),
+            tripwires=(
+                live_eval.LiveEvalPass(
+                    case_name="deferred_case",
+                    question="deferred",
+                    expected=test_support.question_frame_proposal(),
+                    actual=test_support.question_frame_proposal(),
+                    pass_count=1,
+                    sample_count=1,
+                ),
+            ),
+        )
+
+    monkeypatch.setattr(
+        live_eval,
+        "run_live_question_interpreter_eval",
+        fake_run_live_eval,
+    )
+
+    stdout = io.StringIO()
+    exit_code = live_eval.main(
+        stdout=stdout,
+        stderr=io.StringIO(),
+        env_file=stub_main.env_file,
+    )
+
+    assert exit_code != 0
+    assert "[TRIPWIRE] deferred_case" in stdout.getvalue()
+
+
+def test_write_report_prints_known_deferred_and_tripwire_lines() -> None:
+    stdout = io.StringIO()
+    report = live_eval.LiveEvalReport(
+        total=2,
+        passes=(),
+        failures=(),
+        known_deferred=(
+            live_eval.LiveEvalFailure(
+                case_name="still_deferred",
+                question="q1",
+                expected=test_support.question_frame_proposal(),
+                actual=test_support.question_frame_proposal(metric="gross margin"),
+                reasons=("sample 1: metric mismatch",),
+                pass_count=0,
+                sample_count=1,
+            ),
+        ),
+        tripwires=(
+            live_eval.LiveEvalPass(
+                case_name="now_passes",
+                question="q2",
+                expected=test_support.question_frame_proposal(),
+                actual=test_support.question_frame_proposal(),
+                pass_count=1,
+                sample_count=1,
+            ),
+        ),
+    )
+
+    live_eval.write_live_eval_report(stdout=stdout, report=report)
+
+    output = stdout.getvalue()
+    assert "Known-deferred: 1" in output
+    assert "still_deferred" in output
+    assert "[TRIPWIRE] now_passes now passes — remove deferred=True" in output
+
+
+def test_deferred_cases_have_unsupported_unclassified_intent() -> None:
+    # Honesty guard (one direction only): a case marked deferred must carry an
+    # intent that is unsupported and not-yet-classified — not None, not the
+    # supported "summarize", and not the classified-but-unsupported "rank".
+    for case in question_frame_cases.SHARED_QUESTION_FRAME_CASES:
+        if case.deferred:
+            assert case.expected.intent not in {None, "summarize", "rank"}
