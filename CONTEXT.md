@@ -290,6 +290,36 @@ kept to improve the **Data Assistant**. It is the local-dev, richer counterpart
 to the (sanitized, shipped) **Decision Trail**.
 _Avoid_: Analytics log, transcript, audit dump
 
+**QA Review Mode**:
+A maintainer-only workflow for reviewing a curated set of **Data Questions** and
+their **Final Responses** in Slack, marking each response as handled after any
+needed **Flags** or notes have been captured.
+_Avoid_: Dev mode, production review, user feedback flow
+
+**QA Review Completion**:
+A maintainer's mark that one **QA Review Mode** response has been reviewed in
+Slack. It removes the item from the maintainer's Slack review queue without
+clearing **Flags** or deleting the **Interaction Log** record.
+_Avoid_: Fix, triage closeout, log cleanup
+
+**QA Review Note**:
+Optional maintainer-written context attached to a **QA Review Mode** interaction
+in the **Interaction Log**, used alongside **Flags** when turning reviewed
+responses into improvement work.
+_Avoid_: Slack comment, expected answer, triage result
+
+**QA Case**:
+One curated **Data Question** in a QA battery, identified by a stable
+maintainer-tooling id so QA review history and **Known QA Issues** can survive
+small wording changes to the question.
+_Avoid_: Test case, eval case, issue
+
+**Known QA Issue**:
+A previously triaged problem for a curated **QA Review Mode** question that is
+already mapped to an issue tracker item, so future QA runs can identify it as
+known instead of treating every repeated **Flag** as new signal.
+_Avoid_: Expected failure, skipped test, duplicate flag
+
 **Interaction Log Retention Policy**:
 The rules that decide which **Interaction Log** records remain available for
 improvement work after the log grows beyond its configured limits.
