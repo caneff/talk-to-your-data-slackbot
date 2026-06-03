@@ -77,6 +77,8 @@ SUGGESTED_PROMPTS: tuple[dict[str, str], ...] = (
 FLAG_CORRECTNESS_ACTION_ID: typing.Final[str] = "flag_correctness"
 FLAG_FORMATTING_ACTION_ID: typing.Final[str] = "flag_formatting"
 FLAG_INVESTIGATE_ACTION_ID: typing.Final[str] = "flag_investigate"
+QA_ADD_NOTE_ACTION_ID: typing.Final[str] = "qa_add_note"
+QA_DONE_ACTION_ID: typing.Final[str] = "qa_done"
 
 ACTION_ID_TO_CATEGORY: typing.Final[dict[str, str]] = {
     FLAG_CORRECTNESS_ACTION_ID: "correctness",
@@ -107,6 +109,34 @@ _FLAG_STATUS_PREFIX: typing.Final[str] = "✓ Flagged: "
 # field, so truncation here is purely cosmetic.
 QUESTION_ECHO_MAX_CHARS: typing.Final[int] = 200
 _QUESTION_ECHO_PREFIX: typing.Final[str] = "❓ "
+_QA_FLAG_CATEGORY_EMOJI: typing.Final[dict[str, str]] = {
+    "correctness": "🚩",
+    "formatting": "🎨",
+    "investigate": "🔎",
+}
+
+
+def _flag_button_elements(interaction_id: str) -> list[dict[str, object]]:
+    return [
+        {
+            "type": "button",
+            "action_id": FLAG_CORRECTNESS_ACTION_ID,
+            "text": {"type": "plain_text", "text": "🚩 Incorrect"},
+            "value": interaction_id,
+        },
+        {
+            "type": "button",
+            "action_id": FLAG_FORMATTING_ACTION_ID,
+            "text": {"type": "plain_text", "text": "🎨 Formatting"},
+            "value": interaction_id,
+        },
+        {
+            "type": "button",
+            "action_id": FLAG_INVESTIGATE_ACTION_ID,
+            "text": {"type": "plain_text", "text": "🔎 Investigate"},
+            "value": interaction_id,
+        },
+    ]
 
 
 def flag_action_blocks(interaction_id: str) -> tuple[contracts.SlackBlock, ...]:
@@ -122,23 +152,28 @@ def flag_action_blocks(interaction_id: str) -> tuple[contracts.SlackBlock, ...]:
         {
             "type": "actions",
             "block_id": f"flag_actions:{interaction_id}",
+            "elements": _flag_button_elements(interaction_id),
+        },
+    )
+
+
+def qa_action_blocks(interaction_id: str) -> tuple[contracts.SlackBlock, ...]:
+    return (
+        {
+            "type": "actions",
+            "block_id": f"qa_actions:{interaction_id}",
             "elements": [
+                *_flag_button_elements(interaction_id),
                 {
                     "type": "button",
-                    "action_id": FLAG_CORRECTNESS_ACTION_ID,
-                    "text": {"type": "plain_text", "text": "🚩 Incorrect"},
+                    "action_id": QA_ADD_NOTE_ACTION_ID,
+                    "text": {"type": "plain_text", "text": "📝 Add note"},
                     "value": interaction_id,
                 },
                 {
                     "type": "button",
-                    "action_id": FLAG_FORMATTING_ACTION_ID,
-                    "text": {"type": "plain_text", "text": "🎨 Formatting"},
-                    "value": interaction_id,
-                },
-                {
-                    "type": "button",
-                    "action_id": FLAG_INVESTIGATE_ACTION_ID,
-                    "text": {"type": "plain_text", "text": "🔎 Investigate"},
+                    "action_id": QA_DONE_ACTION_ID,
+                    "text": {"type": "plain_text", "text": "✅ Done"},
                     "value": interaction_id,
                 },
             ],
@@ -333,6 +368,9 @@ class QAReviewContext:
     battery_path: str
     qa_case_id: str | None
     known_issues: tuple[KnownIssueReference, ...] = ()
+    position: int | None = None
+    total: int | None = None
+    note_saved: bool = False
 
 
 class StatusSetter(typing.Protocol):
@@ -500,15 +538,71 @@ def build_runtime_fallback_blocks(
     *,
     question: str,
     interaction_id: str,
+    qa_review_context: QAReviewContext | None = None,
 ) -> tuple[contracts.SlackBlock, ...]:
     fallback_section: contracts.SlackBlock = {
         "type": "section",
         "text": {"type": "mrkdwn", "text": RUNTIME_FALLBACK_MESSAGE},
     }
+    return _reply_blocks(
+        question=question,
+        response_blocks=(fallback_section,),
+        interaction_id=interaction_id,
+        qa_review_context=qa_review_context,
+    )
+
+
+def _qa_review_header_block(
+    qa_review_context: QAReviewContext,
+) -> contracts.SlackBlock:
+    parts: list[str] = []
+    if (
+        qa_review_context.position is not None
+        and qa_review_context.total is not None
+        and qa_review_context.total > 0
+    ):
+        parts.append(f"QA {qa_review_context.position}/{qa_review_context.total}")
+    else:
+        parts.append("QA Review")
+    if qa_review_context.qa_case_id is not None:
+        parts.append(f"Case `{qa_review_context.qa_case_id}`")
+    if qa_review_context.known_issues:
+        known_issues = ", ".join(
+            (
+                f"#{issue.issue_number} "
+                f"{_QA_FLAG_CATEGORY_EMOJI.get(issue.flag_category, '🚩')}"
+            )
+            for issue in qa_review_context.known_issues
+        )
+        parts.append(f"Known QA Issues: {known_issues}")
+    if qa_review_context.note_saved:
+        parts.append("Note saved")
+    return {
+        "type": "context",
+        "elements": [{"type": "mrkdwn", "text": " • ".join(parts)}],
+    }
+
+
+def _reply_blocks(
+    *,
+    question: str,
+    response_blocks: collections_abc.Sequence[contracts.SlackBlock],
+    interaction_id: str,
+    qa_review_context: QAReviewContext | None,
+) -> tuple[contracts.SlackBlock, ...]:
+    leading_blocks: tuple[contracts.SlackBlock, ...]
+    action_blocks: tuple[contracts.SlackBlock, ...]
+    if qa_review_context is None:
+        leading_blocks = ()
+        action_blocks = flag_action_blocks(interaction_id)
+    else:
+        leading_blocks = (_qa_review_header_block(qa_review_context),)
+        action_blocks = qa_action_blocks(interaction_id)
     return (
-        (_question_echo_block(question),)
-        + (fallback_section,)
-        + flag_action_blocks(interaction_id)
+        leading_blocks
+        + (_question_echo_block(question),)
+        + tuple(response_blocks)
+        + action_blocks
     )
 
 
@@ -690,10 +784,11 @@ class AssistantAdapter:
                 result=result,
             ),
         )
-        reply_blocks = (
-            (_question_echo_block(text),)
-            + _visible_response_blocks(final_response)
-            + flag_action_blocks(interaction_id)
+        reply_blocks = _reply_blocks(
+            question=text,
+            response_blocks=_visible_response_blocks(final_response),
+            interaction_id=interaction_id,
+            qa_review_context=qa_review_context,
         )
         return interaction_id, final_response, reply_blocks
 
