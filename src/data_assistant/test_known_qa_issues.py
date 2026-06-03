@@ -244,6 +244,108 @@ def test_record_known_issue_is_idempotent_for_duplicate_mapping() -> None:
     )
 
 
+def test_record_known_issue_for_qa_record_adds_entry_for_qa_review_record() -> None:
+    updated = known_qa_issues.record_known_issue_for_qa_record(
+        _sidecar({}),
+        record={
+            "source": "qa_review",
+            "qa_case_id": "case-a",
+            "question": "should not be copied",
+            "response_text": "should not be copied",
+            "timestamp": "2026-06-03T10:00:00Z",
+        },
+        issue_number=165,
+        flag_category="correctness",
+        valid_case_ids=["case-a", "case-b"],
+    )
+
+    assert updated == _sidecar({"case-a": [_issue(165)]})
+    assert known_qa_issues.serialize_sidecar(updated) == textwrap.dedent(
+        """\
+        {
+          "version": 1,
+          "questions": {
+            "case-a": [
+              {
+                "issue_number": 165,
+                "flag_category": "correctness"
+              }
+            ]
+          }
+        }
+        """
+    )
+
+
+def test_record_known_issue_for_qa_record_noops_for_non_qa_source() -> None:
+    sidecar = _sidecar({})
+
+    assert (
+        known_qa_issues.record_known_issue_for_qa_record(
+            sidecar,
+            record={
+                "source": "slack",
+                "qa_case_id": "case-a",
+            },
+            issue_number=165,
+            flag_category="correctness",
+            valid_case_ids=["case-a"],
+        )
+        == sidecar
+    )
+
+
+def test_record_known_issue_for_qa_record_noops_without_non_empty_case_id() -> None:
+    sidecar = _sidecar({})
+
+    assert (
+        known_qa_issues.record_known_issue_for_qa_record(
+            sidecar,
+            record={
+                "source": "qa_review",
+                "qa_case_id": "",
+            },
+            issue_number=165,
+            flag_category="correctness",
+            valid_case_ids=["case-a"],
+        )
+        == sidecar
+    )
+
+
+def test_record_known_issue_for_qa_record_noops_for_unknown_case_id() -> None:
+    sidecar = _sidecar({})
+
+    assert (
+        known_qa_issues.record_known_issue_for_qa_record(
+            sidecar,
+            record={
+                "source": "qa_review",
+                "qa_case_id": "missing-case",
+            },
+            issue_number=165,
+            flag_category="correctness",
+            valid_case_ids=["case-a"],
+        )
+        == sidecar
+    )
+
+
+def test_record_known_issue_for_qa_record_appends_new_flag_for_existing_issue() -> None:
+    updated = known_qa_issues.record_known_issue_for_qa_record(
+        _sidecar({"case-a": [_issue(165)]}),
+        record={
+            "source": "qa_review",
+            "qa_case_id": "case-a",
+        },
+        issue_number=165,
+        flag_category="formatting",
+        valid_case_ids=["case-a"],
+    )
+
+    assert updated == _sidecar({"case-a": [_issue(165), _issue(165, "formatting")]})
+
+
 @pytest.mark.parametrize("qa_case_id", ["case-b", ""])
 def test_record_known_issue_rejects_missing_or_unknown_case_ids(
     qa_case_id: str,

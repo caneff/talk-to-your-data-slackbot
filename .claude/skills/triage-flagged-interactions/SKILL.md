@@ -21,8 +21,9 @@ Every record:
 `id`, `timestamp`, `user`, `question`, `latency_ms`, `outcome` (`answer` | `non_answer` | `error`), `response_text`, `model`, `flags: [...]`.
 
 Manual QA driver records may also include `qa_case_id`. Treat it as the stable
-QA-case join key for Known QA Issue sidecars. Keep `question` as observed
-evidence only; never use question text as the sidecar key.
+QA-case join key for Known QA Issue sidecars only when the record also has
+`source == "qa_review"`. Keep `question` as observed evidence only; never use
+question text as the sidecar key.
 
 By `outcome`:
 - **answer:** `intent`, `question_frame` (`intent`, `metric`, `time_scope`, `filters`, `unresolved_ambiguities`), routed `dataset` / `metric` / `metric_expression` / `group_by` / `filters` / `result_limit`, `prepared_data_shape` (`rows`×`columns`), `quality_notes`, and `key_data` (the tiny headline numbers).
@@ -83,21 +84,25 @@ Group cases by root-caused layer (several flags often share one cause). For each
 - Already-tracked root cause → if a flag's root cause is already covered by an open issue, just map the `id` to that issue number and move on. Do **not** file a duplicate, do **not** comment on the existing issue, and do **not** propose "repeat occurrence" / "additional occurrence" notes. Repeat flags on a known cause are confirmation noise, not new signal; the mapping in your triage output is the only record needed.
 Reference flags by `id` so the user can trace each back to its log line.
 
-When a handled manual-QA-driver flag with `qa_case_id` has a confirmed mapping
-to a GitHub issue, update the matching Known QA Issue sidecar after that human
-judgment is locked in:
+When a handled QA Review Mode flag has a confirmed mapping to a GitHub issue,
+update the matching Known QA Issue sidecar only after that human judgment is
+locked in:
 - existing issue mapping confirmed → add `(qa_case_id, issue_number, flag_category)`
 - new issue created for the flag → add same sidecar entry as part of handling
-- do **not** add sidecar entries for unconfirmed flags, working-as-intended
-  outcomes, or records without `qa_case_id`
-- preflight remains create/validate/prune only; it must never infer new sidecar
-  entries from flagged records
+- sidecar-eligible means `record["source"] == "qa_review"` and
+  `record["qa_case_id"]` is a present non-empty string
+- do **not** add sidecar entries for raw flag clicks, unconfirmed flags,
+  working-as-intended outcomes, normal Slack or hosted Render records without
+  valid QA metadata, or records missing either gate above
+- preflight remains create/validate/prune only; it must never infer new
+  sidecar entries from flagged records
 
-Use `src/data_assistant/known_qa_issues.py` helper `record_known_issue(...)`
-for the in-memory update, then write the sidecar back. Keep serialization
-stable. Example shape:
+Use `src/data_assistant/known_qa_issues.py` helper
+`record_known_issue_for_qa_record(...)` for the record-level eligibility gate,
+which delegates to `record_known_issue(...)` for the in-memory update, then
+write the sidecar back. Keep serialization stable. Example shape:
 ```bash
-uv run python -c "from pathlib import Path; from data_assistant import known_qa_issues, slack_qa_driver; battery_path=Path(slack_qa_driver.DEFAULT_BATTERY_PATH); cases=slack_qa_driver.parse_battery_cases(battery_path.read_text(encoding='utf-8')); valid_case_ids=[case.id for case in cases if case.id is not None]; sidecar_path=known_qa_issues.default_sidecar_path(battery_path); sidecar=known_qa_issues.load_sidecar(sidecar_path, valid_case_ids=valid_case_ids, create_if_missing=True); updated=known_qa_issues.record_known_issue(sidecar, qa_case_id='case-a', issue_number=178, flag_category='correctness', valid_case_ids=valid_case_ids); known_qa_issues.write_sidecar(sidecar_path, updated)"
+uv run python -c "from pathlib import Path; from data_assistant import known_qa_issues, slack_qa_driver; battery_path=Path(slack_qa_driver.DEFAULT_BATTERY_PATH); cases=slack_qa_driver.parse_battery_cases(battery_path.read_text(encoding='utf-8')); valid_case_ids=[case.id for case in cases if case.id is not None]; sidecar_path=known_qa_issues.default_sidecar_path(battery_path); sidecar=known_qa_issues.load_sidecar(sidecar_path, valid_case_ids=valid_case_ids, create_if_missing=True); record={'source': 'qa_review', 'qa_case_id': 'case-a'}; updated=known_qa_issues.record_known_issue_for_qa_record(sidecar, record=record, issue_number=178, flag_category='correctness', valid_case_ids=valid_case_ids); known_qa_issues.write_sidecar(sidecar_path, updated)"
 ```
 
 When the user explicitly confirms filing an issue in the current turn, **apply the `priority:low` label to every issue you file from a flag** unless the user says a particular flag is urgent. Flagged-interaction issues are demand-driven noise that should NOT jump ahead of roadmap work; the label tells `handle-next-issue` not to favor them (it picks default-priority issues first). Create the label if absent, then file with it:
