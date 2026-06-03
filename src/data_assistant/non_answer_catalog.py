@@ -37,11 +37,9 @@ _StaticReasonCode: typing.TypeAlias = typing.Literal[
 _DEFINITIONS: dict[contracts.NonAnswerReasonCode, _NonAnswerDefinition] = {
     contracts.NonAnswerReasonCode.ACCESS_DENIED: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.ACCESS_DENIAL,
-        reason="You do not have access to the {dataset} Curated Dataset.",
+        reason="You do not have access to {dataset}.",
         context=(),
-        next_step=(
-            "Ask a data owner to grant Dataset Access or ask about available data."
-        ),
+        next_step="Ask a data owner for access, or ask about data you can use.",
     ),
     contracts.NonAnswerReasonCode.AMBIGUOUS_DATASET: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.CLARIFICATION_NEEDED,
@@ -78,12 +76,9 @@ _DEFINITIONS: dict[contracts.NonAnswerReasonCode, _NonAnswerDefinition] = {
     ),
     contracts.NonAnswerReasonCode.MISSING_TIME_SCOPE: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.CLARIFICATION_NEEDED,
-        reason=(
-            "The Data Question must specify a time period or explicitly ask "
-            "for all time."
-        ),
+        reason="I need a time period before I can answer that.",
         context=("time scope",),
-        next_step="Ask which time period should be used, or confirm all time.",
+        next_step="Tell me the time period to use, or say that you want all time.",
     ),
     contracts.NonAnswerReasonCode.NO_MATCHING_DATASET: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,

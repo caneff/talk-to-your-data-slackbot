@@ -99,10 +99,8 @@ _GOLDEN_WORDING: tuple[
     (
         non_answer_catalog.access_denied_non_answer("commerce", stage=_STAGE),
         non_answer_catalog.NonAnswerWording(
-            reason="You do not have access to the commerce Curated Dataset.",
-            next_step=(
-                "Ask a data owner to grant Dataset Access or ask about available data."
-            ),
+            reason="You do not have access to commerce.",
+            next_step="Ask a data owner for access, or ask about data you can use.",
         ),
     ),
     (
@@ -166,11 +164,10 @@ _GOLDEN_WORDING: tuple[
             contracts.NonAnswerReasonCode.MISSING_TIME_SCOPE, stage=_STAGE
         ),
         non_answer_catalog.NonAnswerWording(
-            reason=(
-                "The Data Question must specify a time period or explicitly ask "
-                "for all time."
+            reason="I need a time period before I can answer that.",
+            next_step=(
+                "Tell me the time period to use, or say that you want all time."
             ),
-            next_step="Ask which time period should be used, or confirm all time.",
         ),
     ),
     (
