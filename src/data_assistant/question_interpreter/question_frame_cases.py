@@ -292,6 +292,38 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("order date", MARCH_2026),
         ),
     ),
+    # --- Degradation cases: shapes promotion rejects downstream (#159) ---
+    # Multi-group: the interpreter faithfully emits both group_by ops; promotion
+    # rejects the 2-group shape downstream via UNSUPPORTED_SHAPE (covered by
+    # promotion unit tests, not here). This case only checks the proposal.
+    SharedQuestionFrameCase(
+        name="multi_group_net_revenue_by_region_and_channel",
+        question=(
+            "What was total net revenue by store region and order channel "
+            "in January 2026?"
+        ),
+        expected=_summarize(
+            "total net revenue",
+            _group_by("store region"),
+            _group_by("order channel"),
+            _during("order date", JANUARY_2026),
+        ),
+    ),
+    # Explicit top-N: the model still classifies "top 5 ..." as rank (a deferred
+    # intent), unseduced by the explicit count. There is no limit/N field in the
+    # schema, so the "5" is intentionally not represented.
+    SharedQuestionFrameCase(
+        name="top_n_store_regions_by_net_revenue",
+        question=(
+            "What were the top 5 store regions by total net revenue in January 2026?"
+        ),
+        expected=_deferred(
+            "rank",
+            "total net revenue",
+            _group_by("store region"),
+            _during("order date", JANUARY_2026),
+        ),
+    ),
     # --- New breadth cases: demo_order_lines metrics/fields ---
     SharedQuestionFrameCase(
         name="gross_margin_by_product_category_march",
