@@ -1610,6 +1610,19 @@ class _RecordingFlagStore:
         return self._result
 
 
+class _RecordingDeleteMessage:
+    """Fake ``chat_delete`` seam: records calls, optionally raises."""
+
+    def __init__(self, *, error: BaseException | None = None) -> None:
+        self.calls: list[tuple[str, str]] = []
+        self._error = error
+
+    def __call__(self, channel: str, ts: str) -> None:
+        self.calls.append((channel, ts))
+        if self._error is not None:
+            raise self._error
+
+
 def _answer_blocks() -> list[dict[str, object]]:
     """A minimal Assistant reply: a section + the flag buttons."""
     return [
@@ -1628,6 +1641,29 @@ def _status_text(
             first = typing.cast("list[dict[str, object]]", elements)[0]
             return str(first["text"])
     return None
+
+
+def _qa_done_body(
+    *,
+    channel_id: object = "C123",
+    container_message_ts: object = "1748880000.123456",
+    message_ts: object = "1748880000.123456",
+    value: object = "interaction-123",
+) -> dict[str, object]:
+    return {
+        "channel": {"id": channel_id},
+        "container": {"message_ts": container_message_ts},
+        "message": {
+            "ts": message_ts,
+            "blocks": list(slack_assistant.qa_action_blocks("interaction-123")),
+        },
+        "actions": [
+            {
+                "action_id": slack_assistant.QA_DONE_ACTION_ID,
+                "value": value,
+            }
+        ],
+    }
 
 
 def test_apply_flag_appends_status_line_and_keeps_answer_and_buttons() -> None:
@@ -1775,6 +1811,98 @@ def test_apply_flag_unknown_action_id_is_defensive_noop() -> None:
     # Defensive: an unmapped action_id never flags, returns None (nothing to do).
     assert store.calls == []
     assert new_blocks is None
+
+
+def test_apply_qa_done_deletes_message_from_normal_payload() -> None:
+    delete_message = _RecordingDeleteMessage()
+
+    deleted = slack_assistant.apply_qa_done(
+        body=_qa_done_body(),
+        delete_message=delete_message,
+    )
+
+    assert deleted is True
+    assert delete_message.calls == [("C123", "1748880000.123456")]
+
+
+def test_apply_qa_done_ignores_missing_or_unrelated_button_value() -> None:
+    delete_message = _RecordingDeleteMessage()
+
+    deleted = slack_assistant.apply_qa_done(
+        body=_qa_done_body(value=None),
+        delete_message=delete_message,
+    )
+
+    assert deleted is True
+    assert delete_message.calls == [("C123", "1748880000.123456")]
+
+
+def test_apply_qa_done_falls_back_to_message_ts() -> None:
+    delete_message = _RecordingDeleteMessage()
+
+    deleted = slack_assistant.apply_qa_done(
+        body=_qa_done_body(
+            container_message_ts=None,
+            message_ts="1748889999.000001",
+        ),
+        delete_message=delete_message,
+    )
+
+    assert deleted is True
+    assert delete_message.calls == [("C123", "1748889999.000001")]
+
+
+@pytest.mark.parametrize(
+    ("channel_id", "container_message_ts", "message_ts"),
+    [
+        (None, "1748880000.123456", "1748880000.123456"),
+        ("", "1748880000.123456", "1748880000.123456"),
+        ("C123", None, None),
+        ("C123", "", ""),
+    ],
+)
+def test_apply_qa_done_safe_noop_for_malformed_payload(
+    channel_id: object,
+    container_message_ts: object,
+    message_ts: object,
+) -> None:
+    delete_message = _RecordingDeleteMessage()
+
+    deleted = slack_assistant.apply_qa_done(
+        body=_qa_done_body(
+            channel_id=channel_id,
+            container_message_ts=container_message_ts,
+            message_ts=message_ts,
+        ),
+        delete_message=delete_message,
+    )
+
+    assert deleted is False
+    assert delete_message.calls == []
+
+
+def test_apply_qa_done_catches_delete_failure_without_crashing() -> None:
+    delete_message = _RecordingDeleteMessage(error=RuntimeError("Slack down"))
+
+    deleted = slack_assistant.apply_qa_done(
+        body=_qa_done_body(),
+        delete_message=delete_message,
+    )
+
+    assert deleted is False
+    assert delete_message.calls == [("C123", "1748880000.123456")]
+
+
+def test_qa_action_blocks_include_done_but_flag_blocks_do_not() -> None:
+    qa_action_ids = _action_ids_in(slack_assistant.qa_action_blocks("interaction-xyz"))
+    flag_action_ids = _action_ids_in(
+        slack_assistant.flag_action_blocks("interaction-xyz")
+    )
+
+    assert slack_assistant.QA_DONE_ACTION_ID in qa_action_ids
+    assert slack_assistant.QA_DONE_ACTION_ID not in flag_action_ids
+    assert slack_assistant.QA_ADD_NOTE_ACTION_ID in qa_action_ids
+    assert slack_assistant.QA_ADD_NOTE_ACTION_ID not in flag_action_ids
 
 
 def test_flag_interaction_for_triage_logs_updated_record(

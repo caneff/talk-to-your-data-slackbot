@@ -93,6 +93,7 @@ FLAGGED_INTERACTION_LOG_PREFIX: typing.Final[str] = (
 # ``interaction_log.flag_interaction(.., path=log_path)`` (returns False on an
 # unknown id).
 FlagStore: typing.TypeAlias = collections_abc.Callable[[str, str], bool]
+DeleteMessage: typing.TypeAlias = collections_abc.Callable[[str, str], object | None]
 
 # block_id of the context block that shows which categories a reply has been
 # flagged with. We RE-RENDER the Assistant reply in place on each click (Slack's
@@ -284,6 +285,38 @@ def apply_flag(
         return None
     found = flag_store(interaction_id, category)
     return render_flagged_message_blocks(blocks=blocks, category=category, found=found)
+
+
+def _string_field(mapping: object, key: str) -> str:
+    if not isinstance(mapping, dict):
+        return ""
+    value = typing.cast("dict[str, object]", mapping).get(key)
+    return value if isinstance(value, str) else ""
+
+
+def qa_done_target(body: dict[str, typing.Any]) -> tuple[str, str]:
+    """Extract Slack delete coordinates from a QA-done action payload."""
+    channel_id = _string_field(body.get("channel"), "id")
+    container_message_ts = _string_field(body.get("container"), "message_ts")
+    message_ts = _string_field(body.get("message"), "ts")
+    return channel_id, container_message_ts or message_ts
+
+
+def apply_qa_done(
+    *,
+    body: dict[str, typing.Any],
+    delete_message: DeleteMessage,
+) -> bool:
+    """Pure QA-done core: delete clicked QA review message when payload is usable."""
+    channel_id, message_ts = qa_done_target(body)
+    if not channel_id or not message_ts:
+        return False
+    try:
+        delete_message(channel_id, message_ts)
+    except Exception:
+        logger.exception("Failed to delete QA review message.")
+        return False
+    return True
 
 
 def flag_interaction_for_triage(
@@ -991,10 +1024,10 @@ def register_assistant_handlers(
 
     app.use(assistant)
 
-    _register_flag_actions(app=app, adapter=adapter)
+    _register_message_actions(app=app, adapter=adapter)
 
 
-def _register_flag_actions(
+def _register_message_actions(
     *,
     app: typing.Any,
     adapter: AssistantAdapter,
@@ -1066,3 +1099,19 @@ def _register_flag_actions(
     # Register one listener per flag action_id (the single source of truth).
     for flag_action_id in ACTION_ID_TO_CATEGORY:
         app.action(flag_action_id)(_flag_action)
+
+    def _qa_done_action(
+        ack: collections_abc.Callable[[], None],
+        body: dict[str, typing.Any],
+        client: typing.Any,
+    ) -> None:
+        ack()
+        apply_qa_done(
+            body=body,
+            delete_message=lambda channel, ts: client.chat_delete(
+                channel=channel,
+                ts=ts,
+            ),
+        )
+
+    app.action(QA_DONE_ACTION_ID)(_qa_done_action)
