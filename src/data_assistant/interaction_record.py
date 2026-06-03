@@ -42,14 +42,11 @@ Slack edge also renders it as the fallback reply body. The Assistant transient
 status auto-clears when this reply is sent, so no manual status clear is
 needed."""
 
-KnownIssueReference = known_qa_issues.KnownQAIssue
-
-
 @dataclasses.dataclass(frozen=True)
 class QAReviewContext:
     battery_path: str
     qa_case_id: str | None
-    known_issues: tuple[KnownIssueReference, ...] = ()
+    known_issues: tuple[known_qa_issues.KnownQAIssue, ...] = ()
     position: int | None = None
     total: int | None = None
     note_saved: bool = False
