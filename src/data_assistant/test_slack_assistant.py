@@ -22,6 +22,8 @@ import pytest
 
 import data_assistant.assistant_thread_pointer as assistant_thread_pointer
 import data_assistant.interaction_log as interaction_log
+import data_assistant.interaction_record as interaction_record
+import data_assistant.known_qa_issues as known_qa_issues
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.slack_assistant as slack_assistant
 import data_assistant.workflow.contracts as contracts
@@ -609,15 +611,6 @@ def test_custom_identity_resolver_is_used(
     assert seen_identity_ids == ["employee_123"]
 
 
-def test_final_response_from_workflow_result_unwraps_run() -> None:
-    final = _final_response(text="unwrapped")
-    run = contracts.DataAssistantRun  # type alias smoke
-
-    # A bare FinalResponse passes through unchanged.
-    assert slack_assistant.final_response_from_workflow_result(final) is final
-    del run
-
-
 # --- Interaction Log capture (ADR-0016) -------------------------------------
 
 
@@ -998,11 +991,11 @@ def test_record_runtime_error_logs_qa_review_metadata(
         question="What failed?",
         user="qa_driver",
         error=RuntimeError("answer path blew up"),
-        qa_review_context=slack_assistant.QAReviewContext(
+        qa_review_context=interaction_record.QAReviewContext(
             battery_path="docs/qa-retail-questions.md",
             qa_case_id="case-a",
             known_issues=(
-                slack_assistant.KnownIssueReference(
+                known_qa_issues.KnownQAIssue(
                     issue_number=166,
                     flag_category="correctness",
                 ),
@@ -1163,11 +1156,11 @@ def test_answer_and_render_logs_qa_review_metadata(
         text="What was total revenue by region in January 2026?",
         user="qa_driver",
         set_status=RecordingStatus(),
-        qa_review_context=slack_assistant.QAReviewContext(
+        qa_review_context=interaction_record.QAReviewContext(
             battery_path="docs/qa-retail-questions.md",
             qa_case_id="orders-net-revenue-by-store-region-q1-2026",
             known_issues=(
-                slack_assistant.KnownIssueReference(
+                known_qa_issues.KnownQAIssue(
                     issue_number=166,
                     flag_category="correctness",
                 ),
@@ -1211,7 +1204,7 @@ def test_answer_and_render_omits_known_issue_metadata_for_unidentified_qa_case(
         text="Legacy question?",
         user="qa_driver",
         set_status=RecordingStatus(),
-        qa_review_context=slack_assistant.QAReviewContext(
+        qa_review_context=interaction_record.QAReviewContext(
             battery_path="docs/qa-retail-questions.md",
             qa_case_id=None,
             known_issues=(),
@@ -1252,7 +1245,7 @@ def test_answer_and_render_logs_empty_known_issues_for_identified_qa_case(
         text="Question with no remaining known issues?",
         user="qa_driver",
         set_status=RecordingStatus(),
-        qa_review_context=slack_assistant.QAReviewContext(
+        qa_review_context=interaction_record.QAReviewContext(
             battery_path="docs/qa-retail-questions.md",
             qa_case_id="case-without-known-issues",
             known_issues=(),
@@ -1347,15 +1340,15 @@ def test_answer_and_render_adds_qa_header_and_combined_qa_actions(
         text="QA question?",
         user="qa_driver",
         set_status=RecordingStatus(),
-        qa_review_context=slack_assistant.QAReviewContext(
+        qa_review_context=interaction_record.QAReviewContext(
             battery_path="docs/qa-retail-questions.md",
             qa_case_id="case-a",
             known_issues=(
-                slack_assistant.KnownIssueReference(
+                known_qa_issues.KnownQAIssue(
                     issue_number=166,
                     flag_category="correctness",
                 ),
-                slack_assistant.KnownIssueReference(
+                known_qa_issues.KnownQAIssue(
                     issue_number=169,
                     flag_category="formatting",
                 ),
@@ -1411,7 +1404,7 @@ def test_answer_and_render_qa_header_omits_case_id_for_unidentified_case(
         text="Legacy question?",
         user="qa_driver",
         set_status=RecordingStatus(),
-        qa_review_context=slack_assistant.QAReviewContext(
+        qa_review_context=interaction_record.QAReviewContext(
             battery_path="docs/qa-retail-questions.md",
             qa_case_id=None,
             known_issues=(),
@@ -1532,7 +1525,7 @@ def test_on_user_message_record_build_failure_does_not_break_user_reply(
     def boom(**_kwargs: object) -> dict[str, object]:
         raise ValueError("record construction blew up")
 
-    monkeypatch.setattr(slack_assistant, "_interaction_record", boom)
+    monkeypatch.setattr(interaction_record, "build_interaction_record", boom)
 
     def answer_path(
         _connection: duckdb.DuckDBPyConnection,
