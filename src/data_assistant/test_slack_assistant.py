@@ -1623,6 +1623,16 @@ class _RecordingDeleteMessage:
             raise self._error
 
 
+class _RecordingNoteStore:
+    def __init__(self, *, result: bool = True) -> None:
+        self.calls: list[tuple[str, str]] = []
+        self._result = result
+
+    def __call__(self, interaction_id: str, note: str) -> bool:
+        self.calls.append((interaction_id, note))
+        return self._result
+
+
 def _answer_blocks() -> list[dict[str, object]]:
     """A minimal Assistant reply: a section + the flag buttons."""
     return [
@@ -1663,6 +1673,19 @@ def _qa_done_body(
                 "value": value,
             }
         ],
+    }
+
+
+def _qa_note_view_state(note: str) -> dict[str, object]:
+    return {
+        "values": {
+            slack_assistant.QA_REVIEW_NOTE_BLOCK_ID: {
+                slack_assistant.QA_REVIEW_NOTE_ACTION_ID: {
+                    "type": "plain_text_input",
+                    "value": note,
+                }
+            }
+        }
     }
 
 
@@ -1903,6 +1926,92 @@ def test_qa_action_blocks_include_done_but_flag_blocks_do_not() -> None:
     assert slack_assistant.QA_DONE_ACTION_ID not in flag_action_ids
     assert slack_assistant.QA_ADD_NOTE_ACTION_ID in qa_action_ids
     assert slack_assistant.QA_ADD_NOTE_ACTION_ID not in flag_action_ids
+
+
+def test_build_qa_review_note_modal_prefills_existing_note_and_metadata() -> None:
+    original_blocks: list[contracts.SlackBlock] = [
+        {
+            "type": "context",
+            "elements": [{"type": "mrkdwn", "text": "QA 1/1 • Case `case-a`"}],
+        },
+        {"type": "context", "elements": [{"type": "mrkdwn", "text": "❓ QA?"}]},
+        {"type": "section", "text": {"type": "mrkdwn", "text": "Answer body"}},
+        *slack_assistant.qa_action_blocks("interaction-123"),
+    ]
+
+    view = slack_assistant.build_qa_review_note_modal(
+        interaction_id="interaction-123",
+        existing_note="Existing note",
+        original_blocks=original_blocks,
+    )
+
+    assert view["callback_id"] == slack_assistant.QA_REVIEW_NOTE_CALLBACK_ID
+    assert view["private_metadata"]
+    metadata = json.loads(str(view["private_metadata"]))
+    assert metadata["interaction_id"] == "interaction-123"
+    assert metadata["original_blocks"] == original_blocks
+    view_blocks = typing.cast("list[dict[str, object]]", view["blocks"])
+    state = typing.cast("dict[str, object]", view_blocks[0]["element"])
+    assert state["action_id"] == slack_assistant.QA_REVIEW_NOTE_ACTION_ID
+    assert state["initial_value"] == "Existing note"
+
+
+def test_apply_qa_review_note_save_updates_note_and_rerenders_header() -> None:
+    note_store = _RecordingNoteStore()
+    original_blocks: list[contracts.SlackBlock] = [
+        {
+            "type": "context",
+            "elements": [{"type": "mrkdwn", "text": "QA 1/3 • Case `case-a`"}],
+        },
+        {"type": "context", "elements": [{"type": "mrkdwn", "text": "❓ QA?"}]},
+        {"type": "section", "text": {"type": "mrkdwn", "text": "Answer body"}},
+        *slack_assistant.qa_action_blocks("interaction-123"),
+    ]
+    body = {
+        "view": {
+            "private_metadata": json.dumps(
+                {
+                    "interaction_id": "interaction-123",
+                    "original_blocks": original_blocks,
+                }
+            ),
+            "state": _qa_note_view_state("Saved note"),
+        }
+    }
+
+    result = slack_assistant.apply_qa_review_note_save(
+        body=body,
+        note_store=note_store,
+    )
+
+    assert result is not None
+    assert note_store.calls == [("interaction-123", "Saved note")]
+    result_blocks = typing.cast("list[contracts.SlackBlock]", result["blocks"])
+    assert "Note saved" in _context_text(result_blocks[0])
+    assert result_blocks[1:] == original_blocks[1:]
+
+
+def test_apply_qa_review_note_save_unknown_id_returns_none() -> None:
+    note_store = _RecordingNoteStore(result=False)
+    body = {
+        "view": {
+            "private_metadata": json.dumps(
+                {
+                    "interaction_id": "missing",
+                    "original_blocks": [],
+                }
+            ),
+            "state": _qa_note_view_state("Saved note"),
+        }
+    }
+
+    result = slack_assistant.apply_qa_review_note_save(
+        body=body,
+        note_store=note_store,
+    )
+
+    assert result is None
+    assert note_store.calls == [("missing", "Saved note")]
 
 
 def test_flag_interaction_for_triage_logs_updated_record(

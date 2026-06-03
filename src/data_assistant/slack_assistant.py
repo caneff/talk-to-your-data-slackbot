@@ -94,6 +94,7 @@ FLAGGED_INTERACTION_LOG_PREFIX: typing.Final[str] = (
 # unknown id).
 FlagStore: typing.TypeAlias = collections_abc.Callable[[str, str], bool]
 DeleteMessage: typing.TypeAlias = collections_abc.Callable[[str, str], object | None]
+NoteStore: typing.TypeAlias = collections_abc.Callable[[str, str], bool]
 
 # block_id of the context block that shows which categories a reply has been
 # flagged with. We RE-RENDER the Assistant reply in place on each click (Slack's
@@ -103,6 +104,9 @@ DeleteMessage: typing.TypeAlias = collections_abc.Callable[[str, str], object | 
 # and replace the prior status block instead of stacking duplicates.
 FLAG_STATUS_BLOCK_ID: typing.Final[str] = "flag_status"
 _FLAG_STATUS_PREFIX: typing.Final[str] = "✓ Flagged: "
+QA_REVIEW_NOTE_CALLBACK_ID: typing.Final[str] = "qa_review_note_submit"
+QA_REVIEW_NOTE_BLOCK_ID: typing.Final[str] = "qa_review_note"
+QA_REVIEW_NOTE_ACTION_ID: typing.Final[str] = "qa_review_note_input"
 
 # Every reply leads with a small grey echo of the question so a reader can pair a
 # response back to what was asked. We cap the echoed text to keep the context
@@ -317,6 +321,139 @@ def apply_qa_done(
         logger.exception("Failed to delete QA review message.")
         return False
     return True
+
+
+def build_qa_review_note_modal(
+    *,
+    interaction_id: str,
+    existing_note: str,
+    original_blocks: collections_abc.Sequence[contracts.SlackBlock],
+    channel_id: str = "",
+    message_ts: str = "",
+    message_text: str = "",
+) -> dict[str, object]:
+    metadata: dict[str, object] = {
+        "interaction_id": interaction_id,
+        "original_blocks": list(original_blocks),
+    }
+    if channel_id:
+        metadata["channel_id"] = channel_id
+    if message_ts:
+        metadata["message_ts"] = message_ts
+    if message_text:
+        metadata["message_text"] = message_text
+    return {
+        "type": "modal",
+        "callback_id": QA_REVIEW_NOTE_CALLBACK_ID,
+        "private_metadata": json.dumps(metadata),
+        "title": {"type": "plain_text", "text": "QA Review Note"},
+        "submit": {"type": "plain_text", "text": "Save"},
+        "close": {"type": "plain_text", "text": "Cancel"},
+        "blocks": [
+            {
+                "type": "input",
+                "block_id": QA_REVIEW_NOTE_BLOCK_ID,
+                "label": {"type": "plain_text", "text": "Note"},
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": QA_REVIEW_NOTE_ACTION_ID,
+                    "multiline": True,
+                    "initial_value": existing_note,
+                },
+            }
+        ],
+    }
+
+
+def apply_qa_review_note_save(
+    *,
+    body: dict[str, typing.Any],
+    note_store: NoteStore,
+) -> dict[str, object] | None:
+    view_obj = body.get("view")
+    if not isinstance(view_obj, dict):
+        return None
+    view = typing.cast("dict[str, object]", view_obj)
+    metadata = _qa_review_note_metadata(view.get("private_metadata"))
+    interaction_id = metadata.get("interaction_id")
+    if not isinstance(interaction_id, str) or not interaction_id:
+        return None
+    note = _qa_review_note_value(view.get("state"))
+    if note is None:
+        return None
+    changed = note_store(interaction_id, note)
+    if not changed:
+        return None
+    original_blocks = metadata.get("original_blocks")
+    blocks = _render_note_saved_blocks(original_blocks)
+    result: dict[str, object] = {"blocks": blocks}
+    for field in ("channel_id", "message_ts", "message_text"):
+        value = metadata.get(field)
+        if isinstance(value, str) and value:
+            result[field] = value
+    return result
+
+
+def _qa_review_note_metadata(metadata: object) -> dict[str, object]:
+    if not isinstance(metadata, str) or not metadata:
+        return {}
+    try:
+        loaded = json.loads(metadata)
+    except json.JSONDecodeError:
+        return {}
+    return typing.cast("dict[str, object]", loaded) if isinstance(loaded, dict) else {}
+
+
+def _qa_review_note_value(state: object) -> str | None:
+    if not isinstance(state, dict):
+        return None
+    state_dict = typing.cast("dict[str, object]", state)
+    values = state_dict.get("values")
+    if not isinstance(values, dict):
+        return None
+    values_dict = typing.cast("dict[str, object]", values)
+    block = values_dict.get(QA_REVIEW_NOTE_BLOCK_ID)
+    if not isinstance(block, dict):
+        return None
+    block_dict = typing.cast("dict[str, object]", block)
+    action = block_dict.get(QA_REVIEW_NOTE_ACTION_ID)
+    if not isinstance(action, dict):
+        return None
+    action_dict = typing.cast("dict[str, object]", action)
+    value = action_dict.get("value", "")
+    return value if isinstance(value, str) else ""
+
+
+def _render_note_saved_blocks(
+    blocks: object,
+) -> list[contracts.SlackBlock]:
+    if not isinstance(blocks, list):
+        return []
+    raw_blocks = typing.cast("list[object]", blocks)
+    rendered: list[contracts.SlackBlock] = []
+    for block_obj in raw_blocks:
+        if not isinstance(block_obj, dict):
+            return []
+        block_dict = typing.cast("dict[str, object]", block_obj)
+        rendered.append(dict(block_dict))
+    if not rendered:
+        return rendered
+    first = rendered[0]
+    if first.get("type") != "context":
+        return rendered
+    elements = first.get("elements")
+    if not isinstance(elements, list) or not elements:
+        return rendered
+    lead = typing.cast("list[object]", elements)[0]
+    if not isinstance(lead, dict):
+        return rendered
+    lead_dict = typing.cast("dict[str, object]", lead)
+    text = lead_dict.get("text")
+    if not isinstance(text, str):
+        return rendered
+    if "Note saved" not in text:
+        lead_dict["text"] = f"{text} • Note saved"
+    return rendered
 
 
 def flag_interaction_for_triage(
@@ -1115,3 +1252,82 @@ def _register_message_actions(
         )
 
     app.action(QA_DONE_ACTION_ID)(_qa_done_action)
+
+    def _qa_add_note_action(
+        ack: collections_abc.Callable[[], None],
+        body: dict[str, typing.Any],
+        client: typing.Any,
+    ) -> None:
+        ack()
+        actions: list[dict[str, typing.Any]] = body.get("actions") or [{}]
+        action = actions[0]
+        interaction_id = str(action.get("value", ""))
+        trigger_id = _string_field(body, "trigger_id")
+        if not interaction_id or not trigger_id:
+            return
+        message = body.get("message")
+        if isinstance(message, dict):
+            message_dict: dict[str, object] = typing.cast(
+                "dict[str, object]",
+                message,
+            )
+        else:
+            message_dict = {}
+        raw_blocks = message_dict.get("blocks")
+        original_blocks: collections_abc.Sequence[contracts.SlackBlock] = (
+            typing.cast("list[contracts.SlackBlock]", raw_blocks)
+            if isinstance(raw_blocks, list)
+            else []
+        )
+        record = interaction_log.find_interaction(interaction_id, path=adapter.log_path)
+        existing_note = ""
+        if record is not None:
+            note_value = record.get("qa_review_note")
+            if isinstance(note_value, str):
+                existing_note = note_value
+        channel_id, message_ts = qa_done_target(body)
+        client.views_open(
+            trigger_id=trigger_id,
+            view=build_qa_review_note_modal(
+                interaction_id=interaction_id,
+                existing_note=existing_note,
+                original_blocks=original_blocks,
+                channel_id=channel_id,
+                message_ts=message_ts,
+                message_text=_string_field(message_dict, "text"),
+            ),
+        )
+
+    app.action(QA_ADD_NOTE_ACTION_ID)(_qa_add_note_action)
+
+    def _qa_review_note_submit(
+        ack: collections_abc.Callable[[], None],
+        body: dict[str, typing.Any],
+        client: typing.Any,
+    ) -> None:
+        ack()
+        result = apply_qa_review_note_save(
+            body=body,
+            note_store=lambda interaction_id, note: interaction_log.save_qa_review_note(
+                interaction_id,
+                note,
+                path=adapter.log_path,
+            ),
+        )
+        if result is None:
+            return
+        channel_id = typing.cast("str | None", result.get("channel_id"))
+        message_ts = typing.cast("str | None", result.get("message_ts"))
+        if not channel_id or not message_ts:
+            return
+        kwargs: dict[str, object] = {
+            "channel": channel_id,
+            "ts": message_ts,
+            "blocks": result["blocks"],
+        }
+        message_text = result.get("message_text")
+        if isinstance(message_text, str) and message_text:
+            kwargs["text"] = message_text
+        client.chat_update(**kwargs)
+
+    app.view(QA_REVIEW_NOTE_CALLBACK_ID)(_qa_review_note_submit)
