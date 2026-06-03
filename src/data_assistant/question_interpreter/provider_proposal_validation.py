@@ -5,15 +5,11 @@ from __future__ import annotations
 import data_assistant.non_answer_catalog as non_answer_catalog
 import data_assistant.question_interpreter._field_operations as field_operations
 import data_assistant.question_interpreter._time_scope as time_scope
+import data_assistant.question_interpreter.proposals as proposals
 import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.workflow.contracts as contracts
 from data_assistant.question_interpreter import guards as interpreter_guards
 from data_assistant.question_interpreter import semantic_context
-from data_assistant.question_interpreter.proposals import (
-    ProviderFailure,
-    ProviderProposal,
-    QuestionInterpreterProvider,
-)
 
 _SUPPORTED_PROVIDER_INTENTS = frozenset({"summarize"})
 
@@ -22,7 +18,7 @@ def interpret_question(
     *,
     question: str,
     semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
-    provider: QuestionInterpreterProvider,
+    provider: proposals.QuestionInterpreterProvider,
 ) -> contracts.StageResult[contracts.QuestionFrame]:
     """Apply Provider Proposal Validation to produce a trusted Question Frame."""
     normalized_question = interpreter_guards.normalize_question(question)
@@ -68,13 +64,13 @@ def _validate_provider_result(
     raw_provider_result: object,
     semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> contracts.StageResult[contracts.QuestionFrame]:
-    if isinstance(raw_provider_result, ProviderFailure):
+    if isinstance(raw_provider_result, proposals.ProviderFailure):
         return contracts.NonAnswer(
             stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
             reason_code=contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
             context=_provider_failure_context(raw_provider_result),
         )
-    if not isinstance(raw_provider_result, ProviderProposal):
+    if not isinstance(raw_provider_result, proposals.ProviderProposal):
         return non_answer_catalog.non_answer(
             contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
             stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
@@ -145,7 +141,7 @@ def _validate_provider_result(
 
 
 def _provider_failure_context(
-    provider_failure: ProviderFailure,
+    provider_failure: proposals.ProviderFailure,
 ) -> tuple[str, ...]:
     if provider_failure.diagnostic_class is None:
         return ("provider failure",)

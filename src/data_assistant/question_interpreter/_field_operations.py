@@ -6,14 +6,14 @@ import datetime
 import decimal
 
 import data_assistant.non_answer_catalog as non_answer_catalog
+import data_assistant.question_interpreter.proposals as proposals
 import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
-from data_assistant.question_interpreter.proposals import ProviderFieldOperation
 
 
 def validate_field_filters(
-    operation_proposals: tuple[ProviderFieldOperation, ...],
+    operation_proposals: tuple[proposals.ProviderFieldOperation, ...],
     semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> contracts.NonAnswer | tuple[str | None, tuple[contracts.FieldFilter[str], ...]]:
     fields_by_label = {
@@ -62,7 +62,7 @@ def validate_field_filters(
 
 
 def _validate_range_filter(
-    operation_proposal: ProviderFieldOperation,
+    operation_proposal: proposals.ProviderFieldOperation,
     field: schema.SemanticField,
     operation: schema.FieldOperation,
 ) -> contracts.NonAnswer | contracts.RangeFilter[str]:
@@ -114,7 +114,7 @@ def _range_bounds_are_reversed(
 
 
 def _validate_values_filter(
-    operation_proposal: ProviderFieldOperation,
+    operation_proposal: proposals.ProviderFieldOperation,
     field: schema.SemanticField,
     operation: schema.FieldOperation,
 ) -> contracts.NonAnswer | contracts.ValuesFilter[str]:
