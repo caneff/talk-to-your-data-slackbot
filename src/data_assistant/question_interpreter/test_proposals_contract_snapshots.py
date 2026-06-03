@@ -531,7 +531,7 @@ def test_question_interpreter_rejects_non_finite_decimal_filter_values() -> None
     )
 
 
-def test_question_interpreter_promotes_semantic_layer_operation_enum() -> None:
+def test_question_interpreter_validates_semantic_layer_operation_enum() -> None:
     result = interpreter_support.interpret_with_provider_proposal(
         interpreter_support.question_frame_proposal()
     )

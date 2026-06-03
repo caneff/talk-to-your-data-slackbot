@@ -1,7 +1,7 @@
 """Deterministic Provider Proposal Validation tests for metric qualifiers.
 
 These lock the ADR-0017 precedence both ways, independent of the LLM:
-an exact qualified label (e.g. "total net revenue") must promote, while a
+an exact qualified label (e.g. "total net revenue") must validate, while a
 reported `metric_ambiguity` with no reflecting label must Non-Answer.
 """
 
@@ -63,7 +63,7 @@ class _StaticProvider:
         return self._proposal
 
 
-def test_exact_net_revenue_label_promotes_to_question_frame() -> None:
+def test_exact_net_revenue_label_validates_to_question_frame() -> None:
     proposal = question_interpreter.ProviderProposal(
         intent="summarize",
         metric="total net revenue",

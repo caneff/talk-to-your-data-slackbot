@@ -116,7 +116,7 @@ def question_frame_proposal(
         tuple[question_interpreter.ProviderFieldOperation, ...] | object
     ) = _DEFAULT_FIELD_OPERATIONS,
 ) -> question_interpreter.ProviderProposal:
-    """Build a valid proposal while allowing each promoted field to be varied."""
+    """Build a valid proposal while allowing each validated field to be varied."""
     if field_operations is _DEFAULT_FIELD_OPERATIONS:
         active_field_operations = (
             question_interpreter.ProviderFieldOperation(
