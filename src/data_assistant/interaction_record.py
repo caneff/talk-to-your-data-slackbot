@@ -42,6 +42,7 @@ Slack edge also renders it as the fallback reply body. The Assistant transient
 status auto-clears when this reply is sent, so no manual status clear is
 needed."""
 
+
 @dataclasses.dataclass(frozen=True)
 class QAReviewContext:
     battery_path: str
