@@ -90,6 +90,12 @@ def _button_elements(block: contracts.SlackBlock) -> list[dict[str, object]]:
     return typed
 
 
+def _actions_blocks(
+    blocks: collections.abc.Sequence[contracts.SlackBlock],
+) -> list[contracts.SlackBlock]:
+    return [block for block in blocks if block.get("type") == "actions"]
+
+
 class RecordingSay:
     """Capture ``say`` calls (text plus optional blocks)."""
 
@@ -1259,6 +1265,164 @@ def test_answer_and_render_logs_empty_known_issues_for_identified_qa_case(
     assert records[0]["battery_path"] == "docs/qa-retail-questions.md"
     assert records[0]["qa_case_id"] == "case-without-known-issues"
     assert records[0]["known_issues"] == []
+
+
+def test_answer_and_render_keeps_normal_reply_without_qa_header_or_qa_buttons(
+    tmp_path: pathlib.Path,
+    connect_orders: collections.abc.Callable[
+        ..., contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
+    ],
+) -> None:
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        _question: str,
+        _identity: contracts.InternalIdentity,
+        _progress_sink: contracts.ProgressSink,
+    ) -> slack_assistant.SlackWorkflowResult:
+        return _final_response(
+            text="Final answer text.",
+            blocks=(
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": "trust"},
+                },
+            ),
+        )
+
+    adapter = slack_assistant.AssistantAdapter(
+        connection_factory=_connection_factory(connect_orders),
+        answer_path=answer_path,
+        log_path=tmp_path / "interactions.jsonl",
+    )
+
+    interaction_id, _final_response_out, reply_blocks = adapter.answer_and_render(
+        text="Normal question?",
+        user="U123",
+        set_status=RecordingStatus(),
+    )
+
+    assert _context_text(reply_blocks[0]) == "❓ Normal question?"
+    assert len(_actions_blocks(reply_blocks)) == 1
+    assert _action_ids_in(reply_blocks) == {
+        slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
+        slack_assistant.FLAG_FORMATTING_ACTION_ID,
+        slack_assistant.FLAG_INVESTIGATE_ACTION_ID,
+    }
+    for element in _button_elements(_actions_blocks(reply_blocks)[0]):
+        assert element["value"] == interaction_id
+
+
+def test_answer_and_render_adds_qa_header_and_combined_qa_actions(
+    tmp_path: pathlib.Path,
+    connect_orders: collections.abc.Callable[
+        ..., contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
+    ],
+) -> None:
+    answer_blocks: tuple[contracts.SlackBlock, ...] = (
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "Answer body"},
+        },
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "Trust summary"},
+        },
+    )
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        _question: str,
+        _identity: contracts.InternalIdentity,
+        _progress_sink: contracts.ProgressSink,
+    ) -> slack_assistant.SlackWorkflowResult:
+        return _final_response(text="Final answer text.", blocks=answer_blocks)
+
+    adapter = slack_assistant.AssistantAdapter(
+        connection_factory=_connection_factory(connect_orders),
+        answer_path=answer_path,
+        log_path=tmp_path / "interactions.jsonl",
+    )
+
+    interaction_id, _final_response_out, reply_blocks = adapter.answer_and_render(
+        text="QA question?",
+        user="qa_driver",
+        set_status=RecordingStatus(),
+        qa_review_context=slack_assistant.QAReviewContext(
+            battery_path="docs/qa-retail-questions.md",
+            qa_case_id="case-a",
+            known_issues=(
+                slack_assistant.KnownIssueReference(
+                    issue_number=166,
+                    flag_category="correctness",
+                ),
+                slack_assistant.KnownIssueReference(
+                    issue_number=169,
+                    flag_category="formatting",
+                ),
+            ),
+            position=1,
+            total=3,
+            note_saved=True,
+        ),
+    )
+
+    assert _context_text(reply_blocks[0]).startswith("QA 1/3")
+    assert "Case `case-a`" in _context_text(reply_blocks[0])
+    assert "#166" in _context_text(reply_blocks[0])
+    assert "🚩" in _context_text(reply_blocks[0])
+    assert "#169" in _context_text(reply_blocks[0])
+    assert "🎨" in _context_text(reply_blocks[0])
+    assert "Note saved" in _context_text(reply_blocks[0])
+    assert _context_text(reply_blocks[1]) == "❓ QA question?"
+    assert reply_blocks[2:4] == answer_blocks
+    assert len(_actions_blocks(reply_blocks)) == 1
+    assert _action_ids_in(reply_blocks) == {
+        slack_assistant.FLAG_CORRECTNESS_ACTION_ID,
+        slack_assistant.FLAG_FORMATTING_ACTION_ID,
+        slack_assistant.FLAG_INVESTIGATE_ACTION_ID,
+        slack_assistant.QA_ADD_NOTE_ACTION_ID,
+        slack_assistant.QA_DONE_ACTION_ID,
+    }
+    for element in _button_elements(_actions_blocks(reply_blocks)[0]):
+        assert element["value"] == interaction_id
+
+
+def test_answer_and_render_qa_header_omits_case_id_for_unidentified_case(
+    tmp_path: pathlib.Path,
+    connect_orders: collections.abc.Callable[
+        ..., contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
+    ],
+) -> None:
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        _question: str,
+        _identity: contracts.InternalIdentity,
+        _progress_sink: contracts.ProgressSink,
+    ) -> slack_assistant.SlackWorkflowResult:
+        return _final_response(text="Final answer text.")
+
+    adapter = slack_assistant.AssistantAdapter(
+        connection_factory=_connection_factory(connect_orders),
+        answer_path=answer_path,
+        log_path=tmp_path / "interactions.jsonl",
+    )
+
+    _interaction_id, _final_response_out, reply_blocks = adapter.answer_and_render(
+        text="Legacy question?",
+        user="qa_driver",
+        set_status=RecordingStatus(),
+        qa_review_context=slack_assistant.QAReviewContext(
+            battery_path="docs/qa-retail-questions.md",
+            qa_case_id=None,
+            known_issues=(),
+            position=2,
+            total=5,
+        ),
+    )
+
+    assert _context_text(reply_blocks[0]).startswith("QA 2/5")
+    assert "Case `" not in _context_text(reply_blocks[0])
+    assert _context_text(reply_blocks[1]) == "❓ Legacy question?"
 
 
 def test_answer_and_render_truncates_long_question_in_echo_block(

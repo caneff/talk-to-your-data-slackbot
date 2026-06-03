@@ -443,6 +443,7 @@ def test_resolve_thread_target(
 
 def test_replay_cases_passes_case_id_to_adapter_and_posts_blocks() -> None:
     seen_calls: list[tuple[str, str | None]] = []
+    seen_contexts: list[slack_qa_driver.QAReviewContext | None] = []
     posted_messages: list[dict[str, object]] = []
     pauses: list[str] = []
 
@@ -456,9 +457,10 @@ def test_replay_cases_passes_case_id_to_adapter_and_posts_blocks() -> None:
             qa_review_context: slack_qa_driver.QAReviewContext | None = None,
             set_status: contracts.ProgressSink,
         ) -> tuple[str, contracts.FinalResponse, tuple[contracts.SlackBlock, ...]]:
-            del user, qa_review_context
+            del user
             set_status("ignored")
             seen_calls.append((text, qa_case_id))
+            seen_contexts.append(qa_review_context)
             return (
                 "interaction-1",
                 contracts.FinalResponse(
@@ -505,6 +507,16 @@ def test_replay_cases_passes_case_id_to_adapter_and_posts_blocks() -> None:
         (
             "What was total revenue by region in January 2026?",
             "orders-net-revenue-by-store-region-q1-2026",
+        )
+    ]
+    assert seen_contexts == [
+        slack_qa_driver.QAReviewContext(
+            battery_path="docs/qa-retail-questions.md",
+            qa_case_id="orders-net-revenue-by-store-region-q1-2026",
+            known_issues=(),
+            position=1,
+            total=1,
+            note_saved=False,
         )
     ]
     assert posted_messages == [
@@ -751,6 +763,9 @@ def test_replay_cases_posts_runtime_fallback_continues_and_records_error() -> No
                 flag_category="correctness",
             ),
         ),
+        position=1,
+        total=2,
+        note_saved=False,
     )
     assert summary.posted_count == 1
     assert summary.fallback_error_count == 1

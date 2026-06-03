@@ -299,6 +299,9 @@ def replay_cases(
             battery_path=battery_path,
             qa_case_id=case.id,
             known_issues=known_issues,
+            position=index,
+            total=len(cases),
+            note_saved=False,
         )
         try:
             _interaction_id, final_response, reply_blocks = adapter.answer_and_render(
@@ -324,6 +327,7 @@ def replay_cases(
                     slack_assistant.build_runtime_fallback_blocks(
                         question=case.question,
                         interaction_id=interaction_id or "qa-runtime-fallback",
+                        qa_review_context=qa_review_context,
                     )
                 ),
             )
