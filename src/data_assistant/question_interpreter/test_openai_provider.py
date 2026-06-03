@@ -283,7 +283,18 @@ def test_openai_provider_schema_rejects_empty_implicit_filters() -> None:
     )
 
 
-def test_openai_provider_prompt_extracts_explicit_calendar_month_time_ranges() -> None:
+# Developer-prompt wiring guards.
+#
+# These guard the two regressions a unit test can actually catch: the prompt
+# stops being wired into the call, or the file is truncated so a whole section
+# vanishes. They do NOT pin prose — content equality is checked against the file
+# itself, so rewording the guidance never false-fails. Whether the model obeys
+# the guidance (classifies rank, picks one date field, etc.) is a behavioral
+# question, guarded only by the manual live_eval suite (live_eval.py) run before
+# shipping a prompt change. Do not re-add substring pins on guidance sentences:
+# they break on rephrase and guard nothing the live eval doesn't already cover.
+def _captured_input_messages() -> list[dict[str, str]]:
+    """Return the input messages the provider sends for a canonical question."""
     parse_calls: list[dict[str, object]] = []
 
     class FakeParsedResponse:
@@ -293,214 +304,43 @@ def test_openai_provider_prompt_extracts_explicit_calendar_month_time_ranges() -
         FakeParsedResponse(),
         parse_calls=parse_calls,
     )
-
     provider.propose_question_frame(
         question=test_support.CANONICAL_DATA_QUESTION,
         semantic_layer_context={"datasets": []},
     )
+    return typing.cast(list[dict[str, str]], parse_calls[0]["input"])
 
-    input_messages = typing.cast(
-        list[dict[str, str]],
-        parse_calls[0]["input"],
+
+def test_provider_wires_developer_prompt_file_as_first_message() -> None:
+    """The provider sends the developer-prompt file, verbatim, as message[0].
+
+    Compared against the file via developer_message, so this tracks any prompt
+    edit instead of pinning its wording.
+    """
+    developer_message = _captured_input_messages()[0]
+    expected = openai_support.developer_message(
+        openai_provider._QUESTION_INTERPRETER_DEVELOPER_PROMPT  # pyright: ignore[reportPrivateUsage]
     )
-    developer_prompt = input_messages[0]["content"]
-    assert 'Use intent "summarize"' in developer_prompt
-    assert '"what was ..."' in developer_prompt
-    assert '"show ..."' in developer_prompt
-    assert '"summarize ..."' in developer_prompt
-    assert "complete calendar month and year" in developer_prompt
-    assert "January 2026" in developer_prompt
-    assert "2026-01-01" in developer_prompt
-    assert "2026-01-31" in developer_prompt
-    assert "Use only business-facing Semantic Layer labels supplied in" in (
-        developer_prompt
-    )
-    assert "semantic_layer_context" in developer_prompt
-    assert "may come from semantic_layer_context even when" in developer_prompt
-    assert "When the selected metric_context has exactly one date" in (developer_prompt)
-    assert "use that field for a complete calendar month and year" in (developer_prompt)
-    assert "Never omit a complete calendar month" in developer_prompt
-    assert 'operation "range_filter", field "order date"' in developer_prompt
-    assert "not inventing a time range" in developer_prompt
+    assert developer_message["role"] == "developer"
+    assert developer_message["content"] == expected["content"]
+    assert developer_message["content"].strip() != ""
 
 
-def test_openai_provider_prompt_chooses_one_relevant_date_field() -> None:
-    parse_calls: list[dict[str, object]] = []
+def test_developer_prompt_retains_all_sections() -> None:
+    """Truncation tripwire: every structural section header survives.
 
-    class FakeParsedResponse:
-        output_parsed = test_support.question_frame_proposal()
-
-    provider = _openai_provider_returning(
-        FakeParsedResponse(),
-        parse_calls=parse_calls,
-    )
-
-    provider.propose_question_frame(
-        question="What was customer count by customer region in January 2026?",
-        semantic_layer_context={"datasets": []},
-    )
-
-    input_messages = typing.cast(
-        list[dict[str, str]],
-        parse_calls[0]["input"],
-    )
-    developer_prompt = input_messages[0]["content"]
-    assert "One explicit date phrase should produce at most one date" in (
-        developer_prompt
-    )
-    assert "choose the one most" in developer_prompt
-    assert "related to the requested metric and grouping labels" in developer_prompt
-    assert "Do not add date filters" in developer_prompt
-    assert "for unrelated fields just because" in developer_prompt
-    assert "merely available in the Semantic Layer" in developer_prompt
-    assert "use the metric_context" in developer_prompt
-    assert "outside the selected metric's compatible fields" in developer_prompt
-    assert "field that appears only under a different metric_context" in (
-        developer_prompt
-    )
-    assert "or exclude_filter with values []" in developer_prompt
-    assert "values []" in developer_prompt
-    assert "What was customer count by customer region in January 2026?" in (
-        developer_prompt
-    )
-    assert 'operation "range_filter", field "created date"' in developer_prompt
-
-
-def test_openai_provider_prompt_forbids_implicit_empty_filters() -> None:
-    parse_calls: list[dict[str, object]] = []
-
-    class FakeParsedResponse:
-        output_parsed = test_support.question_frame_proposal()
-
-    provider = _openai_provider_returning(
-        FakeParsedResponse(),
-        parse_calls=parse_calls,
-    )
-
-    provider.propose_question_frame(
-        question="What was total revenue by region?",
-        semantic_layer_context={"datasets": []},
-    )
-
-    input_messages = typing.cast(
-        list[dict[str, str]],
-        parse_calls[0]["input"],
-    )
-    developer_prompt = input_messages[0]["content"]
-    assert "field_operations must be minimal and exhaustive" in developer_prompt
-    assert "field operation is not directly supported" in developer_prompt
-    assert "directly supported by words in the Data" in developer_prompt
-    assert "to represent a grouping label" in developer_prompt
-    assert "no explicit included or excluded value is present" in developer_prompt
-    assert "do not invent a range_filter" in developer_prompt
-    assert 'For "What was total revenue by region?"' in developer_prompt
-    assert "exactly one field_operation" in developer_prompt
-    assert 'operation "group_by", field "region"' in developer_prompt
-    assert 'Do not add any "order date" operation' in developer_prompt
-    assert 'range_filter for "order date" with null bounds' in developer_prompt
-    assert "Semantic Layer examples and available fields describe" in developer_prompt
-
-
-def test_openai_provider_prompt_classifies_rank_as_unsupported_intent() -> None:
-    parse_calls: list[dict[str, object]] = []
-
-    class FakeParsedResponse:
-        output_parsed = test_support.question_frame_proposal(intent="rank")
-
-    provider = _openai_provider_returning(
-        FakeParsedResponse(),
-        parse_calls=parse_calls,
-    )
-
-    provider.propose_question_frame(
-        question="Which region had the highest total revenue in January 2026?",
-        semantic_layer_context={"datasets": []},
-    )
-
-    input_messages = typing.cast(
-        list[dict[str, str]],
-        parse_calls[0]["input"],
-    )
-    developer_prompt = input_messages[0]["content"]
-    assert 'Use intent "rank" for unsupported top or bottom Data Questions' in (
-        developer_prompt
-    )
-    assert "highest, lowest, most, least, biggest, smallest, top, or bottom" in (
-        developer_prompt
-    )
-    assert (
-        'For "Which region had the highest total revenue in January 2026?"'
-        in developer_prompt
-    )
-    assert '"rank" and the same field_operations' in developer_prompt
-    assert "Do not collapse that question into" in developer_prompt
-
-
-def test_openai_provider_prompt_describes_dimension_value_filters() -> None:
-    parse_calls: list[dict[str, object]] = []
-
-    class FakeParsedResponse:
-        output_parsed = test_support.question_frame_proposal()
-
-    provider = _openai_provider_returning(
-        FakeParsedResponse(),
-        parse_calls=parse_calls,
-    )
-
-    provider.propose_question_frame(
-        question="What was total revenue in the West region for all time?",
-        semantic_layer_context={"datasets": []},
-    )
-
-    input_messages = typing.cast(
-        list[dict[str, str]],
-        parse_calls[0]["input"],
-    )
-    developer_prompt = input_messages[0]["content"]
-    assert "Use include_filter when the user asks for one concrete value" in (
-        developer_prompt
-    )
-    assert '"in the <value> <field label>"' in developer_prompt
-    assert "requested value into values" in developer_prompt
-    assert (
-        'For a dimension-value filter question like "What was total revenue'
-        in developer_prompt
-    )
-    assert 'operation "include_filter", field "region"' in developer_prompt
-    assert 'values ["West"]' in developer_prompt
-    assert "Apply the same pattern to" in developer_prompt
-
-
-def test_openai_provider_prompt_states_phrasing_independent_metric_rule() -> None:
-    parse_calls: list[dict[str, object]] = []
-
-    class FakeParsedResponse:
-        output_parsed = test_support.question_frame_proposal()
-
-    provider = _openai_provider_returning(
-        FakeParsedResponse(),
-        parse_calls=parse_calls,
-    )
-
-    provider.propose_question_frame(
-        question="What was total net revenue by store region?",
-        semantic_layer_context={"datasets": []},
-    )
-
-    input_messages = typing.cast(
-        list[dict[str, str]],
-        parse_calls[0]["input"],
-    )
-    developer_prompt = input_messages[0]["content"]
-    assert "Decide the metric by checking available_metric_labels only" in (
-        developer_prompt
-    )
-    assert "not depend on whether time, filters, or grouping are present" in (
-        developer_prompt
-    )
-    assert "even when the wording contains a qualifier" in developer_prompt
-    assert "phrasing- and time-independent" in developer_prompt
-    assert "Never flag an exact available label" in developer_prompt
+    Headers are stable structure, not guidance prose, so this catches a gutted
+    or truncated prompt without breaking when wording changes.
+    """
+    developer_prompt = _captured_input_messages()[0]["content"]
+    for header in (
+        "## Intent",
+        "## Metric and ambiguity",
+        "## Field operations",
+        "## Dates",
+        "## Examples",
+    ):
+        assert header in developer_prompt
 
 
 def test_openai_provider_maps_refusal_to_provider_failure() -> None:
