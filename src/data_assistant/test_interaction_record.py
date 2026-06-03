@@ -3,7 +3,7 @@
 These exercise the contract-aware ``build_interaction_record`` /
 ``build_error_record`` mapping directly against fabricated workflow traces --
 no Slack edge, no adapter, no file I/O. The end-to-end "the adapter appends one
-sanitized line" behavior stays in ``test_slack_assistant.py``; here we pin the
+sanitized line" behavior stays in ``slack/test_adapter.py``; here we pin the
 record SHAPE (and its sanitization) at the unit boundary that owns it.
 """
 
