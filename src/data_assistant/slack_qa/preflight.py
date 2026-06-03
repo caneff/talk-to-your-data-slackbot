@@ -10,9 +10,9 @@ It orchestrates, but does not own, the sidecar: the JSONL **data store**
 (load/prune/write) lives in ``known_qa_issues``; this module reads and updates
 it through that store's API.
 
-Dependency direction is one-way: this module imports ``qa_battery`` (for the
-:class:`~data_assistant.qa_battery.QACase` type) and ``known_qa_issues`` (the
-store); neither imports back, so there is no cycle.
+Dependency direction is one-way: this module imports ``battery`` (for the
+:class:`~data_assistant.slack_qa.battery.QACase` type) and ``known_qa_issues``
+(the store); neither imports back, so there is no cycle.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ import subprocess
 import typing
 
 import data_assistant.known_qa_issues as known_qa_issues
-import data_assistant.qa_battery as qa_battery
+import data_assistant.slack_qa.battery as qa_battery
 
 
 @dataclasses.dataclass(frozen=True)

@@ -16,7 +16,7 @@ import pytest
 
 import data_assistant.assistant_thread_pointer as assistant_thread_pointer
 import data_assistant.known_qa_issues as known_qa_issues
-import data_assistant.slack_qa_driver as slack_qa_driver
+import data_assistant.slack_qa.driver as slack_qa_driver
 import data_assistant.workflow.contracts as contracts
 
 

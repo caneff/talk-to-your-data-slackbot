@@ -38,14 +38,14 @@ import typing
 import dotenv
 
 import data_assistant.assistant_thread_pointer as assistant_thread_pointer
-import data_assistant.cli_common as cli_common
-import data_assistant.composition as composition
 import data_assistant.interaction_record as interaction_record
 import data_assistant.known_qa_issues as known_qa_issues
-import data_assistant.qa_battery as qa_battery
-import data_assistant.qa_preflight as qa_preflight
 import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.slack as slack_assistant
+import data_assistant.slack.cli_common as cli_common
+import data_assistant.slack.composition as composition
+import data_assistant.slack_qa.battery as qa_battery
+import data_assistant.slack_qa.preflight as qa_preflight
 import data_assistant.workflow.contracts as contracts
 
 DEFAULT_BATTERY_PATH: typing.Final[str] = "docs/qa-retail-questions.md"

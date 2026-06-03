@@ -10,8 +10,8 @@ import textwrap
 
 import pytest
 
-import data_assistant.qa_battery as qa_battery
-import data_assistant.slack_qa_driver as slack_qa_driver
+import data_assistant.slack_qa.battery as qa_battery
+import data_assistant.slack_qa.driver as slack_qa_driver
 
 
 def test_parse_battery_cases_returns_identified_top_level_cases() -> None:

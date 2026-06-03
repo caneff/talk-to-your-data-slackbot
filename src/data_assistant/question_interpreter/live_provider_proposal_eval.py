@@ -12,10 +12,10 @@ import typing
 
 import dotenv
 
-import data_assistant.composition as composition
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.question_interpreter.provider_proposal_eval as proposal_eval
 import data_assistant.semantic_layer.loader as semantic_layer_loader
+import data_assistant.slack.composition as composition
 
 
 def main(

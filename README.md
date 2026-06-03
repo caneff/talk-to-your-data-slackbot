@@ -142,7 +142,7 @@ Slack references:
 Install dependencies and start the adapter:
 
 ```bash
-uv run python -m data_assistant.slack_runtime
+uv run python -m data_assistant.slack.runtime_main
 ```
 
 Startup requires `OPENAI_API_KEY`. Invalid structured output is retried once by
@@ -158,7 +158,7 @@ To run the same Slack bot against a different Semantic Layer and DuckDB
 location, pass runtime data flags:
 
 ```bash
-uv run python -m data_assistant.slack_runtime --semantic-layer-path examples/retail_ops_demo/semantic_layer --duckdb-path :memory: --seed-sql-path examples/retail_ops_demo/seeds/retail_ops_seed.sql
+uv run python -m data_assistant.slack.runtime_main --semantic-layer-path examples/retail_ops_demo/semantic_layer --duckdb-path :memory: --seed-sql-path examples/retail_ops_demo/seeds/retail_ops_seed.sql
 ```
 
 `--seed-sql-path` is optional for an existing DuckDB file. It is useful for demo
@@ -189,7 +189,7 @@ docker run --env-file .env talk-to-your-data-slackbot:local
 The Docker image starts the Retail Operations demo by default, using the
 standalone Semantic Layer and deterministic DuckDB seed under
 `examples/retail_ops_demo/`. The container still runs
-`python -m data_assistant.slack_runtime`, so the Slack app from
+`python -m data_assistant.slack.runtime_main`, so the Slack app from
 `slack-app-manifest.yaml` is still required. Socket Mode opens an outbound
 connection to Slack and binds no inbound port, so no `-p` flag is needed for
 local Docker runs.
@@ -197,7 +197,7 @@ local Docker runs.
 Override the command only if you want the tiny local smoke-test fixture instead:
 
 ```bash
-docker run --env-file .env talk-to-your-data-slackbot:local python -m data_assistant.slack_runtime
+docker run --env-file .env talk-to-your-data-slackbot:local python -m data_assistant.slack.runtime_main
 ```
 
 ## Host on Render (time-boxed demo)
@@ -249,7 +249,7 @@ A no-flag app run loads the **Retail Operations** layer
 an in-memory DuckDB. (The library/test default stays on the Commerce example;
 the retail default is an app-run concern only — see ADR-0001.)
 
-1. Start the adapter with `uv run python -m data_assistant.slack_runtime`.
+1. Start the adapter with `uv run python -m data_assistant.slack.runtime_main`.
 2. Open a DM with the app in Slack.
 3. Send a supported question. The retail demo data answers net revenue by store
    region, so use:
@@ -370,7 +370,7 @@ path one question at a time, posting each Final Response **as the bot** into an
 assistant thread so you read it and press the existing flag buttons. Flags land
 in the shared Interaction Log and feed the `triage-flagged-interactions` skill.
 It is the recurring generator that refills the triage pipeline with observed
-failures. See `src/data_assistant/slack_qa_driver.py` and **ADR-0016**.
+failures. See `src/data_assistant/slack_qa/driver.py` and **ADR-0016**.
 
 The same agent guard applies: it runs the live OpenAI answer path and costs API
 money, so run it only when you explicitly want a live QA pass — never during
@@ -384,7 +384,7 @@ Step by step:
    you will run the driver from:**
 
    ```bash
-   uv run python -m data_assistant.slack_runtime
+   uv run python -m data_assistant.slack.runtime_main
    ```
 
    The driver posts the answers, but the running bot owns the flag-button
@@ -413,7 +413,7 @@ Step by step:
    posts into the thread you just opened — no ids needed):
 
    ```bash
-   uv run python -m data_assistant.slack_qa_driver
+   uv run python -m data_assistant.slack_qa.driver
    ```
 
    `--channel <CHANNEL>` and `--thread-ts <THREAD_TS>` remain as explicit

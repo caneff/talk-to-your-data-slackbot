@@ -11,8 +11,8 @@ import pathlib
 import pytest
 
 import data_assistant.known_qa_issues as known_qa_issues
-import data_assistant.qa_battery as qa_battery
-import data_assistant.qa_preflight as qa_preflight
+import data_assistant.slack_qa.battery as qa_battery
+import data_assistant.slack_qa.preflight as qa_preflight
 
 
 def test_resolve_known_issues_path_honors_override() -> None:
