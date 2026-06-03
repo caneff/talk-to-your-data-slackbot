@@ -142,14 +142,22 @@ def preflight_known_issues(
     is_issue_open: collections_abc.Callable[[int], bool] | None = None,
 ) -> None:
     """Create, validate, and optionally prune the Known QA Issue sidecar."""
-    if any(case.id is None for case in cases):
+    identified_case_ids = [case.id for case in cases if case.id is not None]
+    if not identified_case_ids:
         return
+    if len(identified_case_ids) != len(cases):
+        raise ValueError(
+            "Mixed identified and unidentified QA cases: either give every "
+            "battery question a '[qa-case-id]' or use only legacy "
+            "unidentified bullets."
+        )
 
     sidecar_path = resolve_known_issues_path(
         battery_path=battery_path,
         known_issues_path=known_issues_path,
     )
-    case_ids = [typing.cast("str", case.id) for case in cases]
+    sidecar_existed = sidecar_path.exists()
+    case_ids = list(identified_case_ids)
     sidecar = known_qa_issues.load_sidecar(
         sidecar_path,
         valid_case_ids=case_ids,
@@ -158,12 +166,22 @@ def preflight_known_issues(
     if skip_prune:
         return
     issue_is_open = is_issue_open or _github_issue_is_open
-    pruned = known_qa_issues.prune_sidecar(
+    open_issue_numbers: set[int] = set()
+    for issue_number in known_qa_issues.issue_numbers(sidecar):
+        try:
+            if issue_is_open(issue_number):
+                open_issue_numbers.add(issue_number)
+        except Exception as exc:
+            raise known_qa_issues.KnownQAIssuePruneError(
+                "Failed to prune Known QA Issue sidecar for "
+                f"issue #{issue_number}: {exc}"
+            ) from exc
+    pruned = known_qa_issues.prune_sidecar_using_open_issue_numbers(
         sidecar,
         valid_case_ids=case_ids,
-        is_issue_open=issue_is_open,
+        open_issue_numbers=open_issue_numbers,
     )
-    if pruned != sidecar:
+    if not sidecar_existed or pruned != sidecar:
         known_qa_issues.write_sidecar(sidecar_path, pruned)
 
 

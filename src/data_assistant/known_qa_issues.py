@@ -46,11 +46,9 @@ def load_sidecar(
     valid_case_ids: typing.Iterable[str],
     create_if_missing: bool = False,
 ) -> KnownQAIssueSidecar:
-    """Load one sidecar file, optionally creating an empty v1 file first."""
+    """Load one sidecar file, optionally allowing a missing file in memory."""
     if create_if_missing and not path.exists():
-        sidecar = KnownQAIssueSidecar(version=SIDE_CAR_VERSION, questions={})
-        write_sidecar(path, sidecar)
-        return sidecar
+        return KnownQAIssueSidecar(version=SIDE_CAR_VERSION, questions={})
     raw_payload = json.loads(path.read_text(encoding="utf-8"))
     return _validate_sidecar(raw_payload, valid_case_ids=valid_case_ids)
 
@@ -118,6 +116,43 @@ def prune_sidecar(
     is_issue_open: typing.Callable[[int], bool],
 ) -> KnownQAIssueSidecar:
     """Remove closed issues, stale case ids, and empty question keys."""
+    open_issue_numbers: set[int] = set()
+    for issue_number in issue_numbers(sidecar):
+        try:
+            if is_issue_open(issue_number):
+                open_issue_numbers.add(issue_number)
+        except Exception as exc:  # pragma: no cover - exact branch in tests
+            raise KnownQAIssuePruneError(
+                "Failed to prune Known QA Issue sidecar for "
+                f"issue #{issue_number}: {exc}"
+            ) from exc
+    return prune_sidecar_using_open_issue_numbers(
+        sidecar,
+        valid_case_ids=valid_case_ids,
+        open_issue_numbers=open_issue_numbers,
+    )
+
+
+def issue_numbers(sidecar: KnownQAIssueSidecar) -> tuple[int, ...]:
+    """Return unique issue numbers referenced by one sidecar in first-seen order."""
+    seen_issue_numbers: set[int] = set()
+    ordered_issue_numbers: list[int] = []
+    for issues in sidecar.questions.values():
+        for issue in issues:
+            if issue.issue_number in seen_issue_numbers:
+                continue
+            seen_issue_numbers.add(issue.issue_number)
+            ordered_issue_numbers.append(issue.issue_number)
+    return tuple(ordered_issue_numbers)
+
+
+def prune_sidecar_using_open_issue_numbers(
+    sidecar: KnownQAIssueSidecar,
+    *,
+    valid_case_ids: typing.Iterable[str],
+    open_issue_numbers: typing.AbstractSet[int],
+) -> KnownQAIssueSidecar:
+    """Remove closed issues, stale case ids, and empty question keys."""
     valid_case_id_set = set(valid_case_ids)
     pruned_questions: dict[str, list[KnownQAIssue]] = {}
     for question_id, issues in sidecar.questions.items():
@@ -125,14 +160,8 @@ def prune_sidecar(
             continue
         kept_issues: list[KnownQAIssue] = []
         for issue in issues:
-            try:
-                if is_issue_open(issue.issue_number):
-                    kept_issues.append(issue)
-            except Exception as exc:  # pragma: no cover - exact branch in tests
-                raise KnownQAIssuePruneError(
-                    "Failed to prune Known QA Issue sidecar for "
-                    f"issue #{issue.issue_number}: {exc}"
-                ) from exc
+            if issue.issue_number in open_issue_numbers:
+                kept_issues.append(issue)
         if kept_issues:
             pruned_questions[question_id] = kept_issues
     return KnownQAIssueSidecar(version=sidecar.version, questions=pruned_questions)

@@ -19,7 +19,7 @@ def test_default_sidecar_path_replaces_battery_suffix() -> None:
     )
 
 
-def test_load_sidecar_creates_empty_version_one_file_for_missing_strict_battery(
+def test_load_sidecar_returns_empty_version_one_sidecar_for_missing_file(
     tmp_path: pathlib.Path,
 ) -> None:
     sidecar_path = tmp_path / "qa-retail-questions.known-issues.json"
@@ -31,10 +31,7 @@ def test_load_sidecar_creates_empty_version_one_file_for_missing_strict_battery(
     )
 
     assert sidecar == _sidecar({})
-    assert known_qa_issues.load_sidecar(
-        sidecar_path,
-        valid_case_ids=["case-a", "case-b"],
-    ) == _sidecar({})
+    assert not sidecar_path.exists()
 
 
 @pytest.mark.parametrize(
@@ -188,6 +185,24 @@ def test_prune_sidecar_surfaces_issue_lookup_failures() -> None:
             valid_case_ids=["case-a"],
             is_issue_open=boom,
         )
+
+
+def test_prune_sidecar_using_open_issue_numbers_is_pure_transform() -> None:
+    sidecar = _sidecar(
+        {
+            "case-a": [_issue(165), _issue(166, "formatting")],
+            "missing-case": [_issue(167, "investigate")],
+            "case-empty": [_issue(168)],
+        }
+    )
+
+    pruned = known_qa_issues.prune_sidecar_using_open_issue_numbers(
+        sidecar,
+        valid_case_ids=["case-a", "case-empty"],
+        open_issue_numbers={165},
+    )
+
+    assert pruned == _sidecar({"case-a": [_issue(165)]})
 
 
 def test_record_known_issue_adds_new_entry() -> None:
