@@ -56,12 +56,31 @@ _NO_THREAD_MESSAGE: typing.Final[str] = (
 _IDENTIFIED_CASE_PATTERN: typing.Final[re.Pattern[str]] = re.compile(
     r"^\[(?P<id>[^\]]+)\]\s+(?P<question>.+)$"
 )
+QA_REVIEW_START_MARKER: typing.Final[str] = "QA review run started."
+RUNTIME_FALLBACK_MESSAGE: typing.Final[str] = slack_assistant.RUNTIME_FALLBACK_MESSAGE
 
 
 @dataclasses.dataclass(frozen=True)
 class QACase:
     id: str | None
     question: str
+
+
+@dataclasses.dataclass(frozen=True)
+class PreflightKnownIssuesResult:
+    known_issues_by_case_id: dict[str, tuple[known_qa_issues.KnownQAIssue, ...]]
+    pruned_count: int
+
+
+@dataclasses.dataclass(frozen=True)
+class ReplaySummary:
+    posted_count: int
+    skipped_known_issue_count: int
+    pruned_count: int
+    fallback_error_count: int
+
+
+QAReviewContext = slack_assistant.QAReviewContext
 
 
 class ReplayAdapter(typing.Protocol):
@@ -71,9 +90,21 @@ class ReplayAdapter(typing.Protocol):
         text: str,
         user: str,
         qa_case_id: str | None = None,
+        qa_review_context: slack_assistant.QAReviewContext | None = None,
         set_status: slack_assistant.StatusSetter,
     ) -> tuple[str, contracts.FinalResponse, tuple[contracts.SlackBlock, ...]]:
         """Run one QA case through shared assistant path and return render data."""
+        ...
+
+    def record_runtime_error(
+        self,
+        *,
+        question: str,
+        user: str,
+        error: BaseException,
+        qa_review_context: slack_assistant.QAReviewContext | None = None,
+    ) -> str:
+        """Append one QA runtime error record and return its interaction id."""
         ...
 
 
@@ -140,11 +171,11 @@ def preflight_known_issues(
     known_issues_path: pathlib.Path | None,
     skip_prune: bool,
     is_issue_open: collections_abc.Callable[[int], bool] | None = None,
-) -> None:
+) -> PreflightKnownIssuesResult:
     """Create, validate, and optionally prune the Known QA Issue sidecar."""
     identified_case_ids = [case.id for case in cases if case.id is not None]
     if not identified_case_ids:
-        return
+        return PreflightKnownIssuesResult(known_issues_by_case_id={}, pruned_count=0)
     if len(identified_case_ids) != len(cases):
         raise ValueError(
             "Mixed identified and unidentified QA cases: either give every "
@@ -164,7 +195,12 @@ def preflight_known_issues(
         create_if_missing=True,
     )
     if skip_prune:
-        return
+        return PreflightKnownIssuesResult(
+            known_issues_by_case_id={
+                case_id: tuple(issues) for case_id, issues in sidecar.questions.items()
+            },
+            pruned_count=0,
+        )
     issue_is_open = is_issue_open or _github_issue_is_open
     open_issue_numbers: set[int] = set()
     for issue_number in known_qa_issues.issue_numbers(sidecar):
@@ -181,8 +217,17 @@ def preflight_known_issues(
         valid_case_ids=case_ids,
         open_issue_numbers=open_issue_numbers,
     )
+    pruned_count = sum(len(issues) for issues in sidecar.questions.values()) - sum(
+        len(issues) for issues in pruned.questions.values()
+    )
     if not sidecar_existed or pruned != sidecar:
         known_qa_issues.write_sidecar(sidecar_path, pruned)
+    return PreflightKnownIssuesResult(
+        known_issues_by_case_id={
+            case_id: tuple(issues) for case_id, issues in pruned.questions.items()
+        },
+        pruned_count=pruned_count,
+    )
 
 
 def resolve_thread_target(
@@ -223,26 +268,89 @@ def replay_cases(
     thread_ts: str,
     post_message: collections_abc.Callable[..., object],
     pause: collections_abc.Callable[[str], str],
-) -> None:
+    interactive: bool = True,
+    battery_path: str,
+    known_issues_by_case_id: collections_abc.Mapping[
+        str, collections_abc.Sequence[known_qa_issues.KnownQAIssue]
+    ],
+    record_error: collections_abc.Callable[..., str | None],
+    skip_known_issues: bool = False,
+    preflight_pruned_count: int = 0,
+) -> ReplaySummary:
     """Replay parsed cases through shared adapter path and post each reply."""
+    posted_count = 0
+    skipped_known_issue_count = 0
+    fallback_error_count = 0
+    post_message(
+        channel=channel,
+        thread_ts=thread_ts,
+        text=QA_REVIEW_START_MARKER,
+    )
     for index, case in enumerate(cases, start=1):
+        known_issues = tuple(known_issues_by_case_id.get(case.id or "", ()))
+        if skip_known_issues and known_issues:
+            skipped_known_issue_count += 1
+            continue
         case_label = (
             f"{case.question} ({case.id})" if case.id is not None else case.question
         )
         print(f"[{index}/{len(cases)}] {case_label}")
-        _interaction_id, final_response, reply_blocks = adapter.answer_and_render(
-            text=case.question,
-            user="qa_driver",
+        qa_review_context = QAReviewContext(
+            battery_path=battery_path,
             qa_case_id=case.id,
-            set_status=_quietly_set_status,
+            known_issues=known_issues,
         )
+        try:
+            _interaction_id, final_response, reply_blocks = adapter.answer_and_render(
+                text=case.question,
+                user="qa_driver",
+                qa_case_id=case.id,
+                qa_review_context=qa_review_context,
+                set_status=_quietly_set_status,
+            )
+        except Exception as error:
+            fallback_error_count += 1
+            interaction_id = record_error(
+                question=case.question,
+                user="qa_driver",
+                error=error,
+                qa_review_context=qa_review_context,
+            )
+            post_message(
+                channel=channel,
+                thread_ts=thread_ts,
+                text=RUNTIME_FALLBACK_MESSAGE,
+                blocks=list(
+                    slack_assistant.build_runtime_fallback_blocks(
+                        question=case.question,
+                        interaction_id=interaction_id or "qa-runtime-fallback",
+                    )
+                ),
+            )
+            continue
         post_message(
             channel=channel,
             thread_ts=thread_ts,
             text=final_response.text,
             blocks=list(reply_blocks),
         )
-        pause("  posted. Press Enter for the next question... ")
+        posted_count += 1
+        if interactive:
+            pause("  posted. Press Enter for the next question... ")
+    summary = ReplaySummary(
+        posted_count=posted_count,
+        skipped_known_issue_count=skipped_known_issue_count,
+        pruned_count=preflight_pruned_count,
+        fallback_error_count=fallback_error_count,
+    )
+    print(
+        "Summary: "
+        f"posted={summary.posted_count} "
+        f"skipped_known_issues={summary.skipped_known_issue_count} "
+        f"pruned={summary.pruned_count} "
+        f"fallback_errors={summary.fallback_error_count}"
+    )
+    return summary
 
 
 def _build_web_client(token: str) -> typing.Any:
@@ -284,7 +392,7 @@ def main(
         print(f"No questions found in battery {args.battery}.", file=sys.stderr)
         return 1
     try:
-        preflight_known_issues(
+        preflight = preflight_known_issues(
             battery_path=pathlib.Path(args.battery),
             cases=cases,
             known_issues_path=args.known_issues_path,
@@ -329,6 +437,12 @@ def main(
         thread_ts=thread_ts,
         post_message=client.chat_postMessage,
         pause=input,
+        interactive=args.interactive,
+        battery_path=args.battery,
+        known_issues_by_case_id=preflight.known_issues_by_case_id,
+        record_error=adapter.record_runtime_error,
+        skip_known_issues=args.skip_known_issues,
+        preflight_pruned_count=preflight.pruned_count,
     )
 
     return 0
@@ -418,6 +532,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "Skip preflight pruning of closed or stale Known QA Issue entries "
             "before posting any Slack messages."
         ),
+    )
+    parser.add_argument(
+        "--skip-known-issues",
+        action="store_true",
+        help=(
+            "Skip any QA case that still has at least one Known QA Issue after "
+            "preflight pruning."
+        ),
+    )
+    parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Pause for Enter between posted QA cases.",
     )
     parser.add_argument(
         "--env-file",
