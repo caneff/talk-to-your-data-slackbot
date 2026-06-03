@@ -1,5 +1,6 @@
 import collections.abc
 import io
+import json
 import pathlib
 import types
 import typing
@@ -35,6 +36,10 @@ def _recording_run_live_eval(
         sample_count: int = live_eval.DEFAULT_SAMPLE_COUNT,
         progress: bool = False,
         progress_file: typing.TextIO | None = None,
+        failures_file: typing.TextIO | None = None,
+        start_at: int = 1,
+        stop_at: int | None = None,
+        only_cases: tuple[str, ...] | None = None,
     ) -> live_eval.LiveEvalReport:
         calls.append(
             types.SimpleNamespace(
@@ -44,11 +49,34 @@ def _recording_run_live_eval(
                 sample_count=sample_count,
                 progress=progress,
                 progress_file=progress_file,
+                failures_file=failures_file,
+                start_at=start_at,
+                stop_at=stop_at,
+                only_cases=only_cases,
             )
         )
         return live_eval.LiveEvalReport(total=0, passes=(), failures=())
 
     return _fake
+
+
+def _isolate_main_for_default_failures_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+) -> None:
+    """Chdir into ``tmp_path`` and stub the semantic-layer load.
+
+    ``main()`` opens a default failures file under ``eval_results/`` relative to
+    the cwd, so tests chdir into ``tmp_path`` to keep that artifact out of the
+    repo. The chdir would otherwise break the eager (relative-path) semantic
+    layer load, so it is stubbed to a small in-memory catalog.
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        semantic_layer_loader,
+        "load_semantic_layer",
+        lambda path=None: semantic_layer_testing.semantic_layer_with_table(),
+    )
 
 
 def test_compare_proposal_matches_exact_meaning() -> None:
@@ -453,6 +481,7 @@ def test_main_loads_openai_config_from_dotenv(
     env_file = tmp_path / ".env"
     env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    _isolate_main_for_default_failures_file(monkeypatch, tmp_path)
 
     class FakeProvider:
         def propose_question_frame(
@@ -499,6 +528,7 @@ def test_main_passes_verbose_flag_to_report_writer(
     env_file = tmp_path / ".env"
     env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    _isolate_main_for_default_failures_file(monkeypatch, tmp_path)
     captured_verbose: list[bool] = []
 
     class FakeProvider:
@@ -557,6 +587,7 @@ def test_main_passes_samples_flag_to_live_eval(
     env_file = tmp_path / ".env"
     env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    _isolate_main_for_default_failures_file(monkeypatch, tmp_path)
 
     class FakeProvider:
         def propose_question_frame(
@@ -613,6 +644,7 @@ def test_main_enables_progress_by_default_and_accepts_no_progress(
     env_file = tmp_path / ".env"
     env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    _isolate_main_for_default_failures_file(monkeypatch, tmp_path)
 
     class FakeProvider:
         def propose_question_frame(
@@ -672,6 +704,7 @@ def test_main_returns_one_when_live_eval_report_has_failures(
     env_file = tmp_path / ".env"
     env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    _isolate_main_for_default_failures_file(monkeypatch, tmp_path)
 
     class FakeProvider:
         def propose_question_frame(
@@ -699,8 +732,13 @@ def test_main_returns_one_when_live_eval_report_has_failures(
         sample_count: int = live_eval.DEFAULT_SAMPLE_COUNT,
         progress: bool = False,
         progress_file: typing.TextIO | None = None,
+        failures_file: typing.TextIO | None = None,
+        start_at: int = 1,
+        stop_at: int | None = None,
+        only_cases: tuple[str, ...] | None = None,
     ) -> live_eval.LiveEvalReport:
         del provider, semantic_layer, cases, sample_count, progress, progress_file
+        del failures_file, start_at, stop_at, only_cases
         return live_eval.LiveEvalReport(
             total=1,
             passes=(),
@@ -898,6 +936,7 @@ def test_main_loads_real_semantic_layer_for_live_eval(
     env_file = tmp_path / ".env"
     env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)
     loaded_semantic_layer = semantic_layer_testing.semantic_layer_with_table()
     captured_paths: list[pathlib.Path] = []
 
@@ -949,3 +988,534 @@ def test_main_loads_real_semantic_layer_for_live_eval(
     assert exit_code == 0
     assert [call.semantic_layer for call in calls] == [loaded_semantic_layer]
     assert captured_paths == [slack_runtime.RETAIL_SEMANTIC_LAYER_PATH]
+
+
+def _named_case(name: str) -> live_eval.LiveEvalCase:
+    return live_eval.LiveEvalCase(
+        name=name,
+        question=f"question for {name}",
+        expected=test_support.question_frame_proposal(),
+    )
+
+
+def test_select_cases_defaults_to_full_enabled_list_with_absolute_indices() -> None:
+    enabled = (_named_case("a"), _named_case("b"), _named_case("c"))
+
+    selected = live_eval.select_cases(
+        enabled, start_at=1, stop_at=None, only_cases=None
+    )
+
+    assert [(index, case.name) for index, case in selected] == [
+        (1, "a"),
+        (2, "b"),
+        (3, "c"),
+    ]
+
+
+def test_select_cases_start_at_skips_leading_cases_keeping_absolute_index() -> None:
+    enabled = (_named_case("a"), _named_case("b"), _named_case("c"))
+
+    selected = live_eval.select_cases(
+        enabled, start_at=2, stop_at=None, only_cases=None
+    )
+
+    assert [(index, case.name) for index, case in selected] == [(2, "b"), (3, "c")]
+
+
+def test_select_cases_stop_at_is_inclusive() -> None:
+    enabled = (_named_case("a"), _named_case("b"), _named_case("c"), _named_case("d"))
+
+    selected = live_eval.select_cases(enabled, start_at=2, stop_at=3, only_cases=None)
+
+    assert [(index, case.name) for index, case in selected] == [(2, "b"), (3, "c")]
+
+
+def test_select_cases_only_cases_by_index() -> None:
+    enabled = (_named_case("a"), _named_case("b"), _named_case("c"))
+
+    selected = live_eval.select_cases(
+        enabled, start_at=1, stop_at=None, only_cases=("3", "1")
+    )
+
+    assert [(index, case.name) for index, case in selected] == [(1, "a"), (3, "c")]
+
+
+def test_select_cases_only_cases_by_name() -> None:
+    enabled = (_named_case("a"), _named_case("b"), _named_case("c"))
+
+    selected = live_eval.select_cases(
+        enabled, start_at=1, stop_at=None, only_cases=("c", "a")
+    )
+
+    assert [(index, case.name) for index, case in selected] == [(1, "a"), (3, "c")]
+
+
+def test_select_cases_only_cases_mixes_index_and_name_dedupes_enabled_order() -> None:
+    enabled = (_named_case("a"), _named_case("b"), _named_case("c"))
+
+    selected = live_eval.select_cases(
+        enabled, start_at=1, stop_at=None, only_cases=("c", "1", "a", "3")
+    )
+
+    assert [(index, case.name) for index, case in selected] == [(1, "a"), (3, "c")]
+
+
+def test_select_cases_only_cases_with_start_or_stop_raises() -> None:
+    enabled = (_named_case("a"), _named_case("b"))
+
+    with pytest.raises(ValueError):
+        live_eval.select_cases(enabled, start_at=2, stop_at=None, only_cases=("a",))
+
+
+def test_select_cases_unknown_name_raises() -> None:
+    enabled = (_named_case("a"), _named_case("b"))
+
+    with pytest.raises(ValueError):
+        live_eval.select_cases(enabled, start_at=1, stop_at=None, only_cases=("nope",))
+
+
+def test_select_cases_out_of_range_index_raises() -> None:
+    enabled = (_named_case("a"), _named_case("b"))
+
+    with pytest.raises(ValueError):
+        live_eval.select_cases(enabled, start_at=1, stop_at=None, only_cases=("3",))
+
+
+def test_select_cases_start_below_one_raises() -> None:
+    enabled = (_named_case("a"), _named_case("b"))
+
+    with pytest.raises(ValueError):
+        live_eval.select_cases(enabled, start_at=0, stop_at=None, only_cases=None)
+
+
+def test_select_cases_stop_below_start_raises() -> None:
+    enabled = (_named_case("a"), _named_case("b"), _named_case("c"))
+
+    with pytest.raises(ValueError):
+        live_eval.select_cases(enabled, start_at=3, stop_at=2, only_cases=None)
+
+
+def test_select_cases_start_beyond_enabled_raises() -> None:
+    enabled = (_named_case("a"), _named_case("b"))
+
+    with pytest.raises(ValueError):
+        live_eval.select_cases(enabled, start_at=3, stop_at=None, only_cases=None)
+
+
+def _failing_provider() -> question_interpreter.QuestionInterpreterProvider:
+    class FakeProvider:
+        def propose_question_frame(
+            self,
+            *,
+            question: str,
+            semantic_layer_context: dict[str, object],
+        ) -> live_eval.ProviderResult:
+            del semantic_layer_context
+            if question == "passing":
+                return test_support.question_frame_proposal()
+            if question == "bad metric":
+                return test_support.question_frame_proposal(metric="gross margin")
+            return question_interpreter.ProviderFailure(reason="provider offline")
+
+    return FakeProvider()
+
+
+def test_run_eval_streams_failure_line_with_locked_schema() -> None:
+    cases = (
+        live_eval.LiveEvalCase(
+            name="passing_case",
+            question="passing",
+            expected=test_support.question_frame_proposal(),
+        ),
+        live_eval.LiveEvalCase(
+            name="mismatch_case",
+            question="bad metric",
+            expected=test_support.question_frame_proposal(),
+        ),
+    )
+    failures_file = io.StringIO()
+
+    live_eval.run_live_question_interpreter_eval(
+        provider=_failing_provider(),
+        semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
+        cases=cases,
+        sample_count=3,
+        failures_file=failures_file,
+    )
+
+    lines = [line for line in failures_file.getvalue().splitlines() if line]
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record["case_number"] == 2
+    assert record["case_name"] == "mismatch_case"
+    assert record["question"] == "bad metric"
+    assert record["pass_count"] == 0
+    assert record["sample_count"] == 3
+    assert record["reasons"] == [
+        "sample 1: metric: expected 'total revenue', got 'gross margin'",
+        "sample 2: metric: expected 'total revenue', got 'gross margin'",
+        "sample 3: metric: expected 'total revenue', got 'gross margin'",
+    ]
+    assert record["expected"] == json.loads(
+        json.dumps(test_support.question_frame_proposal().model_dump())
+    )
+    assert record["actual"] == json.loads(
+        json.dumps(
+            test_support.question_frame_proposal(metric="gross margin").model_dump()
+        )
+    )
+
+
+def test_run_eval_streams_provider_failure_actual() -> None:
+    cases = (
+        live_eval.LiveEvalCase(
+            name="provider_failure_case",
+            question="provider failure",
+            expected=test_support.question_frame_proposal(),
+        ),
+    )
+    failures_file = io.StringIO()
+
+    live_eval.run_live_question_interpreter_eval(
+        provider=_failing_provider(),
+        semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
+        cases=cases,
+        sample_count=1,
+        failures_file=failures_file,
+    )
+
+    record = json.loads(failures_file.getvalue().strip())
+    assert record["case_number"] == 1
+    assert record["actual"] == {"provider_failure": "provider offline"}
+
+
+def test_run_eval_clean_run_leaves_empty_failures_file() -> None:
+    cases = (
+        live_eval.LiveEvalCase(
+            name="passing_case",
+            question="passing",
+            expected=test_support.question_frame_proposal(),
+        ),
+    )
+    failures_file = io.StringIO()
+
+    live_eval.run_live_question_interpreter_eval(
+        provider=_failing_provider(),
+        semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
+        cases=cases,
+        sample_count=2,
+        failures_file=failures_file,
+    )
+
+    assert failures_file.getvalue() == ""
+
+
+def test_run_eval_streams_multiple_failures_in_order() -> None:
+    cases = (
+        live_eval.LiveEvalCase(
+            name="mismatch_case",
+            question="bad metric",
+            expected=test_support.question_frame_proposal(),
+        ),
+        live_eval.LiveEvalCase(
+            name="passing_case",
+            question="passing",
+            expected=test_support.question_frame_proposal(),
+        ),
+        live_eval.LiveEvalCase(
+            name="provider_failure_case",
+            question="provider failure",
+            expected=test_support.question_frame_proposal(),
+        ),
+    )
+    failures_file = io.StringIO()
+
+    live_eval.run_live_question_interpreter_eval(
+        provider=_failing_provider(),
+        semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
+        cases=cases,
+        sample_count=1,
+        failures_file=failures_file,
+    )
+
+    records = [
+        json.loads(line) for line in failures_file.getvalue().splitlines() if line
+    ]
+    assert [(r["case_number"], r["case_name"]) for r in records] == [
+        (1, "mismatch_case"),
+        (3, "provider_failure_case"),
+    ]
+
+
+def test_run_eval_case_number_is_absolute_under_start_at() -> None:
+    cases = (
+        live_eval.LiveEvalCase(
+            name="passing_case",
+            question="passing",
+            expected=test_support.question_frame_proposal(),
+        ),
+        live_eval.LiveEvalCase(
+            name="mismatch_case",
+            question="bad metric",
+            expected=test_support.question_frame_proposal(),
+        ),
+    )
+    failures_file = io.StringIO()
+
+    report = live_eval.run_live_question_interpreter_eval(
+        provider=_failing_provider(),
+        semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
+        cases=cases,
+        sample_count=1,
+        failures_file=failures_file,
+        start_at=2,
+    )
+
+    assert report.total == 1
+    record = json.loads(failures_file.getvalue().strip())
+    assert record["case_number"] == 2
+    assert record["case_name"] == "mismatch_case"
+
+
+def test_run_eval_only_cases_runs_selected_subset() -> None:
+    cases = (
+        live_eval.LiveEvalCase(
+            name="passing_case",
+            question="passing",
+            expected=test_support.question_frame_proposal(),
+        ),
+        live_eval.LiveEvalCase(
+            name="mismatch_case",
+            question="bad metric",
+            expected=test_support.question_frame_proposal(),
+        ),
+    )
+
+    report = live_eval.run_live_question_interpreter_eval(
+        provider=_failing_provider(),
+        semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
+        cases=cases,
+        sample_count=1,
+        only_cases=("mismatch_case",),
+    )
+
+    assert report.total == 1
+    assert report.failed == 1
+    assert report.failures[0].case_name == "mismatch_case"
+
+
+def test_main_writes_failures_out_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    failures_path = tmp_path / "out.jsonl"
+
+    class FakeProvider:
+        def propose_question_frame(
+            self,
+            *,
+            question: str,
+            semantic_layer_context: dict[str, object],
+        ) -> live_eval.ProviderResult:
+            del question, semantic_layer_context
+            raise AssertionError("live eval runner is stubbed")
+
+    def fake_build_openai_provider(
+        environ: collections.abc.Mapping[str, str],
+    ) -> question_interpreter.QuestionInterpreterProvider:
+        return FakeProvider()
+
+    calls: list[types.SimpleNamespace] = []
+    monkeypatch.setattr(
+        live_eval.question_interpreter,
+        "build_openai_question_interpreter_provider",
+        fake_build_openai_provider,
+    )
+    monkeypatch.setattr(
+        live_eval,
+        "run_live_question_interpreter_eval",
+        _recording_run_live_eval(calls),
+    )
+
+    exit_code = live_eval.main(
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+        env_file=env_file,
+        argv=("--failures-out", str(failures_path)),
+    )
+
+    assert exit_code == 0
+    assert failures_path.exists()
+    assert len(calls) == 1
+    assert calls[0].failures_file is not None
+
+
+def test_main_default_failures_path_lands_under_eval_results(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    _isolate_main_for_default_failures_file(monkeypatch, tmp_path)
+
+    class FakeProvider:
+        def propose_question_frame(
+            self,
+            *,
+            question: str,
+            semantic_layer_context: dict[str, object],
+        ) -> live_eval.ProviderResult:
+            del question, semantic_layer_context
+            raise AssertionError("live eval runner is stubbed")
+
+    def fake_build_openai_provider(
+        environ: collections.abc.Mapping[str, str],
+    ) -> question_interpreter.QuestionInterpreterProvider:
+        return FakeProvider()
+
+    calls: list[types.SimpleNamespace] = []
+    monkeypatch.setattr(
+        live_eval.question_interpreter,
+        "build_openai_question_interpreter_provider",
+        fake_build_openai_provider,
+    )
+    monkeypatch.setattr(
+        live_eval,
+        "run_live_question_interpreter_eval",
+        _recording_run_live_eval(calls),
+    )
+
+    exit_code = live_eval.main(
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+        env_file=env_file,
+    )
+
+    assert exit_code == 0
+    written = list((tmp_path / "eval_results").glob("*.jsonl"))
+    assert len(written) == 1
+    assert written[0].name.startswith("live_eval_failures_")
+
+
+def test_main_passes_selection_flags_to_runner(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    _isolate_main_for_default_failures_file(monkeypatch, tmp_path)
+
+    class FakeProvider:
+        def propose_question_frame(
+            self,
+            *,
+            question: str,
+            semantic_layer_context: dict[str, object],
+        ) -> live_eval.ProviderResult:
+            del question, semantic_layer_context
+            raise AssertionError("live eval runner is stubbed")
+
+    def fake_build_openai_provider(
+        environ: collections.abc.Mapping[str, str],
+    ) -> question_interpreter.QuestionInterpreterProvider:
+        return FakeProvider()
+
+    calls: list[types.SimpleNamespace] = []
+    monkeypatch.setattr(
+        live_eval.question_interpreter,
+        "build_openai_question_interpreter_provider",
+        fake_build_openai_provider,
+    )
+    monkeypatch.setattr(
+        live_eval,
+        "run_live_question_interpreter_eval",
+        _recording_run_live_eval(calls),
+    )
+
+    start_stop_exit = live_eval.main(
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+        env_file=env_file,
+        argv=("--start-at", "3", "--stop-at", "7"),
+    )
+    only_exit = live_eval.main(
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+        env_file=env_file,
+        argv=("--only-cases", "44,exact_date", "--only-cases", "10"),
+    )
+
+    assert start_stop_exit == 0
+    assert only_exit == 0
+    assert calls[0].start_at == 3
+    assert calls[0].stop_at == 7
+    assert calls[0].only_cases is None
+    assert calls[1].start_at == 1
+    assert calls[1].stop_at is None
+    assert calls[1].only_cases == ("44", "exact_date", "10")
+
+
+def test_main_only_cases_with_start_at_is_usage_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    with pytest.raises(SystemExit) as exit_info:
+        live_eval.main(
+            stdout=io.StringIO(),
+            stderr=io.StringIO(),
+            env_file=env_file,
+            argv=("--only-cases", "1", "--start-at", "2"),
+        )
+
+    assert exit_info.value.code != 0
+
+
+def test_main_bad_range_exits_non_zero_with_message(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    _isolate_main_for_default_failures_file(monkeypatch, tmp_path)
+    stderr = io.StringIO()
+
+    class FakeProvider:
+        def propose_question_frame(
+            self,
+            *,
+            question: str,
+            semantic_layer_context: dict[str, object],
+        ) -> live_eval.ProviderResult:
+            del question, semantic_layer_context
+            raise AssertionError("live eval runner is stubbed")
+
+    def fake_build_openai_provider(
+        environ: collections.abc.Mapping[str, str],
+    ) -> question_interpreter.QuestionInterpreterProvider:
+        return FakeProvider()
+
+    monkeypatch.setattr(
+        live_eval.question_interpreter,
+        "build_openai_question_interpreter_provider",
+        fake_build_openai_provider,
+    )
+
+    exit_code = live_eval.main(
+        stdout=io.StringIO(),
+        stderr=stderr,
+        env_file=env_file,
+        argv=("--start-at", "9999"),
+    )
+
+    assert exit_code == 1
+    assert stderr.getvalue().strip() != ""
