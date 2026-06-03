@@ -82,6 +82,35 @@ def write_sidecar(path: pathlib.Path, sidecar: KnownQAIssueSidecar) -> None:
     path.write_text(serialize_sidecar(sidecar), encoding="utf-8")
 
 
+def record_known_issue(
+    sidecar: KnownQAIssueSidecar,
+    *,
+    qa_case_id: str,
+    issue_number: int,
+    flag_category: str,
+    valid_case_ids: typing.Iterable[str],
+) -> KnownQAIssueSidecar:
+    """Return sidecar with one confirmed QA-case-to-issue mapping recorded."""
+    valid_case_id_set = set(valid_case_ids)
+    if qa_case_id not in valid_case_id_set:
+        raise ValueError(f"Unknown QA case id in sidecar: {qa_case_id}")
+
+    issue = _validate_issue_entry(
+        {
+            "issue_number": issue_number,
+            "flag_category": flag_category,
+        },
+        question_id=qa_case_id,
+    )
+    existing_issues = sidecar.questions.get(qa_case_id, [])
+    if issue in existing_issues:
+        return sidecar
+
+    updated_questions = dict(sidecar.questions)
+    updated_questions[qa_case_id] = [*existing_issues, issue]
+    return KnownQAIssueSidecar(version=sidecar.version, questions=updated_questions)
+
+
 def prune_sidecar(
     sidecar: KnownQAIssueSidecar,
     *,

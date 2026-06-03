@@ -190,6 +190,59 @@ def test_prune_sidecar_surfaces_issue_lookup_failures() -> None:
         )
 
 
+def test_record_known_issue_adds_new_entry() -> None:
+    updated = known_qa_issues.record_known_issue(
+        _sidecar({}),
+        qa_case_id="case-a",
+        issue_number=165,
+        flag_category="correctness",
+        valid_case_ids=["case-a", "case-b"],
+    )
+
+    assert updated == _sidecar({"case-a": [_issue(165)]})
+
+
+def test_record_known_issue_appends_second_entry_and_preserves_existing() -> None:
+    updated = known_qa_issues.record_known_issue(
+        _sidecar({"case-a": [_issue(165)]}),
+        qa_case_id="case-a",
+        issue_number=166,
+        flag_category="formatting",
+        valid_case_ids=["case-a"],
+    )
+
+    assert updated == _sidecar({"case-a": [_issue(165), _issue(166, "formatting")]})
+
+
+def test_record_known_issue_is_idempotent_for_duplicate_mapping() -> None:
+    sidecar = _sidecar({"case-a": [_issue(165)]})
+
+    assert (
+        known_qa_issues.record_known_issue(
+            sidecar,
+            qa_case_id="case-a",
+            issue_number=165,
+            flag_category="correctness",
+            valid_case_ids=["case-a"],
+        )
+        == sidecar
+    )
+
+
+@pytest.mark.parametrize("qa_case_id", ["case-b", ""])
+def test_record_known_issue_rejects_missing_or_unknown_case_ids(
+    qa_case_id: str,
+) -> None:
+    with pytest.raises(ValueError, match="Unknown QA case id in sidecar"):
+        known_qa_issues.record_known_issue(
+            _sidecar({}),
+            qa_case_id=qa_case_id,
+            issue_number=165,
+            flag_category="correctness",
+            valid_case_ids=["case-a"],
+        )
+
+
 def test_serialize_sidecar_is_deterministic() -> None:
     sidecar = _sidecar(
         {

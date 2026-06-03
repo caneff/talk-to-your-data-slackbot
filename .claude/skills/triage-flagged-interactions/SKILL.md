@@ -20,6 +20,10 @@ Turn maintainer flags on Data Assistant responses into root-caused, actionable w
 Every record:
 `id`, `timestamp`, `user`, `question`, `latency_ms`, `outcome` (`answer` | `non_answer` | `error`), `response_text`, `model`, `flags: [...]`.
 
+Manual QA driver records may also include `qa_case_id`. Treat it as the stable
+QA-case join key for Known QA Issue sidecars. Keep `question` as observed
+evidence only; never use question text as the sidecar key.
+
 By `outcome`:
 - **answer:** `intent`, `question_frame` (`intent`, `metric`, `time_scope`, `filters`, `unresolved_ambiguities`), routed `dataset` / `metric` / `metric_expression` / `group_by` / `filters` / `result_limit`, `prepared_data_shape` (`rows`×`columns`), `quality_notes`, and `key_data` (the tiny headline numbers).
 - **non_answer:** `stage`, `reason_code` (the fine 15-way `NonAnswerReasonCode`), `context`.
@@ -38,7 +42,8 @@ For Render/hosted triage, query application logs for `data_assistant.flagged_int
 
 ### 2. Present each flagged case
 For every flagged record show, compactly:
-- `id`, `timestamp`, category(ies), `outcome`, the `question`, and the `response_text`.
+- `id`, `timestamp`, category(ies), `outcome`, `qa_case_id` when present, the
+  `question`, and the `response_text`.
 - The debug signal for its outcome:
   - answer → `intent`, routed `dataset`/`metric`(`metric_expression`)/`group_by`/`filters`, `time_scope`, `prepared_data_shape`, `quality_notes`, `key_data`, plus any `unresolved_ambiguities`.
   - non_answer → `stage` + `reason_code` + `context`.
@@ -78,6 +83,23 @@ Group cases by root-caused layer (several flags often share one cause). For each
 - Already-tracked root cause → if a flag's root cause is already covered by an open issue, just map the `id` to that issue number and move on. Do **not** file a duplicate, do **not** comment on the existing issue, and do **not** propose "repeat occurrence" / "additional occurrence" notes. Repeat flags on a known cause are confirmation noise, not new signal; the mapping in your triage output is the only record needed.
 Reference flags by `id` so the user can trace each back to its log line.
 
+When the user explicitly confirms issue mutation and the handled record is a
+manual-QA-driver flag with `qa_case_id`, update the matching Known QA Issue
+sidecar only after human judgment has confirmed the mapping:
+- existing issue mapping confirmed → add `(qa_case_id, issue_number, flag_category)`
+- new issue created for the flag → add same sidecar entry as part of handling
+- do **not** add sidecar entries for unconfirmed flags, working-as-intended
+  outcomes, or records without `qa_case_id`
+- preflight remains create/validate/prune only; it must never infer new sidecar
+  entries from flagged records
+
+Use `src/data_assistant/known_qa_issues.py` helper `record_known_issue(...)`
+for the in-memory update, then write the sidecar back. Keep serialization
+stable. Example shape:
+```bash
+uv run python -c "from pathlib import Path; from data_assistant import known_qa_issues; valid_case_ids=['case-a']; path=Path('docs/qa-retail-questions.known-issues.json'); sidecar=known_qa_issues.load_sidecar(path, valid_case_ids=valid_case_ids, create_if_missing=True); updated=known_qa_issues.record_known_issue(sidecar, qa_case_id='case-a', issue_number=178, flag_category='correctness', valid_case_ids=valid_case_ids); known_qa_issues.write_sidecar(path, updated)"
+```
+
 When the user explicitly confirms filing an issue in the current turn, **apply the `priority:low` label to every issue you file from a flag** unless the user says a particular flag is urgent. Flagged-interaction issues are demand-driven noise that should NOT jump ahead of roadmap work; the label tells `handle-next-issue` not to favor them (it picks default-priority issues first). Create the label if absent, then file with it:
 ```bash
 gh label create "priority:low" --color c5def5 \
@@ -92,6 +114,9 @@ Once you file the issue(s), map an `id` to an already-tracked issue, complete th
 - Clearing is the **default**. Do **not** ask first — clear every `id` you handled this session, then report exactly what you cleared.
 - **The only exception is a preemptive opt-out.** If the user said earlier in this session not to clear flags (or not to clear a particular `id`), honor that and keep those flagged. A preemptive "don't clear" overrides the default; absent it, clear.
 - List the exact `id`s you cleared and the issue / fix / WAI determination each maps to.
+- If a handled flag also produced a Known QA Issue sidecar update, report that
+  sidecar path and `(qa_case_id, issue_number, flag_category)` mapping
+  alongside the cleared `id`.
 - Clear each handled `id` with `interaction_log.clear_flags(id)` — this **empties the record's `flags` list but keeps the interaction line** (still useful as an improvement corpus; it is not a delete). Run it via the project env, e.g.:
   ```bash
   uv run python -c "from data_assistant import interaction_log; print(interaction_log.clear_flags('<id>'))"
