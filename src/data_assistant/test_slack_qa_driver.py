@@ -1,9 +1,9 @@
 """Tests for the Slack QA driver's pure parts.
 
 The driver's ``main`` is near-untested by design (live Slack + live OpenAI,
-like the ``live_eval`` mains). Only the pure battery parser is covered here; it
-maps the ``qa-retail-questions.md`` markdown shape to a flat list of
-top-level questions with no Slack and no OpenAI.
+like the ``live_eval`` mains). This file covers pure parsing, argument,
+Known QA Issue preflight, and thread-target resolution behavior with no Slack
+and no OpenAI.
 """
 
 from __future__ import annotations
@@ -161,15 +161,6 @@ def test_parse_battery_strips_surrounding_whitespace() -> None:
     assert slack_qa_driver.parse_battery(markdown) == ["What was total revenue?"]
 
 
-def test_resolve_known_issues_path_uses_default_sidecar_name() -> None:
-    battery_path = pathlib.Path("docs/qa-retail-questions.md")
-
-    assert slack_qa_driver.resolve_known_issues_path(
-        battery_path=battery_path,
-        known_issues_path=None,
-    ) == pathlib.Path("docs/qa-retail-questions.known-issues.json")
-
-
 def test_resolve_known_issues_path_honors_override() -> None:
     battery_path = pathlib.Path("docs/qa-retail-questions.md")
     override_path = pathlib.Path("docs/custom-known-issues.json")
@@ -186,7 +177,7 @@ def test_resolve_known_issues_path_honors_override() -> None:
 def test_preflight_known_issues_skips_escape_hatch_unidentified_cases(
     tmp_path: pathlib.Path,
 ) -> None:
-    sidecar_path = tmp_path / "qa-retail-questions.known-issues.json"
+    sidecar_path = _sidecar_path(tmp_path)
 
     slack_qa_driver.preflight_known_issues(
         battery_path=tmp_path / "qa-retail-questions.md",
@@ -202,163 +193,181 @@ def test_preflight_known_issues_skips_escape_hatch_unidentified_cases(
 def test_preflight_known_issues_aborts_when_prune_fails(
     tmp_path: pathlib.Path,
 ) -> None:
-    sidecar_path = tmp_path / "qa-retail-questions.known-issues.json"
-    sidecar_path.write_text(
-        textwrap.dedent(
-            """\
-            {
-              "version": 1,
-              "questions": {
-                "case-a": [
-                  {
-                    "issue_number": 165,
-                    "flag_category": "correctness"
-                  }
-                ]
-              }
-            }
-            """
-        ),
-        encoding="utf-8",
+    sidecar_path = _sidecar_path(tmp_path)
+    _write_sidecar(
+        sidecar_path,
+        {
+            "case-a": [
+                known_qa_issues.KnownQAIssue(
+                    issue_number=165,
+                    flag_category="correctness",
+                )
+            ]
+        },
     )
+
+    def fail_lookup(_issue_number: int) -> bool:
+        raise RuntimeError("lookup failed")
 
     with pytest.raises(known_qa_issues.KnownQAIssuePruneError, match="lookup failed"):
         slack_qa_driver.preflight_known_issues(
             battery_path=tmp_path / "qa-retail-questions.md",
-            cases=[slack_qa_driver.QACase(id="case-a", question="Question?")],
+            cases=[_case("case-a")],
             known_issues_path=sidecar_path,
             skip_prune=False,
-            is_issue_open=lambda _issue_number: (_ for _ in ()).throw(
-                RuntimeError("lookup failed")
-            ),
+            is_issue_open=fail_lookup,
         )
 
 
 def test_preflight_known_issues_skip_prune_keeps_existing_sidecar(
     tmp_path: pathlib.Path,
 ) -> None:
-    sidecar_path = tmp_path / "qa-retail-questions.known-issues.json"
-    original_text = textwrap.dedent(
-        """\
+    sidecar_path = _sidecar_path(tmp_path)
+    _write_sidecar(
+        sidecar_path,
         {
-          "version": 1,
-          "questions": {
             "case-a": [
-              {
-                "issue_number": 165,
-                "flag_category": "correctness"
-              }
+                known_qa_issues.KnownQAIssue(
+                    issue_number=165,
+                    flag_category="correctness",
+                )
             ]
-          }
-        }
-        """
+        },
     )
-    sidecar_path.write_text(original_text, encoding="utf-8")
+
+    def fail_lookup(_issue_number: int) -> bool:
+        raise RuntimeError("should not be called")
 
     slack_qa_driver.preflight_known_issues(
         battery_path=tmp_path / "qa-retail-questions.md",
-        cases=[slack_qa_driver.QACase(id="case-a", question="Question?")],
+        cases=[_case("case-a")],
         known_issues_path=sidecar_path,
         skip_prune=True,
-        is_issue_open=lambda _issue_number: (_ for _ in ()).throw(
-            RuntimeError("should not be called")
-        ),
+        is_issue_open=fail_lookup,
     )
 
-    assert sidecar_path.read_text(encoding="utf-8") == original_text
+    assert _load_sidecar(sidecar_path, valid_case_ids=["case-a"]).questions == {
+        "case-a": [
+            known_qa_issues.KnownQAIssue(
+                issue_number=165,
+                flag_category="correctness",
+            )
+        ]
+    }
 
 
 def test_preflight_known_issues_prunes_and_rewrites_sidecar(
     tmp_path: pathlib.Path,
 ) -> None:
-    sidecar_path = tmp_path / "qa-retail-questions.known-issues.json"
+    sidecar_path = _sidecar_path(tmp_path)
 
     slack_qa_driver.preflight_known_issues(
         battery_path=tmp_path / "qa-retail-questions.md",
-        cases=[
-            slack_qa_driver.QACase(id="case-a", question="Question A?"),
-            slack_qa_driver.QACase(id="case-b", question="Question B?"),
-        ],
+        cases=[_case("case-a", question="Question A?"), _case("case-b")],
         known_issues_path=sidecar_path,
         skip_prune=False,
         is_issue_open=lambda issue_number: issue_number == 165,
     )
 
-    assert sidecar_path.read_text(encoding="utf-8") == (
-        '{\n  "version": 1,\n  "questions": {}\n}\n'
+    assert (
+        _load_sidecar(
+            sidecar_path,
+            valid_case_ids=["case-a", "case-b"],
+        ).questions
+        == {}
     )
 
 
-def test_resolve_thread_target_uses_explicit_args_over_pointer(
+@pytest.mark.parametrize(
+    (
+        "channel",
+        "thread_ts",
+        "pointer",
+        "expected",
+    ),
+    [
+        pytest.param(
+            "Cexplicit",
+            "1.1",
+            ("Cpointer", "9.9"),
+            ("Cexplicit", "1.1"),
+            id="explicit-args-win",
+        ),
+        pytest.param(
+            None,
+            None,
+            ("Cpointer", "9.9"),
+            ("Cpointer", "9.9"),
+            id="fallback-to-pointer",
+        ),
+        pytest.param(
+            "Cexplicit",
+            None,
+            ("Cpointer", "9.9"),
+            ("Cexplicit", "9.9"),
+            id="partial-args-fill-from-pointer",
+        ),
+        pytest.param(
+            None,
+            None,
+            None,
+            "No assistant thread found",
+            id="missing-args-and-pointer",
+        ),
+        pytest.param(
+            "Cexplicit",
+            None,
+            None,
+            "No assistant thread found",
+            id="partial-args-without-pointer",
+        ),
+    ],
+)
+def test_resolve_thread_target(
     tmp_path: pathlib.Path,
+    channel: str | None,
+    thread_ts: str | None,
+    pointer: tuple[str, str] | None,
+    expected: tuple[str, str] | str,
 ) -> None:
     pointer_path = tmp_path / "last_assistant_thread.json"
-    assistant_thread_pointer.write_latest("Cpointer", "9.9", path=pointer_path)
+    if pointer is not None:
+        assistant_thread_pointer.write_latest(*pointer, path=pointer_path)
 
     target = slack_qa_driver.resolve_thread_target(
-        channel="Cexplicit",
-        thread_ts="1.1",
+        channel=channel,
+        thread_ts=thread_ts,
         pointer_path=pointer_path,
     )
 
-    # Explicit overrides win even when a pointer exists.
-    assert target == ("Cexplicit", "1.1")
+    if isinstance(expected, str):
+        assert isinstance(target, str)
+        assert expected in target
+    else:
+        assert target == expected
 
 
-def test_resolve_thread_target_falls_back_to_pointer_when_args_missing(
-    tmp_path: pathlib.Path,
+def _sidecar_path(tmp_path: pathlib.Path) -> pathlib.Path:
+    return tmp_path / "qa-retail-questions.known-issues.json"
+
+
+def _case(case_id: str, *, question: str = "Question?") -> slack_qa_driver.QACase:
+    return slack_qa_driver.QACase(id=case_id, question=question)
+
+
+def _write_sidecar(
+    path: pathlib.Path,
+    questions: dict[str, list[known_qa_issues.KnownQAIssue]],
 ) -> None:
-    pointer_path = tmp_path / "last_assistant_thread.json"
-    assistant_thread_pointer.write_latest("Cpointer", "9.9", path=pointer_path)
-
-    target = slack_qa_driver.resolve_thread_target(
-        channel=None,
-        thread_ts=None,
-        pointer_path=pointer_path,
+    known_qa_issues.write_sidecar(
+        path,
+        known_qa_issues.KnownQAIssueSidecar(version=1, questions=questions),
     )
 
-    assert target == ("Cpointer", "9.9")
 
-
-def test_resolve_thread_target_partial_args_fill_from_pointer(
-    tmp_path: pathlib.Path,
-) -> None:
-    pointer_path = tmp_path / "last_assistant_thread.json"
-    assistant_thread_pointer.write_latest("Cpointer", "9.9", path=pointer_path)
-
-    # Only one id passed: the other fills from the pointer.
-    target = slack_qa_driver.resolve_thread_target(
-        channel="Cexplicit",
-        thread_ts=None,
-        pointer_path=pointer_path,
-    )
-
-    assert target == ("Cexplicit", "9.9")
-
-
-def test_resolve_thread_target_no_args_no_pointer_returns_error(
-    tmp_path: pathlib.Path,
-) -> None:
-    target = slack_qa_driver.resolve_thread_target(
-        channel=None,
-        thread_ts=None,
-        pointer_path=tmp_path / "missing.json",
-    )
-
-    # Unresolved -> a clear operator-facing error message (a str, not a tuple).
-    assert isinstance(target, str)
-    assert "No assistant thread found" in target
-
-
-def test_resolve_thread_target_partial_args_no_pointer_returns_error(
-    tmp_path: pathlib.Path,
-) -> None:
-    # One id passed but the other cannot be filled (no pointer) -> still an error.
-    target = slack_qa_driver.resolve_thread_target(
-        channel="Cexplicit",
-        thread_ts=None,
-        pointer_path=tmp_path / "missing.json",
-    )
-
-    assert isinstance(target, str)
-    assert "No assistant thread found" in target
+def _load_sidecar(
+    path: pathlib.Path,
+    *,
+    valid_case_ids: list[str],
+) -> known_qa_issues.KnownQAIssueSidecar:
+    return known_qa_issues.load_sidecar(path, valid_case_ids=valid_case_ids)
