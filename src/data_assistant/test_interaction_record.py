@@ -161,6 +161,37 @@ def _final_response(*, text: str) -> contracts.FinalResponse:
     )
 
 
+def _build_record(
+    result: contracts.WorkflowResult,
+    *,
+    interaction_id: str = "abc123",
+    timestamp: str = "2026-01-01T00:00:00+00:00",
+    latency_ms: int = 1,
+    user: str = "U123",
+    question: str = "q",
+    qa_case_id: str | None = None,
+    qa_review_context: interaction_record.QAReviewContext | None = None,
+    model: str = "m",
+) -> dict[str, object]:
+    """Call ``build_interaction_record`` with always-field defaults.
+
+    Each test passes only the inputs it actually exercises (the result, plus any
+    ``qa_case_id`` / ``qa_review_context`` / model / latency it asserts on); the
+    boilerplate always-fields stay here so the test bodies show only behavior.
+    """
+    return interaction_record.build_interaction_record(
+        result=result,
+        interaction_id=interaction_id,
+        timestamp=timestamp,
+        latency_ms=latency_ms,
+        user=user,
+        question=question,
+        qa_case_id=qa_case_id,
+        qa_review_context=qa_review_context,
+        model=model,
+    )
+
+
 def test_final_response_from_workflow_result_unwraps_run() -> None:
     final = _final_response(text="unwrapped")
     run = _data_assistant_run()
@@ -177,16 +208,11 @@ def test_final_response_from_workflow_result_unwraps_run() -> None:
 def test_build_interaction_record_answer_carries_shape_and_key_data() -> None:
     run = _data_assistant_run()
 
-    record = interaction_record.build_interaction_record(
-        interaction_id="abc123",
-        timestamp="2026-01-01T00:00:00+00:00",
+    record = _build_record(
+        run,
         latency_ms=42,
-        user="U123",
         question="What was total revenue by region in January 2026?",
-        qa_case_id=None,
-        qa_review_context=None,
         model="gpt-4o-mini",
-        result=run,
     )
 
     assert record["id"] == "abc123"
@@ -228,17 +254,7 @@ def test_build_interaction_record_non_answer_carries_reason_and_stage() -> None:
         non_answer=non_answer,
     )
 
-    record = interaction_record.build_interaction_record(
-        interaction_id="def456",
-        timestamp="2026-01-01T00:00:00+00:00",
-        latency_ms=7,
-        user="U123",
-        question="how much?",
-        qa_case_id=None,
-        qa_review_context=None,
-        model="gpt-4o-mini",
-        result=final,
-    )
+    record = _build_record(final)
 
     assert record["outcome"] == "non_answer"
     assert record["reason_code"] == "missing_time_scope"
@@ -251,17 +267,7 @@ def test_build_interaction_record_non_answer_carries_reason_and_stage() -> None:
 def test_build_interaction_record_includes_optional_qa_case_id() -> None:
     run = _data_assistant_run()
 
-    record = interaction_record.build_interaction_record(
-        interaction_id="abc123",
-        timestamp="2026-01-01T00:00:00+00:00",
-        latency_ms=1,
-        user="U123",
-        question="q",
-        qa_case_id="case-7",
-        qa_review_context=None,
-        model="m",
-        result=run,
-    )
+    record = _build_record(run, qa_case_id="case-7")
 
     assert record["qa_case_id"] == "case-7"
 
@@ -297,17 +303,7 @@ def test_qa_review_context_is_applied_to_record() -> None:
         ),
     )
 
-    record = interaction_record.build_interaction_record(
-        interaction_id="abc123",
-        timestamp="2026-01-01T00:00:00+00:00",
-        latency_ms=1,
-        user="U123",
-        question="q",
-        qa_case_id=None,
-        qa_review_context=context,
-        model="m",
-        result=run,
-    )
+    record = _build_record(run, qa_review_context=context)
 
     assert record["source"] == "qa_review"
     assert record["battery_path"] == "batteries/retail.yaml"
@@ -324,17 +320,7 @@ def test_qa_review_context_without_case_id_omits_known_issues() -> None:
         qa_case_id=None,
     )
 
-    record = interaction_record.build_interaction_record(
-        interaction_id="abc123",
-        timestamp="2026-01-01T00:00:00+00:00",
-        latency_ms=1,
-        user="U123",
-        question="q",
-        qa_case_id=None,
-        qa_review_context=context,
-        model="m",
-        result=run,
-    )
+    record = _build_record(run, qa_review_context=context)
 
     assert record["source"] == "qa_review"
     assert record["battery_path"] == "batteries/retail.yaml"
