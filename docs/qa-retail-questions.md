@@ -29,6 +29,8 @@ comparison.
 - What were units returned by product category in May 2026?
 - What was gross margin by brand for all time?
 - What was total line revenue excluding Electronics products in March 2026?
+- What was total line revenue for Apparel products in March 2026?
+- What were units sold by product category excluding Electronics?
 
 ## Customers
 
@@ -37,6 +39,7 @@ comparison.
 - What was customer count by acquisition channel for all time?
 - What was customer count by customer region for all time?
 - How many customers were created in January 2026?
+- What was customer count by acquisition channel for customers created in 2026?
 
 ## Stores And Products
 
@@ -44,6 +47,8 @@ comparison.
 - What was store count by store channel?
 - What was product count by product category?
 - What was product count by brand?
+- How many stores opened before January 2024?
+- What was store count by store region excluding the West region?
 
 ## Support Operations
 
@@ -51,6 +56,7 @@ comparison.
 - What was support ticket count by ticket priority in May 2026?
 - What was support ticket count by ticket status for all time?
 - What was support ticket count by issue category excluding the Resolved status?
+- What was support ticket count for high priority tickets in April 2026?
 
 ## Inventory Health
 
@@ -58,6 +64,7 @@ comparison.
 - What were on hand units by product category in May 2026?
 - What were stockout days by product subcategory in April 2026?
 - What were on hand units by store in May 2026?
+- What were stockout days for Outdoor products in May 2026?
 
 ## Known Non-Answer Cases
 
@@ -68,6 +75,8 @@ These should return Non-Answers rather than guessed results.
 - What was gross margin?
   - Expected reason: missing time scope.
 - What was support ticket count?
+  - Expected reason: missing time scope.
+- What was support ticket count excluding resolved tickets?
   - Expected reason: missing time scope.
 - What was total net revenue by product category in March 2026?
   - Expected reason: no single Dataset Table has both `total net revenue`
@@ -95,6 +104,14 @@ These should return Non-Answers rather than guessed results.
   - Expected reason: rank / top-N is an unsupported intent.
 - Which issue category had the highest support ticket count?
   - Expected reason: rank / top-N is an unsupported intent.
+- Which order channel had the highest total gross revenue in March 2026?
+  - Expected reason: rank / top-N is an unsupported intent.
+- Which product category had the highest units returned in May 2026?
+  - Expected reason: rank / top-N is an unsupported intent.
+- Which loyalty tier had the highest customer count?
+  - Expected reason: rank / top-N is an unsupported intent.
+- Which inventory product had the highest on hand units?
+  - Expected reason: rank / top-N is an unsupported intent.
 - How did total net revenue compare by store region in Q1 2026?
   - Expected reason: compare is an unsupported intent.
 - Forecast stockout days for June 2026.
@@ -102,6 +119,9 @@ These should return Non-Answers rather than guessed results.
 - What were stockout days by product category in July 2026?
   - Expected reason: time scope is outside the data window (data runs through
     2026-05-31).
+- What was total net revenue yesterday?
+  - Expected reason: relative-date phrasing is unsupported (queries need an
+    absolute time scope).
 - Upload this CSV and show support tickets by priority.
   - Expected reason: user-provided CSV files are not supported data sources.
 
@@ -141,3 +161,18 @@ Slack.
 - on hand units by category may
 - stockout days by subcategory april
 - on hand units by store may
+- best channel by gross revenue
+- apparel sales march
+- most returned category
+- units sold except electronics
+- new customers by acquisition channel this year
+- top loyalty tier by customer count
+- stores opened before 2024
+- stores not in west
+- open vs resolved tickets
+- high priority tickets april
+- biggest support issue
+- tickets excluding resolved
+- outdoor stockouts may
+- which product has most inventory
+- yesterday net revenue
