@@ -1220,6 +1220,47 @@ def test_answer_and_render_omits_known_issue_metadata_for_unidentified_qa_case(
     assert "known_issues" not in records[0]
 
 
+def test_answer_and_render_logs_empty_known_issues_for_identified_qa_case(
+    tmp_path: pathlib.Path,
+    connect_orders: collections.abc.Callable[
+        ..., contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
+    ],
+) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        _question: str,
+        _identity: contracts.InternalIdentity,
+        _progress_sink: contracts.ProgressSink,
+    ) -> slack_assistant.SlackWorkflowResult:
+        return _final_response(text="Final answer text.")
+
+    adapter = slack_assistant.AssistantAdapter(
+        connection_factory=_connection_factory(connect_orders),
+        answer_path=answer_path,
+        log_path=log_path,
+    )
+
+    adapter.answer_and_render(
+        text="Question with no remaining known issues?",
+        user="qa_driver",
+        set_status=RecordingStatus(),
+        qa_review_context=slack_assistant.QAReviewContext(
+            battery_path="docs/qa-retail-questions.md",
+            qa_case_id="case-without-known-issues",
+            known_issues=(),
+        ),
+    )
+
+    records = _read_log_records(log_path)
+    assert len(records) == 1
+    assert records[0]["source"] == "qa_review"
+    assert records[0]["battery_path"] == "docs/qa-retail-questions.md"
+    assert records[0]["qa_case_id"] == "case-without-known-issues"
+    assert records[0]["known_issues"] == []
+
+
 def test_answer_and_render_truncates_long_question_in_echo_block(
     tmp_path: pathlib.Path,
     connect_orders: collections.abc.Callable[
