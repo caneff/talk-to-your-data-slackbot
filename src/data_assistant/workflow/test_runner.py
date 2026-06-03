@@ -12,6 +12,25 @@ import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as workflow_runner
+from data_assistant.conftest import canonical_test_semantic_layer
+
+
+@pytest.fixture(autouse=True)
+def _runner_uses_canonical_layer(  # pyright: ignore[reportUnusedFunction]
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Point the runner's default-layer load at the small orders+customers layer.
+
+    These end-to-end tests pair the in-memory ``orders``/``customers`` DuckDB
+    fixtures with a layer of the same shape. The shipped retail layer (the loader
+    default) is exercised separately in ``semantic_layer/test_loader.py``.
+    """
+    monkeypatch.setattr(
+        workflow_runner.semantic_layer_loader,
+        "load_semantic_layer",
+        canonical_test_semantic_layer,
+    )
+
 
 EXPECTED_PROGRESS_STATUSES = [
     "understanding your question...",
@@ -115,7 +134,7 @@ def test_data_assistant_emits_staged_progress_in_order_on_happy_path(
     assert seen_statuses == EXPECTED_PROGRESS_STATUSES
 
 
-def test_data_assistant_answers_empty_commerce_q4_result_without_crashing(
+def test_data_assistant_answers_empty_retail_q4_result_without_crashing(
     connect_orders: local_duckdb_fixture.OrdersConnector,
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
@@ -721,7 +740,7 @@ def test_data_assistant_denies_dataset_access_before_request_or_preparation(
     non_answer = captured_non_answers[0]
     assert non_answer.stage == contracts.NonAnswerStage.ACCESS_CONTROLLER
     assert non_answer.reason_code == contracts.NonAnswerReasonCode.ACCESS_DENIED
-    assert non_answer.datasets == ("commerce",)
+    assert non_answer.datasets == ("retail_ops",)
 
 
 def test_data_assistant_returns_ambiguous_table_before_access_denial(
@@ -856,8 +875,8 @@ def _ambiguous_table_semantic_layer(
     allowed_identity_ids: tuple[str, ...],
 ) -> semantic_layer_catalog.SemanticLayerCatalog:
     dataset = schema.CuratedDataset(
-        dataset_id="commerce",
-        name="Commerce",
+        dataset_id="retail_ops",
+        name="Retail Operations",
         tables=("orders", "order_rollups"),
         information_types=("revenue",),
         example_questions=(),
@@ -911,7 +930,7 @@ def _table(
 ) -> schema.DatasetTable:
     return schema.DatasetTable(
         table_id=table_id,
-        dataset_id="commerce",
+        dataset_id="retail_ops",
         description="Test table.",
         columns=(
             schema.TableColumn(column_id="order_date", data_type="date"),

@@ -5,13 +5,13 @@ from data_assistant.semantic_layer.catalog import SemanticLayerCatalog
 
 
 def test_catalog_rejects_duplicate_dataset_ids() -> None:
-    orders = _table(table_id="orders", dataset_id="commerce")
+    orders = _table(table_id="orders", dataset_id="retail_ops")
 
-    with pytest.raises(ValueError, match="Duplicate Curated Dataset ids: commerce"):
+    with pytest.raises(ValueError, match="Duplicate Curated Dataset ids: retail_ops"):
         SemanticLayerCatalog(
             datasets=(
-                _dataset(dataset_id="commerce", table_ids=("orders",)),
-                _dataset(dataset_id="commerce", table_ids=("orders",)),
+                _dataset(dataset_id="retail_ops", table_ids=("orders",)),
+                _dataset(dataset_id="retail_ops", table_ids=("orders",)),
             ),
             tables=(orders,),
         )
@@ -20,10 +20,10 @@ def test_catalog_rejects_duplicate_dataset_ids() -> None:
 def test_catalog_rejects_duplicate_table_ids() -> None:
     with pytest.raises(ValueError, match="Duplicate Dataset Table ids: orders"):
         SemanticLayerCatalog(
-            datasets=(_dataset(dataset_id="commerce", table_ids=("orders",)),),
+            datasets=(_dataset(dataset_id="retail_ops", table_ids=("orders",)),),
             tables=(
-                _table(table_id="orders", dataset_id="commerce"),
-                _table(table_id="orders", dataset_id="commerce"),
+                _table(table_id="orders", dataset_id="retail_ops"),
+                _table(table_id="orders", dataset_id="retail_ops"),
             ),
         )
 
@@ -32,21 +32,21 @@ def test_catalog_aggregates_duplicate_and_relationship_errors() -> None:
     with pytest.raises(ValueError) as exc_info:
         SemanticLayerCatalog(
             datasets=(
-                _dataset(dataset_id="commerce", table_ids=("orders", "missing")),
-                _dataset(dataset_id="commerce", table_ids=("orders", "missing")),
+                _dataset(dataset_id="retail_ops", table_ids=("orders", "missing")),
+                _dataset(dataset_id="retail_ops", table_ids=("orders", "missing")),
             ),
             tables=(
-                _table(table_id="orders", dataset_id="commerce"),
-                _table(table_id="orders", dataset_id="commerce"),
+                _table(table_id="orders", dataset_id="retail_ops"),
+                _table(table_id="orders", dataset_id="retail_ops"),
                 _table(table_id="orphan", dataset_id="orphan"),
             ),
         )
 
     assert str(exc_info.value) == "\n".join(
         (
-            "Duplicate Curated Dataset ids: commerce",
+            "Duplicate Curated Dataset ids: retail_ops",
             "Duplicate Dataset Table ids: orders",
-            "Unknown Dataset Table refs for Curated Dataset commerce: missing",
+            "Unknown Dataset Table refs for Curated Dataset retail_ops: missing",
             "Dataset Table refs listed by multiple Curated Datasets: orders",
             "Orphan Dataset Tables not listed by any Curated Dataset: orphan",
         )
@@ -58,7 +58,7 @@ def test_catalog_aggregates_structural_relationship_errors() -> None:
         SemanticLayerCatalog(
             datasets=(
                 _dataset(
-                    dataset_id="commerce",
+                    dataset_id="retail_ops",
                     table_ids=("orders", "missing", "shared"),
                 ),
                 _dataset(
@@ -67,23 +67,23 @@ def test_catalog_aggregates_structural_relationship_errors() -> None:
                 ),
             ),
             tables=(
-                _table(table_id="orders", dataset_id="commerce"),
-                _table(table_id="shared", dataset_id="commerce"),
-                _table(table_id="support_orders", dataset_id="commerce"),
+                _table(table_id="orders", dataset_id="retail_ops"),
+                _table(table_id="shared", dataset_id="retail_ops"),
+                _table(table_id="support_orders", dataset_id="retail_ops"),
                 _table(table_id="orphan", dataset_id="orphan"),
             ),
         )
 
     assert str(exc_info.value) == "\n".join(
         (
-            "Unknown Dataset Table refs for Curated Dataset commerce: missing",
+            "Unknown Dataset Table refs for Curated Dataset retail_ops: missing",
             (
                 "Curated Dataset support lists Dataset Table shared, but "
-                "table.dataset_id is commerce"
+                "table.dataset_id is retail_ops"
             ),
             (
                 "Curated Dataset support lists Dataset Table support_orders, "
-                "but table.dataset_id is commerce"
+                "but table.dataset_id is retail_ops"
             ),
             "Dataset Table refs listed by multiple Curated Datasets: shared",
             "Orphan Dataset Tables not listed by any Curated Dataset: orphan",
@@ -93,8 +93,8 @@ def test_catalog_aggregates_structural_relationship_errors() -> None:
 
 def test_catalog_lookup_methods_reject_invalid_ids() -> None:
     catalog = SemanticLayerCatalog(
-        datasets=(_dataset(dataset_id="commerce", table_ids=("orders",)),),
-        tables=(_table(table_id="orders", dataset_id="commerce"),),
+        datasets=(_dataset(dataset_id="retail_ops", table_ids=("orders",)),),
+        tables=(_table(table_id="orders", dataset_id="retail_ops"),),
     )
 
     with pytest.raises(ValueError, match="Curated Dataset not found: missing"):

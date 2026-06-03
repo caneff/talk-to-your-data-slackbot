@@ -100,7 +100,7 @@ def adversarial_question_interpreter_provider() -> (
 
 
 def allowed_internal_identity() -> contracts.InternalIdentity:
-    """Return the identity allowed to access the demo commerce dataset."""
+    """Return the identity allowed to access the demo retail dataset."""
     return access_controller.DEFAULT_LOCAL_ALLOWED_IDENTITY
 
 

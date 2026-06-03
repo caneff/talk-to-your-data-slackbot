@@ -19,14 +19,14 @@ def test_semantic_router_resolves_available_data(
     resolution = result.value
     assert resolution.resolved_match.table.table_id == "orders"
     assert len(resolution.dataset_selection.selected_datasets) == 1
-    assert resolution.dataset_selection.selected_datasets[0].dataset_id == "commerce"
+    assert resolution.dataset_selection.selected_datasets[0].dataset_id == "retail_ops"
 
 
 def test_dataset_selection_chooses_one_curated_dataset_with_rationale(
     dataset_selection: contracts.DatasetSelection,
 ) -> None:
     assert len(dataset_selection.selected_datasets) == 1
-    assert dataset_selection.selected_datasets[0].dataset_id == "commerce"
+    assert dataset_selection.selected_datasets[0].dataset_id == "retail_ops"
     assert "total revenue metric and region fields" in (
         dataset_selection.match_rationale
     )
@@ -60,8 +60,8 @@ def test_semantic_router_returns_ambiguous_table_for_two_tables_in_one_dataset()
     None
 ):
     dataset = schema.CuratedDataset(
-        dataset_id="commerce",
-        name="Commerce",
+        dataset_id="retail_ops",
+        name="Retail Operations",
         tables=("orders", "order_rollups"),
         information_types=("revenue",),
         example_questions=(),
@@ -109,8 +109,8 @@ def test_semantic_router_returns_ambiguous_table_for_two_tables_in_one_dataset()
 
 def test_resolve_semantic_match_returns_no_matching_table_from_router() -> None:
     selected_dataset = schema.CuratedDataset(
-        dataset_id="commerce",
-        name="Commerce",
+        dataset_id="retail_ops",
+        name="Retail Operations",
         tables=("orders",),
         information_types=("revenue",),
         example_questions=(),
@@ -178,7 +178,7 @@ def _table(
 ) -> schema.DatasetTable:
     return schema.DatasetTable(
         table_id=table_id,
-        dataset_id="commerce",
+        dataset_id="retail_ops",
         description="Test table.",
         columns=(
             schema.TableColumn(column_id="order_date", data_type="date"),

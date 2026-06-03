@@ -84,7 +84,7 @@ def connect_tables(
 
 
 def orders_table_spec(rows: collections.abc.Iterable[OrderRow]) -> TableSpec:
-    """Return the orders table-spec: the demo commerce schema plus `rows`."""
+    """Return the orders table-spec: the demo retail schema plus `rows`."""
     return TableSpec(name="orders", columns=ORDERS_COLUMNS, rows=rows)
 
 

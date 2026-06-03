@@ -9,7 +9,7 @@ import data_assistant.data_requester as data_requester
 import data_assistant.local_duckdb_fixture as local_duckdb_fixture
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.semantic_layer.catalog as semantic_layer_catalog
-import data_assistant.semantic_layer.loader as semantic_layer_loader
+import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_matcher as semantic_matcher
 import data_assistant.semantic_router as semantic_router
 import data_assistant.workflow.contracts as contracts
@@ -79,10 +79,134 @@ def missing_time_scope_proposal() -> question_interpreter.QuestionFrameProposal:
     )
 
 
+def canonical_test_semantic_layer() -> semantic_layer_catalog.SemanticLayerCatalog:
+    """Build the small orders+customers layer shared by workflow tests.
+
+    Workflow integration tests pair this layer with the in-memory ``orders``
+    DuckDB fixture (order_date / region / revenue). It is intentionally
+    self-contained and not parsed from the on-disk retail layer, so the canonical
+    end-to-end fixtures stay decoupled from the shipped dataset's exact shape.
+    """
+    return semantic_layer_catalog.SemanticLayerCatalog(
+        datasets=(
+            schema.CuratedDataset(
+                dataset_id="retail_ops",
+                name="Retail Operations",
+                tables=("orders", "customers"),
+                information_types=(
+                    "revenue",
+                    "regional performance",
+                    "order activity",
+                    "customer metadata",
+                ),
+                example_questions=(
+                    "What was total revenue by region in January 2026?",
+                    "What was customer count by customer region in January 2026?",
+                ),
+                dataset_access=schema.DatasetAccess(
+                    allowed_identity_ids=(
+                        "employee_123",
+                        "local_development_user",
+                    ),
+                ),
+            ),
+        ),
+        tables=(
+            schema.DatasetTable(
+                table_id="orders",
+                dataset_id="retail_ops",
+                description="Clean retail order facts.",
+                columns=(
+                    schema.TableColumn(column_id="order_date", data_type="date"),
+                    schema.TableColumn(column_id="region", data_type="string"),
+                    schema.TableColumn(column_id="revenue", data_type="decimal"),
+                ),
+                metrics=(
+                    schema.Metric(
+                        metric_id="total_revenue",
+                        label="total revenue",
+                        expression="sum(revenue)",
+                        source_column="revenue",
+                        kind=schema.MetricKind.MONEY,
+                    ),
+                ),
+                fields=(
+                    schema.SemanticField(
+                        field_id="order_date",
+                        label="order date",
+                        source_column="order_date",
+                        data_type=schema.DataType.DATE,
+                        operations=(
+                            schema.FieldOperation.GROUP_BY,
+                            schema.FieldOperation.INCLUDE_FILTER,
+                            schema.FieldOperation.EXCLUDE_FILTER,
+                            schema.FieldOperation.RANGE_FILTER,
+                        ),
+                    ),
+                    schema.SemanticField(
+                        field_id="region",
+                        label="region",
+                        source_column="region",
+                        data_type=schema.DataType.STRING,
+                        operations=(
+                            schema.FieldOperation.GROUP_BY,
+                            schema.FieldOperation.INCLUDE_FILTER,
+                            schema.FieldOperation.EXCLUDE_FILTER,
+                        ),
+                    ),
+                ),
+            ),
+            schema.DatasetTable(
+                table_id="customers",
+                dataset_id="retail_ops",
+                description="Clean retail customer metadata.",
+                columns=(
+                    schema.TableColumn(column_id="created_date", data_type="date"),
+                    schema.TableColumn(column_id="customer_id", data_type="string"),
+                    schema.TableColumn(column_id="customer_region", data_type="string"),
+                ),
+                metrics=(
+                    schema.Metric(
+                        metric_id="customer_count",
+                        label="customer count",
+                        expression="count(customer_id)",
+                        source_column="customer_id",
+                        kind=schema.MetricKind.COUNT,
+                    ),
+                ),
+                fields=(
+                    schema.SemanticField(
+                        field_id="created_date",
+                        label="created date",
+                        source_column="created_date",
+                        data_type=schema.DataType.DATE,
+                        operations=(
+                            schema.FieldOperation.INCLUDE_FILTER,
+                            schema.FieldOperation.EXCLUDE_FILTER,
+                            schema.FieldOperation.RANGE_FILTER,
+                        ),
+                    ),
+                    schema.SemanticField(
+                        field_id="customer_region",
+                        label="customer region",
+                        source_column="customer_region",
+                        data_type=schema.DataType.STRING,
+                        operations=(
+                            schema.FieldOperation.GROUP_BY,
+                            schema.FieldOperation.INCLUDE_FILTER,
+                            schema.FieldOperation.EXCLUDE_FILTER,
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
 @pytest.fixture
 def active_semantic_layer() -> semantic_layer_catalog.SemanticLayerCatalog:
-    """Load the configured Semantic Layer used by workflow tests."""
-    return semantic_layer_loader.load_semantic_layer()
+    """Return the canonical orders+customers Semantic Layer for workflow tests."""
+    return canonical_test_semantic_layer()
 
 
 @pytest.fixture
@@ -99,7 +223,7 @@ def canonical_question() -> str:
 
 @pytest.fixture
 def allowed_internal_identity() -> contracts.InternalIdentity:
-    """Return an identity allowed to access the demo commerce dataset."""
+    """Return an identity allowed to access the demo retail dataset."""
     return access_controller.DEFAULT_LOCAL_ALLOWED_IDENTITY
 
 

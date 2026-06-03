@@ -49,7 +49,7 @@ _DEFAULT_FIELDS = (
 def semantic_layer_with_table(
     *,
     table_id: str = "orders",
-    dataset_id: str = "commerce",
+    dataset_id: str = "retail_ops",
     description: str = "Orders table.",
     columns: collections.abc.Mapping[str, str] = _DEFAULT_COLUMNS,
     metrics: tuple[schema.Metric, ...] = _DEFAULT_METRICS,

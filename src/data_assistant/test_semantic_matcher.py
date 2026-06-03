@@ -15,7 +15,7 @@ def test_semantic_matcher_resolves_canonical_table_level_match(
 
     assert len(matches) == 1
     match = matches[0]
-    assert match.dataset.dataset_id == "commerce"
+    assert match.dataset.dataset_id == "retail_ops"
     assert match.table.table_id == "orders"
     assert match.metric.metric_id == "total_revenue"
     assert match.group_by_field is not None

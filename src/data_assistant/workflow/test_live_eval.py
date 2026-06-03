@@ -9,6 +9,25 @@ import data_assistant.question_interpreter as question_interpreter
 import data_assistant.reasoning_layer as reasoning_layer
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.live_eval as live_eval
+import data_assistant.workflow.runner as workflow_runner
+from data_assistant.conftest import canonical_test_semantic_layer
+
+
+@pytest.fixture(autouse=True)
+def _runner_uses_canonical_layer(  # pyright: ignore[reportUnusedFunction]
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Run the offline live-eval pipeline against the small orders-shaped layer.
+
+    The adversarial fixture rows and the static Question Interpreter frame assume
+    the ``orders``/``region``/``revenue`` shape, so the offline tests inject a
+    layer of that shape rather than the shipped retail loader default.
+    """
+    monkeypatch.setattr(
+        workflow_runner.semantic_layer_loader,
+        "load_semantic_layer",
+        canonical_test_semantic_layer,
+    )
 
 
 def _grounded_filled_reasoning_provider() -> reasoning_layer.ReasoningProvider:

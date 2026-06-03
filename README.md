@@ -35,7 +35,7 @@ between. The decisions most worth calling out:
   of collapsing them into a grouped answer.
 
 - **Meaning lives in versioned YAML, not a prompt.** The `Semantic Layer`
-  (`examples/commerce_smoke/semantic_layer/`) is the checked-in source of what the bot knows — datasets,
+  (`examples/retail_ops_demo/semantic_layer/`) is the checked-in source of what the bot knows — datasets,
   metrics, dimensions, joins, access — so meaning is reviewable in git instead of
   hiding inside raw table names the model happened to read.
 
