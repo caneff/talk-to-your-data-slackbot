@@ -1,34 +1,14 @@
 """Shared provider-facing Question Frame cases for evals and demo replay.
 
 These cases target the retail Semantic Layer
-(`examples/retail_ops_demo/semantic_layer`), the app/QA default that the live
-eval loads. Every label here is a verbatim retail YAML label, and every case
-pairs its metric with a groupable field and date field that live in the SAME
-Dataset Table, so each expected proposal is a coherent supported question
-(cross-table combinations are out-of-layer degradation cases handled elsewhere).
+(`examples/retail_ops_demo/semantic_layer`), the app/QA default the live eval
+loads. Two invariants hold for every case, with the table YAMLs under
+`.../semantic_layer/tables/` as the sole authority for both:
 
-Table map (label source: `examples/retail_ops_demo/semantic_layer/tables`):
-
-- `demo_orders`: metrics `total net revenue`, `total gross revenue`,
-  `order count`, `total discount amount`; groupable `order channel`,
-  `fulfillment status`, `promotion code`, `shipping region`, `store region`,
-  `customer segment`; date `order date`.
-- `demo_order_lines`: metrics `total line revenue`, `gross margin`,
-  `units sold`, `units returned`; groupable `product`, `order`,
-  `product category`, `product subcategory`, `brand`; date `order date`.
-- `demo_customers`: metric `customer count`; groupable `customer segment`,
-  `customer region`, `loyalty tier`, `acquisition channel`; date
-  `customer created date`.
-- `demo_products`: metric `product count`; groupable `product category`,
-  `product subcategory`, `brand`; (no date).
-- `demo_stores`: metric `store count`; groupable `store region`,
-  `store channel`; date `store opened date`.
-- `demo_support_tickets`: metric `support ticket count`; groupable
-  `issue category`, `ticket priority`, `ticket status`; date
-  `ticket created date`.
-- `demo_inventory_snapshots`: metrics `on hand units`, `stockout days`;
-  groupable `store`, `inventory product`, `product category`,
-  `product subcategory`; date `inventory snapshot date`.
+- Every metric and field label is copied verbatim from a retail table YAML.
+- Each case pairs its metric, groupable field, and date field from the SAME
+  table, so the expected proposal is a coherent supported question; cross-table
+  combinations are out-of-layer degradation cases handled elsewhere.
 """
 
 from __future__ import annotations
