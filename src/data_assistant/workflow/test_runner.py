@@ -235,6 +235,57 @@ def test_data_assistant_runs_customer_count_by_customer_region_end_to_end(
     )
 
 
+def test_data_assistant_runs_order_date_grouping_end_to_end(
+    allowed_internal_identity: contracts.InternalIdentity,
+) -> None:
+    provider = _static_provider(
+        question_interpreter.QuestionFrameProposal(
+            intent="summarize",
+            metric="total revenue",
+            field_operations=(
+                question_interpreter.GroupByOperationProposal(
+                    operation="group_by",
+                    field="order date",
+                ),
+                question_interpreter.RangeFilterOperationProposal(
+                    operation="range_filter",
+                    field="order date",
+                    lower="2026-01-01",
+                    upper="2026-01-31",
+                ),
+            ),
+        )
+    )
+    order_rows = (
+        ("2026-01-03", "North", "300.00"),
+        ("2026-01-08", "South", "200.00"),
+        ("2026-01-15", "West", "100.00"),
+        ("2026-02-01", "West", "9999.00"),
+    )
+
+    with local_duckdb_fixture.connect_orders(order_rows) as connection:
+        run = workflow_runner.run_data_assistant(
+            connection,
+            "What was total revenue by order date in January 2026?",
+            question_interpreter_provider=provider,
+            internal_identity=allowed_internal_identity,
+        )
+
+    assert isinstance(run, contracts.DataAssistantRun)
+    assert run.question_frame.group_by_field == "order date"
+    assert run.data_request.group_by_field is not None
+    assert run.data_request.group_by_field.label == "order date"
+    assert tuple(run.prepared_data.data["dimension_value"]) == (
+        "2026-01-03",
+        "2026-01-08",
+        "2026-01-15",
+    )
+    assert tuple(run.prepared_data.data["metric_value"]) == (300.0, 200.0, 100.0)
+    assert "All" not in set(run.prepared_data.data["dimension_value"])
+    assert "- 2026-01-03: $300.00" in run.final_response.text
+    assert "2026-01-03 00:00:00" not in run.final_response.text
+
+
 def test_data_assistant_runs_all_time_grouped_revenue_end_to_end(
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:

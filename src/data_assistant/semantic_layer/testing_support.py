@@ -26,6 +26,7 @@ _DEFAULT_FIELDS = (
         source_column="order_date",
         data_type=schema.DataType.DATE,
         operations=(
+            schema.FieldOperation.GROUP_BY,
             schema.FieldOperation.INCLUDE_FILTER,
             schema.FieldOperation.EXCLUDE_FILTER,
             schema.FieldOperation.RANGE_FILTER,

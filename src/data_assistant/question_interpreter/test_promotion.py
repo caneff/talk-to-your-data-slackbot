@@ -119,3 +119,50 @@ def test_unreflected_metric_ambiguity_still_non_answers() -> None:
 
     assert isinstance(result, contracts.NonAnswer)
     assert result.reason_code == contracts.NonAnswerReasonCode.AMBIGUOUS_METRIC
+
+
+def test_group_by_requested_on_non_groupable_field_returns_unsupported_operation() -> (
+    None
+):
+    semantic_layer = semantic_layer_testing.semantic_layer_with_table(
+        fields=(
+            schema.SemanticField(
+                field_id="order_date",
+                label="order date",
+                source_column="order_date",
+                data_type=schema.DataType.DATE,
+                operations=(
+                    schema.FieldOperation.INCLUDE_FILTER,
+                    schema.FieldOperation.EXCLUDE_FILTER,
+                    schema.FieldOperation.RANGE_FILTER,
+                ),
+            ),
+        )
+    )
+    proposal = question_interpreter.QuestionFrameProposal(
+        intent="summarize",
+        metric="total revenue",
+        field_operations=(
+            question_interpreter.GroupByOperationProposal(
+                operation="group_by",
+                field="order date",
+            ),
+            question_interpreter.RangeFilterOperationProposal(
+                operation="range_filter",
+                field="order date",
+                lower="2026-01-01",
+                upper="2026-01-31",
+            ),
+        ),
+    )
+
+    result = question_interpreter.interpret_question(
+        question="What was total revenue by order date in January 2026?",
+        semantic_layer=semantic_layer,
+        provider=_StaticProvider(proposal),
+    )
+
+    assert isinstance(result, contracts.NonAnswer)
+    assert (
+        result.reason_code == contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION
+    )

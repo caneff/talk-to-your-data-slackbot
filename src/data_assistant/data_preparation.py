@@ -27,9 +27,7 @@ def prepare_data(
         dimension_select = "'All'"
         group_and_order = "having count(*) > 0"
     else:
-        dimension_select = (
-            f"coalesce(nullif(trim({group_by_field.source_column}), ''), 'Unknown')"
-        )
+        dimension_select = _grouped_dimension_sql(group_by_field)
         group_and_order = (
             "group by dimension_value\n"
             "        order by metric_value desc, dimension_value asc"
@@ -49,15 +47,7 @@ def prepare_data(
         limit $result_limit
     """
     missing_dimension_expression = (
-        "0"
-        if group_by_field is None
-        else f"""
-                case
-                    when {group_by_field.source_column} is null
-                      or trim({group_by_field.source_column}) = '' then 1
-                    else 0
-                end
-        """
+        "0" if group_by_field is None else _missing_dimension_sql(group_by_field)
     )
     quality_query = f"""
         with {filtered_rows_cte}
@@ -171,3 +161,30 @@ def _row_word(count: int) -> str:
     if count == 1:
         return "row"
     return "rows"
+
+
+def _grouped_dimension_sql(group_by_field: schema.SemanticField) -> str:
+    column = group_by_field.source_column
+    if group_by_field.data_type == schema.DataType.STRING:
+        return f"coalesce(nullif(trim({column}), ''), 'Unknown')"
+    if group_by_field.data_type == schema.DataType.DATE:
+        return f"cast({column} as varchar)"
+    return column
+
+
+def _missing_dimension_sql(group_by_field: schema.SemanticField) -> str:
+    column = group_by_field.source_column
+    if group_by_field.data_type == schema.DataType.STRING:
+        return f"""
+                case
+                    when {column} is null
+                      or trim({column}) = '' then 1
+                    else 0
+                end
+        """
+    return f"""
+                case
+                    when {column} is null then 1
+                    else 0
+                end
+    """
