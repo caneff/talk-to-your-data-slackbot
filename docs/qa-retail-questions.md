@@ -57,7 +57,6 @@ comparison.
 - What was support ticket count by ticket status for all time?
 - What was support ticket count by issue category excluding the Resolved status?
 - What was support ticket count for high priority tickets in April 2026?
-- What was support ticket count excluding resolved tickets?
 
 ## Inventory Health
 
@@ -76,6 +75,8 @@ These should return Non-Answers rather than guessed results.
 - What was gross margin?
   - Expected reason: missing time scope.
 - What was support ticket count?
+  - Expected reason: missing time scope.
+- What was support ticket count excluding resolved tickets?
   - Expected reason: missing time scope.
 - What was total net revenue by product category in March 2026?
   - Expected reason: no single Dataset Table has both `total net revenue`
