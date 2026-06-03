@@ -320,7 +320,6 @@ def test_openai_provider_prompt_extracts_explicit_calendar_month_time_ranges() -
     assert "When the selected metric_context has exactly one date" in (developer_prompt)
     assert "use that field for a complete calendar month and year" in (developer_prompt)
     assert "Never omit a complete calendar month" in developer_prompt
-    assert 'return intent\n"summarize"' in developer_prompt
     assert 'operation "range_filter", field "order date"' in developer_prompt
     assert "not inventing a time range" in developer_prompt
 
@@ -350,17 +349,16 @@ def test_openai_provider_prompt_chooses_one_relevant_date_field() -> None:
         developer_prompt
     )
     assert "choose the one most" in developer_prompt
-    assert "directly related to the requested metric" in developer_prompt
-    assert "Do not add date" in developer_prompt
-    assert "filters for unrelated fields" in developer_prompt
-    assert "must not include operations for fields that are merely" in (
-        developer_prompt
-    )
+    assert "related to the requested metric and grouping labels" in developer_prompt
+    assert "Do not add date filters" in developer_prompt
+    assert "for unrelated fields just because" in developer_prompt
+    assert "merely available in the Semantic Layer" in developer_prompt
     assert "use the metric_context" in developer_prompt
     assert "outside the selected metric's compatible fields" in developer_prompt
-    assert "A field that" in developer_prompt
-    assert "appears only under a different metric_context" in developer_prompt
-    assert "Never return include_filter or exclude_filter with" in developer_prompt
+    assert "field that appears only under a different metric_context" in (
+        developer_prompt
+    )
+    assert "or exclude_filter with values []" in developer_prompt
     assert "values []" in developer_prompt
     assert "What was customer count by customer region in January 2026?" in (
         developer_prompt
@@ -390,20 +388,17 @@ def test_openai_provider_prompt_forbids_implicit_empty_filters() -> None:
     )
     developer_prompt = input_messages[0]["content"]
     assert "field_operations must be minimal and exhaustive" in developer_prompt
-    assert "if a field operation is not" in developer_prompt
-    assert "directly supported by words in the Data Question" in developer_prompt
-    assert "Do not use include_filter or exclude_filter" in developer_prompt
-    assert "included or excluded\nvalue" in developer_prompt
-    assert "return no include_filter or exclude_filter" in developer_prompt
-    assert "do not invent a\n  range_filter" in developer_prompt
+    assert "field operation is not directly supported" in developer_prompt
+    assert "directly supported by words in the Data" in developer_prompt
+    assert "to represent a grouping label" in developer_prompt
+    assert "no explicit included or excluded value is present" in developer_prompt
+    assert "do not invent a range_filter" in developer_prompt
     assert 'For "What was total revenue by region?"' in developer_prompt
     assert "exactly one field_operation" in developer_prompt
     assert 'operation "group_by", field "region"' in developer_prompt
     assert 'Do not add any "order date" operation' in developer_prompt
     assert 'range_filter for "order date" with null bounds' in developer_prompt
-    assert "Semantic Layer examples and available fields describe capabilities" in (
-        developer_prompt
-    )
+    assert "Semantic Layer examples and available fields describe" in developer_prompt
 
 
 def test_openai_provider_prompt_classifies_rank_as_unsupported_intent() -> None:
@@ -437,8 +432,8 @@ def test_openai_provider_prompt_classifies_rank_as_unsupported_intent() -> None:
         'For "Which region had the highest total revenue in January 2026?"'
         in developer_prompt
     )
-    assert 'return\nintent "rank"' in developer_prompt
-    assert 'Do not collapse that question into intent "summarize"' in (developer_prompt)
+    assert '"rank" and the same field_operations' in developer_prompt
+    assert "Do not collapse that question into" in developer_prompt
 
 
 def test_openai_provider_prompt_describes_dimension_value_filters() -> None:
@@ -466,16 +461,46 @@ def test_openai_provider_prompt_describes_dimension_value_filters() -> None:
         developer_prompt
     )
     assert '"in the <value> <field label>"' in developer_prompt
-    assert "Copy the\n  requested value into values" in developer_prompt
+    assert "requested value into values" in developer_prompt
     assert (
         'For a dimension-value filter question like "What was total revenue'
         in developer_prompt
     )
     assert 'operation "include_filter", field "region"' in developer_prompt
     assert 'values ["West"]' in developer_prompt
-    assert "Apply the same pattern to\nany single requested dimension value" in (
+    assert "Apply the same pattern to" in developer_prompt
+
+
+def test_openai_provider_prompt_states_phrasing_independent_metric_rule() -> None:
+    parse_calls: list[dict[str, object]] = []
+
+    class FakeParsedResponse:
+        output_parsed = test_support.question_frame_proposal()
+
+    provider = _openai_provider_returning(
+        FakeParsedResponse(),
+        parse_calls=parse_calls,
+    )
+
+    provider.propose_question_frame(
+        question="What was total net revenue by store region?",
+        semantic_layer_context={"datasets": []},
+    )
+
+    input_messages = typing.cast(
+        list[dict[str, str]],
+        parse_calls[0]["input"],
+    )
+    developer_prompt = input_messages[0]["content"]
+    assert "Decide the metric by checking available_metric_labels only" in (
         developer_prompt
     )
+    assert "not depend on whether time, filters, or grouping are present" in (
+        developer_prompt
+    )
+    assert "even when the wording contains a qualifier" in developer_prompt
+    assert "phrasing- and time-independent" in developer_prompt
+    assert "Never flag an exact available label" in developer_prompt
 
 
 def test_openai_provider_maps_refusal_to_provider_failure() -> None:
