@@ -29,8 +29,10 @@ from __future__ import annotations
 
 import argparse
 import collections.abc as collections_abc
+import dataclasses
 import os
 import pathlib
+import re
 import sys
 import typing
 
@@ -47,6 +49,45 @@ _NO_THREAD_MESSAGE: typing.Final[str] = (
     "No assistant thread found — open a thread with the bot first, "
     "or pass --channel/--thread-ts."
 )
+_IDENTIFIED_CASE_PATTERN: typing.Final[re.Pattern[str]] = re.compile(
+    r"^\[(?P<id>[^\]]+)\]\s+(?P<question>.+)$"
+)
+
+
+@dataclasses.dataclass(frozen=True)
+class QACase:
+    id: str | None
+    question: str
+
+
+def parse_battery_cases(
+    markdown: str,
+    *,
+    allow_unidentified: bool = False,
+) -> list[QACase]:
+    """Extract top-level QA cases from markdown in source order."""
+    cases: list[QACase] = []
+    seen_ids: set[str] = set()
+    for line in markdown.splitlines():
+        if not line.startswith("- "):
+            continue
+        bullet_text = line[len("- ") :].strip()
+        match = _IDENTIFIED_CASE_PATTERN.match(bullet_text)
+        if match is None:
+            if allow_unidentified:
+                cases.append(QACase(id=None, question=bullet_text))
+                continue
+            raise ValueError(
+                "Missing QA case id for bullet: "
+                f"{bullet_text}. Use '- [qa-case-id] Question text' or pass "
+                "--allow-unidentified-cases."
+            )
+        case_id = match.group("id").strip()
+        if case_id in seen_ids:
+            raise ValueError(f"Duplicate QA case id: {case_id}")
+        seen_ids.add(case_id)
+        cases.append(QACase(id=case_id, question=match.group("question").strip()))
+    return cases
 
 
 def parse_battery(markdown: str) -> list[str]:
@@ -59,11 +100,9 @@ def parse_battery(markdown: str) -> list[str]:
     so there is deliberately no expected-answer comparison here). Pure string ->
     list: no Slack, no OpenAI.
     """
-    questions: list[str] = []
-    for line in markdown.splitlines():
-        if line.startswith("- "):
-            questions.append(line[len("- ") :].strip())
-    return questions
+    return [
+        case.question for case in parse_battery_cases(markdown, allow_unidentified=True)
+    ]
 
 
 def resolve_thread_target(
@@ -134,8 +173,15 @@ def main(
     channel, thread_ts = target
 
     battery_text = pathlib.Path(args.battery).read_text(encoding="utf-8")
-    questions = parse_battery(battery_text)
-    if not questions:
+    try:
+        cases = parse_battery_cases(
+            battery_text,
+            allow_unidentified=args.allow_unidentified_cases,
+        )
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    if not cases:
         print(f"No questions found in battery {args.battery}.", file=sys.stderr)
         return 1
 
@@ -152,14 +198,17 @@ def main(
     )
 
     print(
-        f"Replaying {len(questions)} question(s) from {args.battery} "
+        f"Replaying {len(cases)} question(s) from {args.battery} "
         f"into channel={channel} thread_ts={thread_ts} as the bot.\n"
         "The bot must be running to own the flag buttons and share the log.\n"
     )
-    for index, question in enumerate(questions, start=1):
-        print(f"[{index}/{len(questions)}] {question}")
+    for index, case in enumerate(cases, start=1):
+        case_label = (
+            f"{case.question} ({case.id})" if case.id is not None else case.question
+        )
+        print(f"[{index}/{len(cases)}] {case_label}")
         _interaction_id, final_response, reply_blocks = adapter.answer_and_render(
-            text=question,
+            text=case.question,
             user="qa_driver",
             set_status=_quietly_set_status,
         )
@@ -190,7 +239,7 @@ def _connection_factory(args: argparse.Namespace) -> slack_runtime.ConnectionFac
     )
 
 
-def _parse_args(argv: collections_abc.Sequence[str]) -> argparse.Namespace:
+def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Replay the curated QA battery through the bot into an assistant "
@@ -220,6 +269,14 @@ def _parse_args(argv: collections_abc.Sequence[str]) -> argparse.Namespace:
         type=str,
         default=DEFAULT_BATTERY_PATH,
         help=f"Markdown battery to replay. Defaults to {DEFAULT_BATTERY_PATH}.",
+    )
+    parser.add_argument(
+        "--allow-unidentified-cases",
+        action="store_true",
+        help=(
+            "Allow legacy top-level '- Question text' bullets without "
+            "stable QA case ids."
+        ),
     )
     parser.add_argument(
         "--env-file",
@@ -254,6 +311,11 @@ def _parse_args(argv: collections_abc.Sequence[str]) -> argparse.Namespace:
             "the retail demo seed (only when --duckdb-path is also unset)."
         ),
     )
+    return parser
+
+
+def _parse_args(argv: collections_abc.Sequence[str]) -> argparse.Namespace:
+    parser = build_arg_parser()
     args = parser.parse_args(argv)
     if args.seed_sql_path is not None and args.duckdb_path is None:
         parser.error("--seed-sql-path requires --duckdb-path")
