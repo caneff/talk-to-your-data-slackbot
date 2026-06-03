@@ -728,6 +728,59 @@ def test_default_live_eval_includes_customer_count_by_customer_region_case() -> 
     )
 
 
+def test_default_live_eval_includes_exact_date_net_revenue_case() -> None:
+    case = next(
+        case
+        for case in live_eval.DEFAULT_CASES
+        if case.name == "exact_date_net_revenue"
+    )
+
+    assert case.enabled is True
+    assert case.question == "What was total net revenue on 2026-01-15?"
+    assert case.expected == question_interpreter.QuestionFrameProposal(
+        intent="summarize",
+        metric="total net revenue",
+        field_operations=(
+            question_interpreter.IncludeFilterOperationProposal(
+                operation="include_filter",
+                field="order date",
+                values=("2026-01-15",),
+            ),
+        ),
+    )
+
+
+def test_default_live_eval_includes_multi_filter_net_revenue_case() -> None:
+    case = next(
+        case
+        for case in live_eval.DEFAULT_CASES
+        if case.name == "multi_filter_net_revenue"
+    )
+
+    assert case.enabled is True
+    assert case.question == (
+        "What was total net revenue for the Web order channel and Shipped "
+        "fulfillment status for all time?"
+    )
+    assert case.expected == question_interpreter.QuestionFrameProposal(
+        intent="summarize",
+        metric="total net revenue",
+        all_time=True,
+        field_operations=(
+            question_interpreter.IncludeFilterOperationProposal(
+                operation="include_filter",
+                field="order channel",
+                values=("Web",),
+            ),
+            question_interpreter.IncludeFilterOperationProposal(
+                operation="include_filter",
+                field="fulfillment status",
+                values=("Shipped",),
+            ),
+        ),
+    )
+
+
 def test_main_loads_real_semantic_layer_for_live_eval(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: pathlib.Path,

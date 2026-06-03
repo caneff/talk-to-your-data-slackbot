@@ -88,6 +88,26 @@ def _order_channel_filter(
     )
 
 
+def _order_date_filter(
+    value: str,
+) -> question_interpreter.IncludeFilterOperationProposal:
+    return question_interpreter.IncludeFilterOperationProposal(
+        operation="include_filter",
+        field="order date",
+        values=(value,),
+    )
+
+
+def _fulfillment_status_filter(
+    value: str,
+) -> question_interpreter.IncludeFilterOperationProposal:
+    return question_interpreter.IncludeFilterOperationProposal(
+        operation="include_filter",
+        field="fulfillment status",
+        values=(value,),
+    )
+
+
 def _january_net_revenue_by_store_region_proposal() -> (
     question_interpreter.QuestionFrameProposal
 ):
@@ -172,6 +192,26 @@ def _all_time_net_revenue_for_channel_value_proposal(
     )
 
 
+def _exact_date_net_revenue_proposal() -> question_interpreter.QuestionFrameProposal:
+    return _proposal(
+        intent="summarize",
+        metric="total net revenue",
+        field_operations=(_order_date_filter("2026-01-15"),),
+    )
+
+
+def _multi_filter_net_revenue_proposal() -> question_interpreter.QuestionFrameProposal:
+    return _proposal(
+        intent="summarize",
+        metric="total net revenue",
+        field_operations=(
+            _order_channel_filter("Web"),
+            _fulfillment_status_filter("Shipped"),
+        ),
+        all_time=True,
+    )
+
+
 SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
     SharedQuestionFrameCase(
         name="canonical_question",
@@ -219,5 +259,18 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
         name="all_time_net_revenue_for_channel_value",
         question="What was total net revenue for the Web order channel for all time?",
         expected=_all_time_net_revenue_for_channel_value_proposal("Web"),
+    ),
+    SharedQuestionFrameCase(
+        name="exact_date_net_revenue",
+        question="What was total net revenue on 2026-01-15?",
+        expected=_exact_date_net_revenue_proposal(),
+    ),
+    SharedQuestionFrameCase(
+        name="multi_filter_net_revenue",
+        question=(
+            "What was total net revenue for the Web order channel and Shipped "
+            "fulfillment status for all time?"
+        ),
+        expected=_multi_filter_net_revenue_proposal(),
     ),
 )
