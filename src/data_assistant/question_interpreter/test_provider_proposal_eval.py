@@ -9,7 +9,6 @@ import data_assistant.question_interpreter.provider_proposal_cases as proposal_c
 import data_assistant.question_interpreter.provider_proposal_eval as proposal_eval
 import data_assistant.question_interpreter.test_support as test_support
 import data_assistant.semantic_layer.testing_support as semantic_layer_testing
-import data_assistant.workflow.contracts as contracts
 
 
 class _SequenceProvider:
@@ -43,6 +42,14 @@ def _eval_case(
     )
 
 
+def _selection_cases() -> tuple[proposal_eval.ProviderProposalEvalCase, ...]:
+    return (
+        _eval_case(name="alpha"),
+        _eval_case(name="beta"),
+        _eval_case(name="gamma"),
+    )
+
+
 def test_default_cases_preserve_catalog_invariants() -> None:
     shared_cases = proposal_cases.SHARED_PROVIDER_PROPOSAL_CASES
     default_cases = proposal_eval.DEFAULT_CASES
@@ -55,10 +62,6 @@ def test_default_cases_preserve_catalog_invariants() -> None:
     }
     assert all(
         isinstance(case.expected, question_interpreter.ProviderProposal)
-        for case in default_cases
-    )
-    assert all(
-        not isinstance(case.expected, contracts.QuestionFrame | contracts.NonAnswer)
         for case in default_cases
     )
     assert all(
@@ -175,11 +178,7 @@ def test_run_provider_proposal_eval_separates_known_deferred_and_tripwires() -> 
 
 
 def test_select_cases_supports_range_and_only_cases() -> None:
-    cases = (
-        _eval_case(name="alpha"),
-        _eval_case(name="beta"),
-        _eval_case(name="gamma"),
-    )
+    cases = _selection_cases()
 
     assert proposal_eval.select_cases(cases, start_at=2, stop_at=3) == (
         (2, cases[1]),
@@ -191,51 +190,46 @@ def test_select_cases_supports_range_and_only_cases() -> None:
     )
 
 
-def test_select_cases_rejects_combining_only_cases_with_range() -> None:
-    cases = (
-        _eval_case(name="alpha"),
-        _eval_case(name="beta"),
-        _eval_case(name="gamma"),
-    )
-    message = "--only-cases cannot be combined with --start-at or --stop-at"
-
+@pytest.mark.parametrize(
+    ("start_at", "stop_at", "only_cases", "message"),
+    (
+        (
+            2,
+            None,
+            ("alpha",),
+            "--only-cases cannot be combined with --start-at or --stop-at",
+        ),
+        (
+            2,
+            4,
+            None,
+            "invalid case range: require 1 <= start (2) <= stop (4) <= "
+            "enabled count (3)",
+        ),
+        (
+            1,
+            None,
+            ("9",),
+            "--only-cases index out of range: 9 (enabled count 3)",
+        ),
+        (
+            1,
+            None,
+            ("missing",),
+            "--only-cases unknown case name: missing",
+        ),
+    ),
+)
+def test_select_cases_rejects_invalid_selection(
+    start_at: int,
+    stop_at: int | None,
+    only_cases: tuple[str, ...] | None,
+    message: str,
+) -> None:
     with pytest.raises(ValueError, match=re.escape(message)):
-        proposal_eval.select_cases(cases, start_at=2, only_cases=("alpha",))
-
-
-def test_select_cases_rejects_invalid_range() -> None:
-    cases = (
-        _eval_case(name="alpha"),
-        _eval_case(name="beta"),
-        _eval_case(name="gamma"),
-    )
-    message = (
-        "invalid case range: require 1 <= start (2) <= stop (4) <= enabled count (3)"
-    )
-
-    with pytest.raises(ValueError, match=re.escape(message)):
-        proposal_eval.select_cases(cases, start_at=2, stop_at=4)
-
-
-def test_select_cases_rejects_out_of_range_only_cases_index() -> None:
-    cases = (
-        _eval_case(name="alpha"),
-        _eval_case(name="beta"),
-        _eval_case(name="gamma"),
-    )
-    message = "--only-cases index out of range: 9 (enabled count 3)"
-
-    with pytest.raises(ValueError, match=re.escape(message)):
-        proposal_eval.select_cases(cases, only_cases=("9",))
-
-
-def test_select_cases_rejects_unknown_only_cases_name() -> None:
-    cases = (
-        _eval_case(name="alpha"),
-        _eval_case(name="beta"),
-        _eval_case(name="gamma"),
-    )
-    message = "--only-cases unknown case name: missing"
-
-    with pytest.raises(ValueError, match=re.escape(message)):
-        proposal_eval.select_cases(cases, only_cases=("missing",))
+        proposal_eval.select_cases(
+            _selection_cases(),
+            start_at=start_at,
+            stop_at=stop_at,
+            only_cases=only_cases,
+        )
