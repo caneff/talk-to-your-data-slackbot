@@ -38,6 +38,7 @@ import pandas as pd
 import data_assistant.access_controller as access_controller
 import data_assistant.assistant_thread_pointer as assistant_thread_pointer
 import data_assistant.interaction_log as interaction_log
+import data_assistant.known_qa_issues as known_qa_issues
 import data_assistant.workflow.contracts as contracts
 
 logger = logging.getLogger(__name__)
@@ -324,6 +325,14 @@ ConnectionFactory: typing.TypeAlias = collections_abc.Callable[
 AssistantIdentityResolver: typing.TypeAlias = collections_abc.Callable[
     [str], contracts.InternalIdentity
 ]
+KnownIssueReference = known_qa_issues.KnownQAIssue
+
+
+@dataclasses.dataclass(frozen=True)
+class QAReviewContext:
+    battery_path: str
+    qa_case_id: str | None
+    known_issues: tuple[KnownIssueReference, ...] = ()
 
 
 class StatusSetter(typing.Protocol):
@@ -403,6 +412,7 @@ def _interaction_record(
     user: str,
     question: str,
     qa_case_id: str | None,
+    qa_review_context: QAReviewContext | None,
     model: str,
     result: SlackWorkflowResult,
 ) -> dict[str, object]:
@@ -426,6 +436,7 @@ def _interaction_record(
     }
     if qa_case_id is not None:
         record["qa_case_id"] = qa_case_id
+    _apply_qa_review_context(record, qa_review_context=qa_review_context)
     if isinstance(result, contracts.DataAssistantRun):
         record["outcome"] = "answer"
         record.update(_answer_fields(result))
@@ -444,9 +455,10 @@ def _error_record(
     question: str,
     model: str,
     error: BaseException,
+    qa_review_context: QAReviewContext | None = None,
 ) -> dict[str, object]:
     """Build the Interaction Log record for a crashed answer path."""
-    return {
+    record: dict[str, object] = {
         "id": interaction_id,
         "timestamp": timestamp,
         "user": user,
@@ -459,6 +471,46 @@ def _error_record(
         "error_type": type(error).__name__,
         "error_message": str(error),
     }
+    _apply_qa_review_context(record, qa_review_context=qa_review_context)
+    return record
+
+
+def _apply_qa_review_context(
+    record: dict[str, object],
+    *,
+    qa_review_context: QAReviewContext | None,
+) -> None:
+    if qa_review_context is None:
+        return
+    record["source"] = "qa_review"
+    record["battery_path"] = qa_review_context.battery_path
+    if qa_review_context.qa_case_id is not None:
+        record["qa_case_id"] = qa_review_context.qa_case_id
+    if qa_review_context.qa_case_id is None or not qa_review_context.known_issues:
+        return
+    record["known_issues"] = [
+        {
+            "issue_number": issue.issue_number,
+            "flag_category": issue.flag_category,
+        }
+        for issue in qa_review_context.known_issues
+    ]
+
+
+def build_runtime_fallback_blocks(
+    *,
+    question: str,
+    interaction_id: str,
+) -> tuple[contracts.SlackBlock, ...]:
+    fallback_section: contracts.SlackBlock = {
+        "type": "section",
+        "text": {"type": "mrkdwn", "text": RUNTIME_FALLBACK_MESSAGE},
+    }
+    return (
+        (_question_echo_block(question),)
+        + (fallback_section,)
+        + flag_action_blocks(interaction_id)
+    )
 
 
 def _answer_fields(run: contracts.DataAssistantRun) -> dict[str, object]:
@@ -590,6 +642,7 @@ class AssistantAdapter:
         text: str,
         user: str,
         qa_case_id: str | None = None,
+        qa_review_context: QAReviewContext | None = None,
         set_status: StatusSetter,
     ) -> tuple[str, contracts.FinalResponse, tuple[contracts.SlackBlock, ...]]:
         """Run the success core for one question and return it ready to post.
@@ -633,6 +686,7 @@ class AssistantAdapter:
                 user=user,
                 question=text,
                 qa_case_id=qa_case_id,
+                qa_review_context=qa_review_context,
                 model=self.model_label,
                 result=result,
             ),
@@ -699,31 +753,46 @@ class AssistantAdapter:
             # Append the error record before the fallback say. Building and
             # appending are both wrapped so a logging failure can never block
             # the user reply.
-            self._record_interaction(
-                lambda: _error_record(
-                    interaction_id=interaction_id,
-                    timestamp=timestamp,
-                    latency_ms=_latency_ms(started_at),
-                    user=user,
-                    question=text,
-                    model=self.model_label,
-                    error=caught,
-                ),
+            self._record_runtime_error(
+                interaction_id=interaction_id,
+                timestamp=timestamp,
+                latency_ms=_latency_ms(started_at),
+                user=user,
+                question=text,
+                error=caught,
             )
             # Log first, then deliver the Runtime Fallback Message. If this `say`
             # itself raises we let it propagate: the maintainer log already
             # exists. The fallback is NOT a Non-Answer. It still carries the flag
             # buttons (its error record exists) so a crash reply is flaggable.
-            fallback_section: contracts.SlackBlock = {
-                "type": "section",
-                "text": {"type": "mrkdwn", "text": RUNTIME_FALLBACK_MESSAGE},
-            }
-            fallback_blocks = (
-                (_question_echo_block(text),)
-                + (fallback_section,)
-                + flag_action_blocks(interaction_id)
+            say(
+                RUNTIME_FALLBACK_MESSAGE,
+                blocks=build_runtime_fallback_blocks(
+                    question=text,
+                    interaction_id=interaction_id,
+                ),
             )
-            say(RUNTIME_FALLBACK_MESSAGE, blocks=fallback_blocks)
+
+    def record_runtime_error(
+        self,
+        *,
+        question: str,
+        user: str,
+        error: BaseException,
+        qa_review_context: QAReviewContext | None = None,
+    ) -> str:
+        interaction_id = uuid.uuid4().hex
+        timestamp = datetime.datetime.now(datetime.UTC).isoformat()
+        self._record_runtime_error(
+            interaction_id=interaction_id,
+            timestamp=timestamp,
+            latency_ms=0,
+            user=user,
+            question=question,
+            error=error,
+            qa_review_context=qa_review_context,
+        )
+        return interaction_id
 
     def _record_interaction(
         self,
@@ -742,6 +811,30 @@ class AssistantAdapter:
             interaction_log.append_interaction(record, path=self.log_path)
         except Exception:
             logger.exception("Failed to record Interaction Log entry.")
+
+    def _record_runtime_error(
+        self,
+        *,
+        interaction_id: str,
+        timestamp: str,
+        latency_ms: int,
+        user: str,
+        question: str,
+        error: BaseException,
+        qa_review_context: QAReviewContext | None = None,
+    ) -> None:
+        self._record_interaction(
+            lambda: _error_record(
+                interaction_id=interaction_id,
+                timestamp=timestamp,
+                latency_ms=latency_ms,
+                user=user,
+                question=question,
+                model=self.model_label,
+                error=error,
+                qa_review_context=qa_review_context,
+            ),
+        )
 
 
 def register_assistant_handlers(

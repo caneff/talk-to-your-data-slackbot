@@ -966,6 +966,55 @@ def test_on_user_message_logs_error_record_and_still_says_fallback(
     assert record["flags"] == []
 
 
+def test_record_runtime_error_logs_qa_review_metadata(
+    tmp_path: pathlib.Path,
+    connect_orders: collections.abc.Callable[
+        ..., contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
+    ],
+) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        _question: str,
+        _identity: contracts.InternalIdentity,
+        _progress_sink: contracts.ProgressSink,
+    ) -> slack_assistant.SlackWorkflowResult:
+        return _final_response()
+
+    adapter = slack_assistant.AssistantAdapter(
+        connection_factory=_connection_factory(connect_orders),
+        answer_path=answer_path,
+        log_path=log_path,
+    )
+
+    adapter.record_runtime_error(
+        question="What failed?",
+        user="qa_driver",
+        error=RuntimeError("answer path blew up"),
+        qa_review_context=slack_assistant.QAReviewContext(
+            battery_path="docs/qa-retail-questions.md",
+            qa_case_id="case-a",
+            known_issues=(
+                slack_assistant.KnownIssueReference(
+                    issue_number=166,
+                    flag_category="correctness",
+                ),
+            ),
+        ),
+    )
+
+    records = _read_log_records(log_path)
+    assert len(records) == 1
+    assert records[0]["outcome"] == "error"
+    assert records[0]["source"] == "qa_review"
+    assert records[0]["battery_path"] == "docs/qa-retail-questions.md"
+    assert records[0]["qa_case_id"] == "case-a"
+    assert records[0]["known_issues"] == [
+        {"issue_number": 166, "flag_category": "correctness"}
+    ]
+
+
 def test_answer_and_render_returns_id_response_blocks_and_logs_one_record(
     tmp_path: pathlib.Path,
     connect_orders: collections.abc.Callable[
@@ -1080,6 +1129,95 @@ def test_answer_and_render_logs_optional_qa_case_id_without_changing_question(
     assert records[0]["id"] == interaction_id
     assert records[0]["question"] == "What was total revenue by region in January 2026?"
     assert records[0]["qa_case_id"] == "orders-net-revenue-by-store-region-q1-2026"
+
+
+def test_answer_and_render_logs_qa_review_metadata(
+    tmp_path: pathlib.Path,
+    connect_orders: collections.abc.Callable[
+        ..., contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
+    ],
+) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        _question: str,
+        _identity: contracts.InternalIdentity,
+        _progress_sink: contracts.ProgressSink,
+    ) -> slack_assistant.SlackWorkflowResult:
+        return _final_response(text="Final answer text.")
+
+    adapter = slack_assistant.AssistantAdapter(
+        connection_factory=_connection_factory(connect_orders),
+        answer_path=answer_path,
+        log_path=log_path,
+    )
+
+    adapter.answer_and_render(
+        text="What was total revenue by region in January 2026?",
+        user="qa_driver",
+        set_status=RecordingStatus(),
+        qa_review_context=slack_assistant.QAReviewContext(
+            battery_path="docs/qa-retail-questions.md",
+            qa_case_id="orders-net-revenue-by-store-region-q1-2026",
+            known_issues=(
+                slack_assistant.KnownIssueReference(
+                    issue_number=166,
+                    flag_category="correctness",
+                ),
+            ),
+        ),
+    )
+
+    records = _read_log_records(log_path)
+    assert len(records) == 1
+    assert records[0]["source"] == "qa_review"
+    assert records[0]["battery_path"] == "docs/qa-retail-questions.md"
+    assert records[0]["qa_case_id"] == "orders-net-revenue-by-store-region-q1-2026"
+    assert records[0]["known_issues"] == [
+        {"issue_number": 166, "flag_category": "correctness"}
+    ]
+
+
+def test_answer_and_render_omits_known_issue_metadata_for_unidentified_qa_case(
+    tmp_path: pathlib.Path,
+    connect_orders: collections.abc.Callable[
+        ..., contextlib.AbstractContextManager[duckdb.DuckDBPyConnection]
+    ],
+) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+
+    def answer_path(
+        _connection: duckdb.DuckDBPyConnection,
+        _question: str,
+        _identity: contracts.InternalIdentity,
+        _progress_sink: contracts.ProgressSink,
+    ) -> slack_assistant.SlackWorkflowResult:
+        return _final_response(text="Final answer text.")
+
+    adapter = slack_assistant.AssistantAdapter(
+        connection_factory=_connection_factory(connect_orders),
+        answer_path=answer_path,
+        log_path=log_path,
+    )
+
+    adapter.answer_and_render(
+        text="Legacy question?",
+        user="qa_driver",
+        set_status=RecordingStatus(),
+        qa_review_context=slack_assistant.QAReviewContext(
+            battery_path="docs/qa-retail-questions.md",
+            qa_case_id=None,
+            known_issues=(),
+        ),
+    )
+
+    records = _read_log_records(log_path)
+    assert len(records) == 1
+    assert records[0]["source"] == "qa_review"
+    assert records[0]["battery_path"] == "docs/qa-retail-questions.md"
+    assert "qa_case_id" not in records[0]
+    assert "known_issues" not in records[0]
 
 
 def test_answer_and_render_truncates_long_question_in_echo_block(
