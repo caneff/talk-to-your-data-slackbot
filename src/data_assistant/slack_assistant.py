@@ -484,10 +484,9 @@ def _apply_qa_review_context(
         return
     record["source"] = "qa_review"
     record["battery_path"] = qa_review_context.battery_path
-    if qa_review_context.qa_case_id is not None:
-        record["qa_case_id"] = qa_review_context.qa_case_id
-    if qa_review_context.qa_case_id is None or not qa_review_context.known_issues:
+    if qa_review_context.qa_case_id is None:
         return
+    record["qa_case_id"] = qa_review_context.qa_case_id
     record["known_issues"] = [
         {
             "issue_number": issue.issue_number,
