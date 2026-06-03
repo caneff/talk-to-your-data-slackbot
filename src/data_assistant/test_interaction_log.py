@@ -449,3 +449,83 @@ def test_clear_flags_missing_file_returns_false(tmp_path: pathlib.Path) -> None:
     cleared = interaction_log.clear_flags("abc123", path=tmp_path / "nope.jsonl")
 
     assert cleared is False
+
+
+# --- save_qa_review_note (issue #169) ---------------------------------------
+
+
+def test_save_qa_review_note_writes_note_to_matching_record(
+    tmp_path: pathlib.Path,
+) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+    interaction_log.append_interaction(_record(id="abc123"), path=log_path)
+
+    changed = interaction_log.save_qa_review_note(
+        "abc123",
+        "Needs follow-up on totals.",
+        path=log_path,
+    )
+
+    assert changed is True
+    assert _read_json_records(log_path) == [
+        {**_record(id="abc123"), "qa_review_note": "Needs follow-up on totals."}
+    ]
+
+
+def test_save_qa_review_note_replaces_prior_note(
+    tmp_path: pathlib.Path,
+) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+    interaction_log.append_interaction(
+        _record(id="abc123", qa_review_note="Old note"),
+        path=log_path,
+    )
+
+    changed = interaction_log.save_qa_review_note(
+        "abc123",
+        "Replacement note",
+        path=log_path,
+    )
+
+    assert changed is True
+    assert _read_json_records(log_path) == [
+        {**_record(id="abc123"), "qa_review_note": "Replacement note"}
+    ]
+
+
+def test_save_qa_review_note_only_touches_matching_record(
+    tmp_path: pathlib.Path,
+) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+    first = _record(id="first")
+    second = _record(id="second")
+    interaction_log.append_interaction(first, path=log_path)
+    interaction_log.append_interaction(second, path=log_path)
+
+    changed = interaction_log.save_qa_review_note(
+        "second",
+        "Review note",
+        path=log_path,
+    )
+
+    assert changed is True
+    assert _read_json_records(log_path) == [
+        first,
+        {**second, "qa_review_note": "Review note"},
+    ]
+
+
+def test_save_qa_review_note_unknown_id_is_noop_returns_false(
+    tmp_path: pathlib.Path,
+) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+    interaction_log.append_interaction(_record(id="abc123"), path=log_path)
+
+    changed = interaction_log.save_qa_review_note(
+        "missing",
+        "Review note",
+        path=log_path,
+    )
+
+    assert changed is False
+    assert _read_json_records(log_path) == [_record(id="abc123")]

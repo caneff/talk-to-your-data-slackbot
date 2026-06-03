@@ -188,6 +188,29 @@ def clear_flags(
     )
 
 
+def save_qa_review_note(
+    interaction_id: str,
+    note: str,
+    *,
+    path: pathlib.Path = DEFAULT_LOG_PATH,
+    retention_policy: RetentionPolicy = DEFAULT_RETENTION_POLICY,
+) -> bool:
+    """Replace one record's ``qa_review_note`` field via atomic rewrite."""
+
+    def _set_note(record: dict[str, object]) -> bool:
+        if record.get("qa_review_note") == note:
+            return False
+        record["qa_review_note"] = note
+        return True
+
+    return _rewrite_matching_record(
+        path,
+        interaction_id,
+        _set_note,
+        retention_policy=retention_policy,
+    )
+
+
 def _rewrite_matching_record(
     path: pathlib.Path,
     interaction_id: str,
