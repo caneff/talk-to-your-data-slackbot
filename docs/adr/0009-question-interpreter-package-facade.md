@@ -8,8 +8,8 @@ Accepted
 
 `question_interpreter.py` grew into a broad module spanning four concerns:
 untrusted provider proposal shapes, Semantic Layer context construction, the
-OpenAI provider, and the promotion boundary that validates and types provider
-output into a trusted Question Frame.
+OpenAI provider, and **Provider Proposal Validation**, which validates and types
+provider output into a trusted Question Frame.
 
 The repo already has packages such as `semantic_layer/` and `workflow/` whose
 `__init__.py` files stay empty apart from docstrings. Those packages are used as
@@ -36,9 +36,9 @@ Semantic Layer context builder, and `interpret_question`. `semantic_layer/` and
 This keeps existing `question_interpreter.X` call sites stable while allowing
 the internal modules to split by responsibility. The provider seam from
 [ADR-0004](0004-defer-llm-orchestration-framework.md) remains in place, and the
-promotion trust boundary affirmed by
-[ADR-0008](0008-question-interpreter-owns-filter-value-typing.md) remains owned
-by the Question Interpreter.
+**Provider Proposal Validation** boundary affirmed by
+[ADR-0008](0008-question-interpreter-owns-filter-value-typing.md) remains owned by
+the Question Interpreter.
 
 ## Consequences
 

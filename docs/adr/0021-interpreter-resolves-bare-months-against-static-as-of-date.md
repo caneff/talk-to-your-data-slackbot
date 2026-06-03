@@ -71,8 +71,8 @@ eval on cases #50/#51 run after this change; the wiring and dormancy are covered
 by free unit tests.
 
 This is the dual of ADR-0008: the interpreter still owns *typing* untrusted
-provider output at the trust boundary, and a resolved bare-month range is just
-another date `range_filter` it produces and the promotion step types. The
+provider output during **Provider Proposal Validation**, and a resolved
+bare-month range is just another date `range_filter` that validation types. The
 as-of date is configuration the interpreter reads, not data it trusts from the
 model.
 

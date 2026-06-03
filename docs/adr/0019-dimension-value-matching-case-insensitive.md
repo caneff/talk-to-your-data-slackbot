@@ -13,12 +13,12 @@ SQL comparison (`where priority in ($v)`) matches zero rows, so a perfectly
 reasonable question silently returns an empty answer.
 
 The first instinct was to resolve provider-proposed values to the catalog's
-canonical casing in `promotion.py`. That is not possible: **the catalog stores
-no value enum.** A `SemanticField` is `field_id / label / source_column /
-data_type / operations` only (see `semantic_layer/schema.py`). The set of
-allowed dimension values lives solely in the database, never in the Semantic
-Layer config, so there is nothing for the interpreter or promotion step to
-canonicalize against.
+canonical casing during **Provider Proposal Validation**. That is not possible:
+**the catalog stores no value enum.** A `SemanticField` is `field_id / label /
+source_column / data_type / operations` only (see `semantic_layer/schema.py`).
+The set of allowed dimension values lives solely in the database, never in the
+Semantic Layer config, so there is nothing for the interpreter's validation
+boundary to canonicalize against.
 
 Two facts shape the decision:
 
@@ -30,9 +30,9 @@ Two facts shape the decision:
   value.
 
 This is the dual of ADR-0008: the interpreter owns *typing* untrusted provider
-output at the trust boundary (date / decimal / string), but typing a string
-value does not constrain its casing. Casing is a retrieval-time concern, not a
-type-validation concern.
+output during **Provider Proposal Validation** (date / decimal / string), but
+typing a string value does not constrain its casing. Casing is a retrieval-time
+concern, not a type-validation concern.
 
 ## Decision
 

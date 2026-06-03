@@ -42,7 +42,7 @@ _Avoid_: Grouped summary, comparison, sort request
 **Unsupported Intent Guard**:
 A deterministic **Question Interpreter** check that rejects high-confidence
 **Unsupported Intent** wording before provider calls, backed by provider-output
-promotion that rejects every non-summarize intent.
+validation that rejects every non-summarize intent.
 _Avoid_: Prompt-only support policy, LLM fallback, best-effort classification
 
 **Slack Acknowledgement**:
@@ -133,6 +133,25 @@ The structured interpretation of a **Data Question**, including intent,
 measures, **Semantic Fields** used for grouping, filters, and unresolved
 ambiguities, without selecting a **Curated Dataset** or **Dataset Table**.
 _Avoid_: Query, prompt, plan
+
+**Provider Proposal**:
+Untrusted structured output from a **Question Interpreter** provider, before it
+has been validated into a **Question Frame**.
+_Avoid_: Question Frame, Question Frame Proposal, parsed question, promoted result
+
+**Provider Proposal Validation**:
+The **Question Interpreter** boundary that validates a **Provider Proposal** and
+returns either a trusted **Question Frame** or a **Non-Answer Response**.
+_Avoid_: Promotion, parsing, best-effort repair
+
+**Provider Proposal Eval**:
+A manual evaluation that checks what a **Question Interpreter** provider returns
+as a **Provider Proposal**, without validating it into a **Question Frame**.
+_Avoid_: Question Frame eval, workflow eval, validation eval
+
+**Live Provider Proposal Eval**:
+A **Provider Proposal Eval** entrypoint wired to the live OpenAI API provider.
+_Avoid_: Offline eval, validation eval, workflow eval
 
 **Question Grouping**:
 A requested grouping in a **Data Question**, expressed over a business-facing

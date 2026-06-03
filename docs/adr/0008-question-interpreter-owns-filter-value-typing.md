@@ -30,15 +30,17 @@ Two facts shape the decision:
   makes parameter binding type-correct right now.
 
 The stable thing to reason about is therefore not the future engine but the
-**trust boundary**: the Question Interpreter is where untrusted LLM provider
-output enters the system.
+**Provider Proposal Validation** boundary: the Question Interpreter is where
+untrusted LLM provider output becomes either a trusted Question Frame or a
+Non-Answer Response.
 
 ## Decision
 
 The Question Interpreter validates *and* fully types provider-proposed filter
-values at the trust boundary. `QuestionFrame.field_operations` carry validated,
-typed `FieldValue`s (`datetime.date | decimal.Decimal | str`) as a durable
-contract; downstream stages consume typed values and never re-parse strings.
+values during **Provider Proposal Validation**. `QuestionFrame.field_operations`
+carry validated, typed `FieldValue`s (`datetime.date | decimal.Decimal | str`)
+as a durable contract; downstream stages consume typed values and never re-parse
+strings.
 
 The issue's "duplicates the engine's typing" concern is rejected as a category
 error: rejecting untrusted provider output and constructing a retrieval query
@@ -52,9 +54,10 @@ alias, and the `INVALID_PROVIDER_OUTPUT` Non-Answer behavior are unchanged.
 
 ## Consequences
 
-Invalid-value rejection stays at the trust boundary, on the Non-Answer surface,
-where the user-facing failure path already lives. The typed-value contract that
-DuckDB parameter binding depends on is affirmed rather than weakened.
+Invalid-value rejection stays in **Provider Proposal Validation**, on the
+Non-Answer surface, where the user-facing failure path already lives. The
+typed-value contract that DuckDB parameter binding depends on is affirmed rather
+than weakened.
 
 If a future query engine ever specifically needs raw, untyped strings, that is a
 deliberate change that supersedes this ADR — not a hedge baked into the contract
@@ -65,8 +68,8 @@ change must justify breaking, not an acknowledged debt.
 
 - **Move coercion behind retrieval (interpreter passes raw values, engine types
   them).** Rejected: it pulls invalid-value rejection downstream, away from the
-  Non-Answer surface and the trust boundary, and there is no engine to receive
-  raw values today.
+  Non-Answer surface and **Provider Proposal Validation**, and there is no
+  engine to receive raw values today.
 - **Split: interpreter validates coercibility but does not produce final typed
   values.** Rejected: it frames typed emission as provisional and documents an
   intent to undo something that currently works (DuckDB parameter binding),
