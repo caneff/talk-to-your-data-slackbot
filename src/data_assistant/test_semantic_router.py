@@ -41,12 +41,8 @@ def test_semantic_router_returns_non_answer_when_no_dataset_matches(
         intent="summarize",
         metric="gross bookings",
         time_scope=contracts.TimeScope.BOUNDED,
-        field_operations=(
-            contracts.SemanticFieldOperation(
-                operation=schema.FieldOperation.GROUP_BY,
-                field="region",
-            ),
-        ),
+        group_by_field="region",
+        field_filters=(),
         unresolved_ambiguities=(),
     )
     semantic_matches = semantic_matcher.find_semantic_matches(
@@ -102,12 +98,8 @@ def test_semantic_router_returns_ambiguous_table_for_two_tables_in_one_dataset()
         intent="summarize",
         metric="total revenue",
         time_scope=contracts.TimeScope.BOUNDED,
-        field_operations=(
-            contracts.SemanticFieldOperation(
-                operation=schema.FieldOperation.GROUP_BY,
-                field="region",
-            ),
-        ),
+        group_by_field="region",
+        field_filters=(),
         unresolved_ambiguities=(),
     )
 
@@ -172,7 +164,8 @@ def test_resolve_semantic_match_returns_no_matching_table_from_router() -> None:
                 fields=(field,),
             ),
             metric=metric,
-            group_by_fields=(field,),
+            group_by_field=field,
+            field_filters=(),
         ),
     )
     dataset_selection = contracts.DatasetSelection(

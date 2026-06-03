@@ -475,7 +475,11 @@ def _answer_fields(run: contracts.DataAssistantRun) -> dict[str, object]:
         "dataset": data_request.dataset.name,
         "metric": data_request.metric.label,
         "metric_expression": data_request.metric.expression,
-        "group_by": [field.label for field in data_request.group_by_fields],
+        "group_by": (
+            []
+            if data_request.group_by_field is None
+            else [data_request.group_by_field.label]
+        ),
         "filters": list(data_request.filter_labels),
         "result_limit": data_request.result_limit,
         "prepared_data_shape": {"rows": int(rows), "columns": int(columns)},
@@ -502,6 +506,9 @@ def _question_frame_summary(
         "intent": question_frame.intent,
         "metric": question_frame.metric,
         "time_scope": str(question_frame.time_scope),
+        "group_by": []
+        if question_frame.group_by_field is None
+        else [question_frame.group_by_field],
         "filters": list(question_frame.filter_labels),
         "unresolved_ambiguities": list(question_frame.unresolved_ambiguities),
     }

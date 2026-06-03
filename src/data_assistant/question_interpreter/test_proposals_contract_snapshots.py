@@ -64,13 +64,9 @@ CONTRACT_SNAPSHOT_CASES = (
                 intent="summarize",
                 metric="total revenue",
                 time_scope=contracts.TimeScope.BOUNDED,
-                field_operations=(
-                    contracts.SemanticFieldOperation(
-                        operation=schema.FieldOperation.GROUP_BY,
-                        field="region",
-                    ),
-                    contracts.SemanticFieldOperation(
-                        operation=schema.FieldOperation.RANGE_FILTER,
+                group_by_field="region",
+                field_filters=(
+                    contracts.RangeFilter(
                         field="order date",
                         lower=datetime.date(2026, 1, 1),
                         upper=datetime.date(2026, 1, 31),
@@ -97,9 +93,9 @@ CONTRACT_SNAPSHOT_CASES = (
                 intent="summarize",
                 metric="total revenue",
                 time_scope=contracts.TimeScope.BOUNDED,
-                field_operations=(
-                    contracts.SemanticFieldOperation(
-                        operation=schema.FieldOperation.RANGE_FILTER,
+                group_by_field=None,
+                field_filters=(
+                    contracts.RangeFilter(
                         field="order date",
                         lower=datetime.date(2026, 1, 1),
                         upper=datetime.date(2026, 1, 31),
@@ -126,12 +122,8 @@ CONTRACT_SNAPSHOT_CASES = (
             contracts.QuestionFrame(
                 intent="summarize",
                 metric="total revenue",
-                field_operations=(
-                    contracts.SemanticFieldOperation(
-                        operation=schema.FieldOperation.GROUP_BY,
-                        field="region",
-                    ),
-                ),
+                group_by_field="region",
+                field_filters=(),
                 unresolved_ambiguities=(),
                 time_scope=contracts.TimeScope.ALL_TIME,
             )
@@ -156,10 +148,11 @@ CONTRACT_SNAPSHOT_CASES = (
             contracts.QuestionFrame(
                 intent="summarize",
                 metric="total revenue",
-                field_operations=(
-                    contracts.SemanticFieldOperation(
-                        operation=schema.FieldOperation.INCLUDE_FILTER,
+                group_by_field=None,
+                field_filters=(
+                    contracts.ValuesFilter(
                         field="region",
+                        mode=contracts.FilterMode.INCLUDE,
                         values=("West",),
                     ),
                 ),
@@ -189,14 +182,11 @@ CONTRACT_SNAPSHOT_CASES = (
                 intent="summarize",
                 metric="total revenue",
                 time_scope=contracts.TimeScope.BOUNDED,
-                field_operations=(
-                    contracts.SemanticFieldOperation(
-                        operation=schema.FieldOperation.GROUP_BY,
-                        field="region",
-                    ),
-                    contracts.SemanticFieldOperation(
-                        operation=schema.FieldOperation.INCLUDE_FILTER,
+                group_by_field="region",
+                field_filters=(
+                    contracts.ValuesFilter(
                         field="order date",
+                        mode=contracts.FilterMode.INCLUDE,
                         values=(datetime.date(2026, 1, 15),),
                     ),
                 ),
@@ -513,7 +503,11 @@ def test_question_interpreter_promotes_semantic_layer_operation_enum() -> None:
     )
 
     assert isinstance(result, contracts.Success)
-    assert all(
-        type(operation.operation) is schema.FieldOperation
-        for operation in result.value.field_operations
+    assert result.value.group_by_field == "region"
+    assert result.value.field_filters == (
+        contracts.RangeFilter(
+            field="order date",
+            lower=datetime.date(2026, 1, 1),
+            upper=datetime.date(2026, 1, 31),
+        ),
     )

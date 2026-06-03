@@ -40,12 +40,11 @@ def test_prepared_data_returns_empty_grouped_result_when_no_rows_match(
     data_request: contracts.DataRequest,
     connect_orders: local_duckdb_fixture.OrdersConnector,
 ) -> None:
-    order_date_field = data_request.filter_operations[0].field
+    order_date_field = data_request.field_filters[0].field
     data_request = dataclasses.replace(
         data_request,
-        filter_operations=(
-            contracts.ResolvedSemanticFieldOperation(
-                operation=schema.FieldOperation.RANGE_FILTER,
+        field_filters=(
+            contracts.RangeFilter(
                 field=order_date_field,
                 lower=datetime.date(2025, 10, 1),
                 upper=datetime.date(2025, 12, 31),
@@ -134,13 +133,14 @@ def test_prepared_data_applies_include_filter_with_parameters(
     data_request: contracts.DataRequest,
     connect_orders: local_duckdb_fixture.OrdersConnector,
 ) -> None:
-    region_field = data_request.group_by_fields[0]
+    assert data_request.group_by_field is not None
+    region_field = data_request.group_by_field
     data_request = dataclasses.replace(
         data_request,
-        filter_operations=(
-            contracts.ResolvedSemanticFieldOperation(
-                operation=schema.FieldOperation.INCLUDE_FILTER,
+        field_filters=(
+            contracts.ValuesFilter(
                 field=region_field,
+                mode=contracts.FilterMode.INCLUDE,
                 values=("North",),
             ),
         ),
@@ -166,13 +166,14 @@ def test_prepared_data_applies_exclude_filter_with_parameters(
     data_request: contracts.DataRequest,
     connect_orders: local_duckdb_fixture.OrdersConnector,
 ) -> None:
-    region_field = data_request.group_by_fields[0]
+    assert data_request.group_by_field is not None
+    region_field = data_request.group_by_field
     data_request = dataclasses.replace(
         data_request,
-        filter_operations=(
-            contracts.ResolvedSemanticFieldOperation(
-                operation=schema.FieldOperation.EXCLUDE_FILTER,
+        field_filters=(
+            contracts.ValuesFilter(
                 field=region_field,
+                mode=contracts.FilterMode.EXCLUDE,
                 values=("South",),
             ),
         ),
@@ -198,7 +199,7 @@ def test_prepared_data_supports_scalar_aggregate_without_group_by(
     data_request: contracts.DataRequest,
     connect_orders: local_duckdb_fixture.OrdersConnector,
 ) -> None:
-    data_request = dataclasses.replace(data_request, group_by_fields=())
+    data_request = dataclasses.replace(data_request, group_by_field=None)
     order_rows = (
         ("2026-01-03", "North", "1200.00"),
         ("2026-01-08", "South", "850.00"),
@@ -220,14 +221,15 @@ def test_prepared_data_returns_empty_scalar_result_when_filtered_metric_rows_mis
     data_request: contracts.DataRequest,
     connect_orders: local_duckdb_fixture.OrdersConnector,
 ) -> None:
-    region_field = data_request.group_by_fields[0]
+    assert data_request.group_by_field is not None
+    region_field = data_request.group_by_field
     data_request = dataclasses.replace(
         data_request,
-        group_by_fields=(),
-        filter_operations=(
-            contracts.ResolvedSemanticFieldOperation(
-                operation=schema.FieldOperation.INCLUDE_FILTER,
+        group_by_field=None,
+        field_filters=(
+            contracts.ValuesFilter(
                 field=region_field,
+                mode=contracts.FilterMode.INCLUDE,
                 values=("West",),
             ),
         ),
@@ -255,7 +257,7 @@ def test_prepared_data_contains_all_time_grouped_revenue_results(
     data_request: contracts.DataRequest,
     connect_orders: local_duckdb_fixture.OrdersConnector,
 ) -> None:
-    data_request = dataclasses.replace(data_request, filter_operations=())
+    data_request = dataclasses.replace(data_request, field_filters=())
     order_rows = (
         ("2026-01-03", "North", "1200.00"),
         ("2026-01-08", "South", "850.00"),
@@ -282,8 +284,8 @@ def test_prepared_data_supports_scalar_all_time_aggregate_without_filters(
 ) -> None:
     data_request = dataclasses.replace(
         data_request,
-        group_by_fields=(),
-        filter_operations=(),
+        group_by_field=None,
+        field_filters=(),
     )
     order_rows = (
         ("2026-01-03", "North", "1200.00"),

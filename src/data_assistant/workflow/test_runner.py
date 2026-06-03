@@ -272,7 +272,7 @@ def test_data_assistant_runs_all_time_grouped_revenue_end_to_end(
 
     assert isinstance(run, contracts.DataAssistantRun)
     assert run.question_frame.time_scope == contracts.TimeScope.ALL_TIME
-    assert run.data_request.filter_operations == ()
+    assert run.data_request.field_filters == ()
     assert run.prepared_data.data.loc[0, "dimension_value"] == "West"
     assert run.prepared_data.data.loc[0, "metric_value"] == 11599.0
     assert run.final_response.response_kind == contracts.ResponseKind.ANSWER
@@ -319,7 +319,7 @@ def test_data_assistant_runs_all_time_scalar_revenue_end_to_end(
 
     assert isinstance(run, contracts.DataAssistantRun)
     assert run.question_frame.time_scope == contracts.TimeScope.ALL_TIME
-    assert run.data_request.filter_operations == ()
+    assert run.data_request.field_filters == ()
     assert run.prepared_data.data.loc[0, "dimension_value"] == "All"
     assert run.prepared_data.data.loc[0, "metric_value"] == 12349.0
     assert run.final_response.response_kind == contracts.ResponseKind.ANSWER
@@ -389,14 +389,15 @@ def test_data_assistant_runs_all_time_scalar_revenue_with_dimension_value_filter
 
     assert isinstance(run, contracts.DataAssistantRun)
     assert run.question_frame.time_scope == contracts.TimeScope.ALL_TIME
-    assert run.question_frame.field_operations == (
-        contracts.SemanticFieldOperation(
-            operation=schema.FieldOperation.INCLUDE_FILTER,
+    assert run.question_frame.group_by_field is None
+    assert run.question_frame.field_filters == (
+        contracts.ValuesFilter(
             field="region",
+            mode=contracts.FilterMode.INCLUDE,
             values=(region_value,),
         ),
     )
-    assert run.data_request.group_by_fields == ()
+    assert run.data_request.group_by_field is None
     assert run.data_request.filter_labels == (f"region in ({region_value})",)
     assert run.prepared_data.data.loc[0, "dimension_value"] == "All"
     assert run.prepared_data.data.loc[0, "metric_value"] == expected_total
@@ -806,13 +807,9 @@ def test_data_assistant_uses_required_question_interpreter_provider(
         intent="summarize",
         metric="total revenue",
         time_scope=contracts.TimeScope.BOUNDED,
-        field_operations=(
-            contracts.SemanticFieldOperation(
-                operation=schema.FieldOperation.GROUP_BY,
-                field="region",
-            ),
-            contracts.SemanticFieldOperation(
-                operation=schema.FieldOperation.RANGE_FILTER,
+        group_by_field="region",
+        field_filters=(
+            contracts.RangeFilter(
                 field="order date",
                 lower=datetime.date(2026, 1, 1),
                 upper=datetime.date(2026, 1, 31),

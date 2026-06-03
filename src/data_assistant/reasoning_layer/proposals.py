@@ -9,7 +9,6 @@ import typing
 import pydantic
 
 import data_assistant.metric_formatter as metric_formatter
-import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
 
 # Fixed, closed set of Narrative Slots the Reasoning Layer fills
@@ -79,7 +78,7 @@ def compute_slot_values(
     LLM slot-fill, and the deterministic floor.
     """
     request = prepared_data.request
-    group_by_fields = request.group_by_fields
+    group_by_field = request.group_by_field
     data = prepared_data.data
 
     metric_total = metric_formatter.format_metric_value(
@@ -87,8 +86,8 @@ def compute_slot_values(
         request.metric.kind,
     )
 
-    if group_by_fields:
-        dimension = _pluralize(group_by_fields[0].label)
+    if group_by_field is not None:
+        dimension = _pluralize(group_by_field.label)
         if data.empty:
             top_dimension = ""
             top_value = ""
@@ -167,20 +166,23 @@ def _pluralize(label: str) -> str:
 
 
 def _time_range_label(data_request: contracts.DataRequest) -> str:
-    for operation in data_request.filter_operations:
-        if operation.field.data_type != "date":
+    for field_filter in data_request.field_filters:
+        if field_filter.field.data_type != "date":
             continue
-        if operation.operation == schema.FieldOperation.RANGE_FILTER:
-            lower = _format_date_bound(operation.lower)
-            upper = _format_date_bound(operation.upper)
+        if isinstance(field_filter, contracts.RangeFilter):
+            lower = _format_date_bound(field_filter.lower)
+            upper = _format_date_bound(field_filter.upper)
             if lower is not None and upper is not None:
                 return f"{lower} through {upper}"
             if lower is not None:
                 return f"from {lower}"
             if upper is not None:
                 return f"through {upper}"
-        if operation.operation == schema.FieldOperation.INCLUDE_FILTER:
-            return ", ".join(str(value) for value in operation.values)
+        if (
+            isinstance(field_filter, contracts.ValuesFilter)
+            and field_filter.mode == contracts.FilterMode.INCLUDE
+        ):
+            return ", ".join(str(value) for value in field_filter.values)
     return "all available data"
 
 

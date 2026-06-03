@@ -7,6 +7,8 @@ reported `metric_ambiguity` with no reflecting label must Non-Answer.
 
 from __future__ import annotations
 
+import datetime
+
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.schema as schema
@@ -84,6 +86,14 @@ def test_exact_net_revenue_label_promotes_to_question_frame() -> None:
 
     assert isinstance(result, contracts.Success)
     assert result.value.metric == "total net revenue"
+    assert result.value.group_by_field is None
+    assert result.value.field_filters == (
+        contracts.RangeFilter(
+            field="order date",
+            lower=datetime.date(2026, 1, 1),
+            upper=datetime.date(2026, 1, 31),
+        ),
+    )
 
 
 def test_unreflected_metric_ambiguity_still_non_answers() -> None:

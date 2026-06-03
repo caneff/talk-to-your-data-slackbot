@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
 
 DEFAULT_RESULT_LIMIT = 10
@@ -14,45 +13,19 @@ def create_data_request(
 ) -> contracts.DataRequest:
     """Create the Data Request from resolved Available Data."""
     resolved_match = available_data_resolution.resolved_match
-    resolved_filters = _resolve_filter_operations(
-        question_frame.field_operations,
-        resolved_match.table,
-    )
+    del question_frame
     return contracts.DataRequest(
         dataset=resolved_match.dataset,
         table=resolved_match.table,
         metric=resolved_match.metric,
-        group_by_fields=resolved_match.group_by_fields,
-        filter_operations=resolved_filters,
+        group_by_field=resolved_match.group_by_field,
+        field_filters=resolved_match.field_filters,
         output_shape=_output_shape(resolved_match),
         result_limit=DEFAULT_RESULT_LIMIT,
     )
 
 
-def _resolve_filter_operations(
-    field_operations: tuple[contracts.SemanticFieldOperation, ...],
-    table: schema.DatasetTable,
-) -> tuple[contracts.ResolvedSemanticFieldOperation, ...]:
-    fields_by_label = {field.label: field for field in table.fields}
-    resolved: list[contracts.ResolvedSemanticFieldOperation] = []
-    for operation in field_operations:
-        if operation.operation == schema.FieldOperation.GROUP_BY:
-            continue
-        field = fields_by_label[operation.field]
-        resolved.append(
-            contracts.ResolvedSemanticFieldOperation(
-                operation=operation.operation,
-                field=field,
-                lower=operation.lower,
-                upper=operation.upper,
-                values=operation.values,
-            )
-        )
-    return tuple(resolved)
-
-
 def _output_shape(match: contracts.SemanticMatch) -> str:
-    if not match.group_by_fields:
+    if match.group_by_field is None:
         return match.metric.label
-    group_by_labels = ", ".join(field.label for field in match.group_by_fields)
-    return f"{match.metric.label} grouped by {group_by_labels}"
+    return f"{match.metric.label} grouped by {match.group_by_field.label}"

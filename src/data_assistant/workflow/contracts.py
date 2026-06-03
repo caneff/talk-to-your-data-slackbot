@@ -3,81 +3,22 @@
 from __future__ import annotations
 
 import dataclasses
-import datetime
-import decimal
 import enum
 import typing
 
 import pandas as pd
 
 import data_assistant.semantic_layer.schema as schema
+import data_assistant.workflow.field_filters as field_filters
 
 T = typing.TypeVar("T")
 
-
-# Filter values are validated and typed at the Question Interpreter trust
-# boundary (see docs/adr/0008); downstream stages consume typed values and
-# never re-parse strings.
-FieldValue: typing.TypeAlias = datetime.date | decimal.Decimal | str
-
-
-@dataclasses.dataclass(frozen=True)
-class SemanticFieldOperation:
-    """Validated provider-requested operation using Semantic Field labels."""
-
-    operation: schema.FieldOperation
-    field: str
-    lower: FieldValue | None = None
-    upper: FieldValue | None = None
-    values: tuple[FieldValue, ...] = ()
-
-    def filter_label(self) -> str | None:
-        """Return user-facing filter summary when this operation filters rows."""
-        if self.operation == schema.FieldOperation.GROUP_BY:
-            return None
-        if self.operation == schema.FieldOperation.RANGE_FILTER:
-            bounds: list[str] = []
-            if self.lower is not None:
-                bounds.append(f">= {_format_field_value(self.lower)}")
-            if self.upper is not None:
-                bounds.append(f"<= {_format_field_value(self.upper)}")
-            return f"{self.field} {' and '.join(bounds)}"
-        values = ", ".join(_format_field_value(value) for value in self.values)
-        verb = (
-            "in" if self.operation == schema.FieldOperation.INCLUDE_FILTER else "not in"
-        )
-        return f"{self.field} {verb} ({values})"
-
-
-@dataclasses.dataclass(frozen=True)
-class ResolvedSemanticFieldOperation:
-    """Validated Semantic Field operation resolved to Semantic Layer config."""
-
-    operation: schema.FieldOperation
-    field: schema.SemanticField
-    lower: FieldValue | None = None
-    upper: FieldValue | None = None
-    values: tuple[FieldValue, ...] = ()
-
-    def as_question_operation(self) -> SemanticFieldOperation:
-        """Return business-facing operation without retrieval details."""
-        return SemanticFieldOperation(
-            operation=self.operation,
-            field=self.field.label,
-            lower=self.lower,
-            upper=self.upper,
-            values=self.values,
-        )
-
-    def filter_label(self) -> str | None:
-        """Return user-facing filter summary when this operation filters rows."""
-        return self.as_question_operation().filter_label()
-
-
-def _format_field_value(value: FieldValue) -> str:
-    if isinstance(value, datetime.date):
-        return value.isoformat()
-    return str(value)
+FieldFilter = field_filters.FieldFilter
+FieldValue = field_filters.FieldValue
+FilterMode = field_filters.FilterMode
+RangeFilter = field_filters.RangeFilter
+ValuesFilter = field_filters.ValuesFilter
+render_filter_label = field_filters.render_filter_label
 
 
 class NonAnswerStage(enum.StrEnum):
@@ -102,16 +43,15 @@ class QuestionFrame:
     intent: str
     metric: str
     time_scope: TimeScope
-    field_operations: tuple[SemanticFieldOperation, ...]
+    group_by_field: str | None
+    field_filters: tuple[FieldFilter[str], ...]
     unresolved_ambiguities: tuple[str, ...]
 
     @property
     def filter_labels(self) -> tuple[str, ...]:
-        """Return user-facing labels for field operations that filter rows."""
+        """Return user-facing labels for row filters."""
         return tuple(
-            label
-            for operation in self.field_operations
-            if (label := operation.filter_label()) is not None
+            render_filter_label(field_filter) for field_filter in self.field_filters
         )
 
 
@@ -214,7 +154,8 @@ class SemanticMatch:
     dataset: schema.CuratedDataset
     table: schema.DatasetTable
     metric: schema.Metric
-    group_by_fields: tuple[schema.SemanticField, ...]
+    group_by_field: schema.SemanticField | None
+    field_filters: tuple[FieldFilter[schema.SemanticField], ...]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -232,8 +173,8 @@ class DataRequest:
     dataset: schema.CuratedDataset
     table: schema.DatasetTable
     metric: schema.Metric
-    group_by_fields: tuple[schema.SemanticField, ...]
-    filter_operations: tuple[ResolvedSemanticFieldOperation, ...]
+    group_by_field: schema.SemanticField | None
+    field_filters: tuple[FieldFilter[schema.SemanticField], ...]
     output_shape: str
     result_limit: int
 
@@ -241,9 +182,7 @@ class DataRequest:
     def filter_labels(self) -> tuple[str, ...]:
         """Return user-facing labels for row filters."""
         return tuple(
-            label
-            for operation in self.filter_operations
-            if (label := operation.filter_label()) is not None
+            render_filter_label(field_filter) for field_filter in self.field_filters
         )
 
 

@@ -90,10 +90,9 @@ def resolve_semantic_match(
 
 
 def _build_match_rationale(match: contracts.SemanticMatch) -> str:
-    if not match.group_by_fields:
+    if match.group_by_field is None:
         return f"{match.dataset.name} contains the {match.metric.label} metric."
-    group_by_labels = ", ".join(field.label for field in match.group_by_fields)
     return (
         f"{match.dataset.name} contains the {match.metric.label} metric and "
-        f"{group_by_labels} fields needed for the Data Question."
+        f"{match.group_by_field.label} fields needed for the Data Question."
     )
