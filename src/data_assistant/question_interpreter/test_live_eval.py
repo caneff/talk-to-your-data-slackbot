@@ -1,6 +1,7 @@
 import collections.abc
 import io
 import pathlib
+import types
 import typing
 
 import pytest
@@ -13,6 +14,41 @@ import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.semantic_layer.testing_support as semantic_layer_testing
 import data_assistant.slack_runtime as slack_runtime
+
+
+def _recording_run_live_eval(
+    calls: list[types.SimpleNamespace],
+) -> collections.abc.Callable[..., live_eval.LiveEvalReport]:
+    """Build a `run_live_question_interpreter_eval` stub that records its call.
+
+    Each test inspects only the keyword(s) it cares about on the recorded
+    `SimpleNamespace`, and the stub returns an empty report.
+    """
+
+    def _fake(
+        *,
+        provider: question_interpreter.QuestionInterpreterProvider,
+        semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
+        cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
+            live_eval.DEFAULT_CASES
+        ),
+        sample_count: int = live_eval.DEFAULT_SAMPLE_COUNT,
+        progress: bool = False,
+        progress_file: typing.TextIO | None = None,
+    ) -> live_eval.LiveEvalReport:
+        calls.append(
+            types.SimpleNamespace(
+                provider=provider,
+                semantic_layer=semantic_layer,
+                cases=cases,
+                sample_count=sample_count,
+                progress=progress,
+                progress_file=progress_file,
+            )
+        )
+        return live_eval.LiveEvalReport(total=0, passes=(), failures=())
+
+    return _fake
 
 
 def test_compare_proposal_matches_exact_meaning() -> None:
@@ -434,19 +470,7 @@ def test_main_loads_openai_config_from_dotenv(
         assert environ["OPENAI_API_KEY"] == "dotenv-key"
         return FakeProvider()
 
-    def fake_run_live_eval(
-        *,
-        provider: question_interpreter.QuestionInterpreterProvider,
-        semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
-        cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
-            live_eval.DEFAULT_CASES
-        ),
-        progress: bool = False,
-        progress_file: typing.TextIO | None = None,
-    ) -> live_eval.LiveEvalReport:
-        del provider, semantic_layer, cases, progress, progress_file
-        return live_eval.LiveEvalReport(total=0, passes=(), failures=())
-
+    calls: list[types.SimpleNamespace] = []
     monkeypatch.setattr(
         live_eval.question_interpreter,
         "build_openai_question_interpreter_provider",
@@ -455,7 +479,7 @@ def test_main_loads_openai_config_from_dotenv(
     monkeypatch.setattr(
         live_eval,
         "run_live_question_interpreter_eval",
-        fake_run_live_eval,
+        _recording_run_live_eval(calls),
     )
 
     exit_code = live_eval.main(
@@ -465,6 +489,7 @@ def test_main_loads_openai_config_from_dotenv(
     )
 
     assert exit_code == 0
+    assert len(calls) == 1
 
 
 def test_main_passes_verbose_flag_to_report_writer(
@@ -492,19 +517,6 @@ def test_main_passes_verbose_flag_to_report_writer(
         assert environ["OPENAI_API_KEY"] == "dotenv-key"
         return FakeProvider()
 
-    def fake_run_live_eval(
-        *,
-        provider: question_interpreter.QuestionInterpreterProvider,
-        semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
-        cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
-            live_eval.DEFAULT_CASES
-        ),
-        progress: bool = False,
-        progress_file: typing.TextIO | None = None,
-    ) -> live_eval.LiveEvalReport:
-        del provider, semantic_layer, cases, progress, progress_file
-        return live_eval.LiveEvalReport(total=0, passes=(), failures=())
-
     def fake_write_report(
         *,
         stdout: typing.TextIO,
@@ -514,6 +526,7 @@ def test_main_passes_verbose_flag_to_report_writer(
         del stdout, report
         captured_verbose.append(verbose)
 
+    calls: list[types.SimpleNamespace] = []
     monkeypatch.setattr(
         live_eval.question_interpreter,
         "build_openai_question_interpreter_provider",
@@ -522,7 +535,7 @@ def test_main_passes_verbose_flag_to_report_writer(
     monkeypatch.setattr(
         live_eval,
         "run_live_question_interpreter_eval",
-        fake_run_live_eval,
+        _recording_run_live_eval(calls),
     )
     monkeypatch.setattr(live_eval, "write_live_eval_report", fake_write_report)
 
@@ -537,15 +550,13 @@ def test_main_passes_verbose_flag_to_report_writer(
     assert captured_verbose == [True]
 
 
-def test_main_enables_progress_by_default_and_accepts_no_progress(
+def test_main_passes_samples_flag_to_live_eval(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: pathlib.Path,
 ) -> None:
     env_file = tmp_path / ".env"
     env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    captured_progress: list[bool] = []
-    captured_progress_files: list[typing.TextIO | None] = []
 
     class FakeProvider:
         def propose_question_frame(
@@ -563,21 +574,7 @@ def test_main_enables_progress_by_default_and_accepts_no_progress(
         assert environ["OPENAI_API_KEY"] == "dotenv-key"
         return FakeProvider()
 
-    def fake_run_live_eval(
-        *,
-        provider: question_interpreter.QuestionInterpreterProvider,
-        semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
-        cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
-            live_eval.DEFAULT_CASES
-        ),
-        progress: bool = False,
-        progress_file: typing.TextIO | None = None,
-    ) -> live_eval.LiveEvalReport:
-        del provider, semantic_layer, cases
-        captured_progress.append(progress)
-        captured_progress_files.append(progress_file)
-        return live_eval.LiveEvalReport(total=0, passes=(), failures=())
-
+    calls: list[types.SimpleNamespace] = []
     monkeypatch.setattr(
         live_eval.question_interpreter,
         "build_openai_question_interpreter_provider",
@@ -586,7 +583,63 @@ def test_main_enables_progress_by_default_and_accepts_no_progress(
     monkeypatch.setattr(
         live_eval,
         "run_live_question_interpreter_eval",
-        fake_run_live_eval,
+        _recording_run_live_eval(calls),
+    )
+
+    default_exit_code = live_eval.main(
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+        env_file=env_file,
+    )
+    explicit_exit_code = live_eval.main(
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+        env_file=env_file,
+        argv=("--samples", "7"),
+    )
+
+    assert default_exit_code == 0
+    assert explicit_exit_code == 0
+    assert [call.sample_count for call in calls] == [
+        live_eval.DEFAULT_SAMPLE_COUNT,
+        7,
+    ]
+
+
+def test_main_enables_progress_by_default_and_accepts_no_progress(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    class FakeProvider:
+        def propose_question_frame(
+            self,
+            *,
+            question: str,
+            semantic_layer_context: dict[str, object],
+        ) -> live_eval.ProviderResult:
+            del question, semantic_layer_context
+            raise AssertionError("live eval runner is stubbed")
+
+    def fake_build_openai_provider(
+        environ: collections.abc.Mapping[str, str],
+    ) -> question_interpreter.QuestionInterpreterProvider:
+        assert environ["OPENAI_API_KEY"] == "dotenv-key"
+        return FakeProvider()
+
+    calls: list[types.SimpleNamespace] = []
+    monkeypatch.setattr(
+        live_eval.question_interpreter,
+        "build_openai_question_interpreter_provider",
+        fake_build_openai_provider,
+    )
+    monkeypatch.setattr(
+        live_eval,
+        "run_live_question_interpreter_eval",
+        _recording_run_live_eval(calls),
     )
 
     default_stderr = io.StringIO()
@@ -605,8 +658,11 @@ def test_main_enables_progress_by_default_and_accepts_no_progress(
 
     assert default_exit_code == 0
     assert no_progress_exit_code == 0
-    assert captured_progress == [True, False]
-    assert captured_progress_files == [default_stderr, no_progress_stderr]
+    assert [call.progress for call in calls] == [True, False]
+    assert [call.progress_file for call in calls] == [
+        default_stderr,
+        no_progress_stderr,
+    ]
 
 
 def test_main_returns_one_when_live_eval_report_has_failures(
@@ -699,6 +755,60 @@ def test_default_live_eval_cases_come_from_shared_question_frame_cases() -> None
     )
 
 
+def test_shared_cases_cover_every_retail_metric() -> None:
+    covered_metrics = {
+        case.expected.metric
+        for case in question_frame_cases.SHARED_QUESTION_FRAME_CASES
+        if case.expected.metric is not None
+    }
+
+    assert covered_metrics == {
+        "total net revenue",
+        "total gross revenue",
+        "order count",
+        "total discount amount",
+        "total line revenue",
+        "gross margin",
+        "units sold",
+        "units returned",
+        "customer count",
+        "product count",
+        "store count",
+        "support ticket count",
+        "on hand units",
+        "stockout days",
+    }
+
+
+def test_shared_cases_cover_every_deferred_intent_once_classified() -> None:
+    covered_intents = {
+        case.expected.intent
+        for case in question_frame_cases.SHARED_QUESTION_FRAME_CASES
+    }
+
+    assert {
+        "summarize",
+        "rank",
+        "compare",
+        "trend",
+        "forecast",
+        "explain",
+        "prescribe",
+        "diagnose",
+    } <= covered_intents
+
+
+def test_shared_cases_use_exclude_filter_on_multiple_field_types() -> None:
+    exclude_fields = {
+        operation.field
+        for case in question_frame_cases.SHARED_QUESTION_FRAME_CASES
+        for operation in case.expected.field_operations
+        if operation.operation == "exclude_filter"
+    }
+
+    assert len(exclude_fields) >= 3
+
+
 def test_default_live_eval_includes_customer_count_by_customer_region_case() -> None:
     case = next(
         case
@@ -789,7 +899,6 @@ def test_main_loads_real_semantic_layer_for_live_eval(
     env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     loaded_semantic_layer = semantic_layer_testing.semantic_layer_with_table()
-    captured_semantic_layers: list[semantic_layer_catalog.SemanticLayerCatalog] = []
     captured_paths: list[pathlib.Path] = []
 
     class FakeProvider:
@@ -814,20 +923,7 @@ def test_main_loads_real_semantic_layer_for_live_eval(
         captured_paths.append(path)
         return loaded_semantic_layer
 
-    def fake_run_live_eval(
-        *,
-        provider: question_interpreter.QuestionInterpreterProvider,
-        semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
-        cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
-            live_eval.DEFAULT_CASES
-        ),
-        progress: bool = False,
-        progress_file: typing.TextIO | None = None,
-    ) -> live_eval.LiveEvalReport:
-        del provider, cases, progress, progress_file
-        captured_semantic_layers.append(semantic_layer)
-        return live_eval.LiveEvalReport(total=0, passes=(), failures=())
-
+    calls: list[types.SimpleNamespace] = []
     monkeypatch.setattr(
         live_eval.question_interpreter,
         "build_openai_question_interpreter_provider",
@@ -841,7 +937,7 @@ def test_main_loads_real_semantic_layer_for_live_eval(
     monkeypatch.setattr(
         live_eval,
         "run_live_question_interpreter_eval",
-        fake_run_live_eval,
+        _recording_run_live_eval(calls),
     )
 
     exit_code = live_eval.main(
@@ -851,5 +947,5 @@ def test_main_loads_real_semantic_layer_for_live_eval(
     )
 
     assert exit_code == 0
-    assert captured_semantic_layers == [loaded_semantic_layer]
+    assert [call.semantic_layer for call in calls] == [loaded_semantic_layer]
     assert captured_paths == [slack_runtime.RETAIL_SEMANTIC_LAYER_PATH]
