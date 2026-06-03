@@ -8,9 +8,9 @@ turns a workflow result (or a crash) into the flat, JSON-safe dict the store
 appends.
 
 The split keeps the dependency one-directional ``edge -> record``: the Slack
-edge (``slack_assistant.py``) imports ``build_interaction_record`` /
+edge (the ``slack/`` package) imports ``build_interaction_record`` /
 ``build_error_record`` / ``QAReviewContext`` FROM here, so this module must NOT
-import ``slack_assistant`` (that would be an import cycle). It owns the
+import ``slack`` (that would be an import cycle). It owns the
 canonical :data:`RUNTIME_FALLBACK_MESSAGE` text and
 :func:`final_response_from_workflow_result` (both read/written here when building
 records); the edge re-imports those for its block-rendering sites.

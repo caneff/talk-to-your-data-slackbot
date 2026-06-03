@@ -18,7 +18,7 @@ import pytest
 
 import data_assistant.composition as composition
 import data_assistant.openai_support as openai_support
-import data_assistant.slack_assistant as slack_assistant
+import data_assistant.slack as slack_assistant
 import data_assistant.workflow.contracts as contracts
 
 
