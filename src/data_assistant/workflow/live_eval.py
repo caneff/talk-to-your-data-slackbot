@@ -32,6 +32,7 @@ import data_assistant.local_duckdb_fixture as local_duckdb_fixture
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.reasoning_layer as reasoning_layer
 import data_assistant.reasoning_layer.proposals as proposals
+import data_assistant.semantic_layer.testing_support as semantic_layer_testing_support
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.runner as runner
 
@@ -148,6 +149,13 @@ def run_full_pipeline_eval(
     reasoning_provider: reasoning_layer.ReasoningProvider,
 ) -> FullPipelineEvalResult:
     """Drive the adversarial question end to end and check the safe property."""
+    # Self-contained orders(order_date, region, revenue) layer matching the
+    # adversarial fixture rows, so the eval never relies on the on-disk loader
+    # default (now the retail layer, whose schema differs from these rows). The
+    # local identity must be allowed access or the run short-circuits.
+    semantic_layer = semantic_layer_testing_support.semantic_layer_with_table(
+        allowed_identity_ids=(allowed_internal_identity().identity_id,),
+    )
     with local_duckdb_fixture.connect_orders(_ADVERSARIAL_ORDER_ROWS) as connection:
         run = runner.run_data_assistant(
             connection,
@@ -155,6 +163,7 @@ def run_full_pipeline_eval(
             question_interpreter_provider=question_interpreter_provider,
             reasoning_provider=reasoning_provider,
             internal_identity=allowed_internal_identity(),
+            semantic_layer=semantic_layer,
         )
 
     if not isinstance(run, contracts.DataAssistantRun):

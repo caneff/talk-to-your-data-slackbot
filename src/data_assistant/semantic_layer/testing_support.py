@@ -54,6 +54,7 @@ def semantic_layer_with_table(
     columns: collections.abc.Mapping[str, str] = _DEFAULT_COLUMNS,
     metrics: tuple[schema.Metric, ...] = _DEFAULT_METRICS,
     fields: tuple[schema.SemanticField, ...] = _DEFAULT_FIELDS,
+    allowed_identity_ids: tuple[str, ...] = (),
 ) -> semantic_layer_catalog.SemanticLayerCatalog:
     return semantic_layer_catalog.SemanticLayerCatalog(
         datasets=(
@@ -63,6 +64,9 @@ def semantic_layer_with_table(
                 tables=(table_id,),
                 information_types=("financial",),
                 example_questions=("What was total revenue?",),
+                dataset_access=schema.DatasetAccess(
+                    allowed_identity_ids=allowed_identity_ids,
+                ),
             ),
         ),
         tables=(
