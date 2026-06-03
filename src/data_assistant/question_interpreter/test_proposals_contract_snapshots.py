@@ -106,6 +106,40 @@ CONTRACT_SNAPSHOT_CASES = (
         ),
     ),
     snapshot_case(
+        name="order_date_group_by_with_bounded_time_filter",
+        proposal=interpreter_support.question_frame_proposal(
+            field_operations=(
+                question_interpreter.GroupByOperationProposal(
+                    operation="group_by",
+                    field="order date",
+                ),
+                question_interpreter.RangeFilterOperationProposal(
+                    operation="range_filter",
+                    field="order date",
+                    lower="2026-01-01",
+                    upper="2026-01-31",
+                ),
+            ),
+        ),
+        expected=contracts.Success(
+            contracts.QuestionFrame(
+                intent="summarize",
+                metric="total revenue",
+                time_scope=contracts.TimeScope.BOUNDED,
+                group_by_field="order date",
+                field_filters=(
+                    contracts.RangeFilter(
+                        field="order date",
+                        lower=datetime.date(2026, 1, 1),
+                        upper=datetime.date(2026, 1, 31),
+                    ),
+                ),
+                unresolved_ambiguities=(),
+            )
+        ),
+        question="What was total revenue by order date in January 2026?",
+    ),
+    snapshot_case(
         name="all_time_scope",
         proposal=question_interpreter.QuestionFrameProposal(
             intent="summarize",
