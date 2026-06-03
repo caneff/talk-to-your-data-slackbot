@@ -78,17 +78,17 @@ def adversarial_question_interpreter_provider() -> (
             *,
             question: str,
             semantic_layer_context: dict[str, object],
-        ) -> question_interpreter.QuestionFrameProposal:
+        ) -> question_interpreter.ProviderProposal:
             del question, semantic_layer_context
-            return question_interpreter.QuestionFrameProposal(
+            return question_interpreter.ProviderProposal(
                 intent="summarize",
                 metric="total revenue",
                 field_operations=(
-                    question_interpreter.GroupByOperationProposal(
+                    question_interpreter.ProviderFieldOperation(
                         operation="group_by",
                         field="region",
                     ),
-                    question_interpreter.RangeFilterOperationProposal(
+                    question_interpreter.ProviderFieldOperation(
                         operation="range_filter",
                         field="order date",
                         lower="2026-01-01",

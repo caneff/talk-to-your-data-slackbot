@@ -30,7 +30,7 @@ class StaticQuestionInterpreterProvider:
 
     def __init__(
         self,
-        proposal: question_interpreter.QuestionFrameProposal,
+        proposal: question_interpreter.ProviderProposal,
     ) -> None:
         self._proposal = proposal
 
@@ -39,23 +39,23 @@ class StaticQuestionInterpreterProvider:
         *,
         question: str,
         semantic_layer_context: dict[str, object],
-    ) -> question_interpreter.QuestionFrameProposal:
+    ) -> question_interpreter.ProviderProposal:
         """Return the configured proposal without calling an LLM."""
         del question, semantic_layer_context
         return self._proposal
 
 
-def canonical_question_proposal() -> question_interpreter.QuestionFrameProposal:
+def canonical_question_proposal() -> question_interpreter.ProviderProposal:
     """Return provider proposal for the canonical revenue-by-region question."""
-    return question_interpreter.QuestionFrameProposal(
+    return question_interpreter.ProviderProposal(
         intent="summarize",
         metric="total revenue",
         field_operations=(
-            question_interpreter.GroupByOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="group_by",
                 field="region",
             ),
-            question_interpreter.RangeFilterOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="range_filter",
                 field="order date",
                 lower="2026-01-01",
@@ -65,13 +65,13 @@ def canonical_question_proposal() -> question_interpreter.QuestionFrameProposal:
     )
 
 
-def missing_time_scope_proposal() -> question_interpreter.QuestionFrameProposal:
+def missing_time_scope_proposal() -> question_interpreter.ProviderProposal:
     """Return provider proposal that omits required time scope."""
-    return question_interpreter.QuestionFrameProposal(
+    return question_interpreter.ProviderProposal(
         intent="summarize",
         metric="total revenue",
         field_operations=(
-            question_interpreter.GroupByOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="group_by",
                 field="region",
             ),

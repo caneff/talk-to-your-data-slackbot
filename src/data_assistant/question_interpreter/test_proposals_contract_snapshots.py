@@ -24,7 +24,7 @@ class ContractSnapshotCase:
 def snapshot_case(
     *,
     name: str,
-    proposal: question_interpreter.QuestionFrameProposal,
+    proposal: question_interpreter.ProviderProposal,
     expected: contracts.StageResult[contracts.QuestionFrame],
     question: str = interpreter_support.CANONICAL_DATA_QUESTION,
 ) -> ContractSnapshotCase:
@@ -80,7 +80,7 @@ CONTRACT_SNAPSHOT_CASES = (
         name="scalar_aggregate_without_group_by",
         proposal=interpreter_support.question_frame_proposal(
             field_operations=(
-                question_interpreter.RangeFilterOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="range_filter",
                     field="order date",
                     lower="2026-01-01",
@@ -109,11 +109,11 @@ CONTRACT_SNAPSHOT_CASES = (
         name="order_date_group_by_with_bounded_time_filter",
         proposal=interpreter_support.question_frame_proposal(
             field_operations=(
-                question_interpreter.GroupByOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="group_by",
                     field="order date",
                 ),
-                question_interpreter.RangeFilterOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="range_filter",
                     field="order date",
                     lower="2026-01-01",
@@ -141,11 +141,11 @@ CONTRACT_SNAPSHOT_CASES = (
     ),
     snapshot_case(
         name="all_time_scope",
-        proposal=question_interpreter.QuestionFrameProposal(
+        proposal=question_interpreter.ProviderProposal(
             intent="summarize",
             metric="total revenue",
             field_operations=(
-                question_interpreter.GroupByOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="group_by",
                     field="region",
                 ),
@@ -166,11 +166,11 @@ CONTRACT_SNAPSHOT_CASES = (
     ),
     snapshot_case(
         name="all_time_scope_with_dimension_value_filter",
-        proposal=question_interpreter.QuestionFrameProposal(
+        proposal=question_interpreter.ProviderProposal(
             intent="summarize",
             metric="total revenue",
             field_operations=(
-                question_interpreter.IncludeFilterOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="include_filter",
                     field="region",
                     values=("West",),
@@ -200,11 +200,11 @@ CONTRACT_SNAPSHOT_CASES = (
         name="exact_date_include_filter",
         proposal=interpreter_support.question_frame_proposal(
             field_operations=(
-                question_interpreter.GroupByOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="group_by",
                     field="region",
                 ),
-                question_interpreter.IncludeFilterOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="include_filter",
                     field="order date",
                     values=("2026-01-15",),
@@ -237,11 +237,11 @@ CONTRACT_SNAPSHOT_CASES = (
     ),
     snapshot_case(
         name="missing_time_scope_non_answer",
-        proposal=question_interpreter.QuestionFrameProposal(
+        proposal=question_interpreter.ProviderProposal(
             intent="summarize",
             metric="total revenue",
             field_operations=(
-                question_interpreter.GroupByOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="group_by",
                     field="region",
                 ),
@@ -331,7 +331,7 @@ CONTRACT_SNAPSHOT_CASES = (
         name="unknown_field",
         proposal=interpreter_support.question_frame_proposal(
             field_operations=(
-                question_interpreter.GroupByOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="group_by",
                     field="product",
                 ),
@@ -345,7 +345,7 @@ CONTRACT_SNAPSHOT_CASES = (
         name="unsupported_operation",
         proposal=interpreter_support.question_frame_proposal(
             field_operations=(
-                question_interpreter.RangeFilterOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="range_filter",
                     field="region",
                     lower="A",
@@ -359,15 +359,15 @@ CONTRACT_SNAPSHOT_CASES = (
     ),
     snapshot_case(
         name="all_time_with_filter_contradiction",
-        proposal=question_interpreter.QuestionFrameProposal(
+        proposal=question_interpreter.ProviderProposal(
             intent="summarize",
             metric="total revenue",
             field_operations=(
-                question_interpreter.GroupByOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="group_by",
                     field="region",
                 ),
-                question_interpreter.RangeFilterOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="range_filter",
                     field="order date",
                     lower="2026-01-01",
@@ -384,7 +384,7 @@ CONTRACT_SNAPSHOT_CASES = (
         name="invalid_value_coercion",
         proposal=interpreter_support.question_frame_proposal(
             field_operations=(
-                question_interpreter.RangeFilterOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="range_filter",
                     field="order date",
                     lower="not-a-date",
@@ -400,7 +400,7 @@ CONTRACT_SNAPSHOT_CASES = (
         name="invalid_reversed_range",
         proposal=interpreter_support.question_frame_proposal(
             field_operations=(
-                question_interpreter.RangeFilterOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="range_filter",
                     field="order date",
                     lower="2026-01-31",
@@ -416,7 +416,7 @@ CONTRACT_SNAPSHOT_CASES = (
         name="invalid_empty_filter_values",
         proposal=interpreter_support.question_frame_proposal(
             field_operations=(
-                question_interpreter.IncludeFilterOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="include_filter",
                     field="region",
                     values=(),
@@ -431,11 +431,11 @@ CONTRACT_SNAPSHOT_CASES = (
         name="multiple_group_by",
         proposal=interpreter_support.question_frame_proposal(
             field_operations=(
-                question_interpreter.GroupByOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="group_by",
                     field="region",
                 ),
-                question_interpreter.GroupByOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="group_by",
                     field="region",
                 ),
@@ -508,11 +508,11 @@ def test_question_interpreter_rejects_non_finite_decimal_filter_values() -> None
             ),
         ),
     )
-    proposal = question_interpreter.QuestionFrameProposal(
+    proposal = question_interpreter.ProviderProposal(
         intent="summarize",
         metric="total revenue",
         field_operations=(
-            question_interpreter.RangeFilterOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="range_filter",
                 field="revenue",
                 lower="NaN",
@@ -531,7 +531,7 @@ def test_question_interpreter_rejects_non_finite_decimal_filter_values() -> None
     )
 
 
-def test_question_interpreter_promotes_semantic_layer_operation_enum() -> None:
+def test_question_interpreter_validates_semantic_layer_operation_enum() -> None:
     result = interpreter_support.interpret_with_provider_proposal(
         interpreter_support.question_frame_proposal()
     )

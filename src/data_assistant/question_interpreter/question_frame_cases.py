@@ -24,7 +24,7 @@ class SharedQuestionFrameCase:
 
     name: str
     question: str
-    expected: question_interpreter.QuestionFrameProposal
+    expected: question_interpreter.ProviderProposal
     enabled: bool = True
     deferred: bool = False
 
@@ -51,11 +51,11 @@ def _proposal(
     *,
     intent: str | None,
     metric: str | None,
-    field_operations: tuple[question_interpreter.FieldOperationProposal, ...],
+    field_operations: tuple[question_interpreter.ProviderFieldOperation, ...],
     all_time: bool = False,
     metric_ambiguity: str | None = None,
-) -> question_interpreter.QuestionFrameProposal:
-    return question_interpreter.QuestionFrameProposal(
+) -> question_interpreter.ProviderProposal:
+    return question_interpreter.ProviderProposal(
         intent=intent,
         metric=metric,
         metric_ambiguity=metric_ambiguity,
@@ -66,9 +66,9 @@ def _proposal(
 
 def _summarize(
     metric: str,
-    *field_operations: question_interpreter.FieldOperationProposal,
+    *field_operations: question_interpreter.ProviderFieldOperation,
     all_time: bool = False,
-) -> question_interpreter.QuestionFrameProposal:
+) -> question_interpreter.ProviderProposal:
     return _proposal(
         intent="summarize",
         metric=metric,
@@ -80,8 +80,8 @@ def _summarize(
 def _deferred(
     intent: str,
     metric: str,
-    *field_operations: question_interpreter.FieldOperationProposal,
-) -> question_interpreter.QuestionFrameProposal:
+    *field_operations: question_interpreter.ProviderFieldOperation,
+) -> question_interpreter.ProviderProposal:
     return _proposal(
         intent=intent,
         metric=metric,
@@ -89,8 +89,8 @@ def _deferred(
     )
 
 
-def _group_by(field: str) -> question_interpreter.GroupByOperationProposal:
-    return question_interpreter.GroupByOperationProposal(
+def _group_by(field: str) -> question_interpreter.ProviderFieldOperation:
+    return question_interpreter.ProviderFieldOperation(
         operation="group_by",
         field=field,
     )
@@ -101,8 +101,8 @@ def _range_filter(
     *,
     lower: str | None = None,
     upper: str | None = None,
-) -> question_interpreter.RangeFilterOperationProposal:
-    return question_interpreter.RangeFilterOperationProposal(
+) -> question_interpreter.ProviderFieldOperation:
+    return question_interpreter.ProviderFieldOperation(
         operation="range_filter",
         field=field,
         lower=lower,
@@ -113,15 +113,15 @@ def _range_filter(
 def _during(
     field: str,
     period: _DateRange,
-) -> question_interpreter.RangeFilterOperationProposal:
+) -> question_interpreter.ProviderFieldOperation:
     return _range_filter(field, lower=period.lower, upper=period.upper)
 
 
 def _include_filter(
     field: str,
     *values: str,
-) -> question_interpreter.IncludeFilterOperationProposal:
-    return question_interpreter.IncludeFilterOperationProposal(
+) -> question_interpreter.ProviderFieldOperation:
+    return question_interpreter.ProviderFieldOperation(
         operation="include_filter",
         field=field,
         values=tuple(values),
@@ -131,8 +131,8 @@ def _include_filter(
 def _exclude_filter(
     field: str,
     *values: str,
-) -> question_interpreter.ExcludeFilterOperationProposal:
-    return question_interpreter.ExcludeFilterOperationProposal(
+) -> question_interpreter.ProviderFieldOperation:
+    return question_interpreter.ProviderFieldOperation(
         operation="exclude_filter",
         field=field,
         values=tuple(values),
@@ -292,10 +292,11 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _during("order date", MARCH_2026),
         ),
     ),
-    # --- Degradation cases: shapes promotion rejects downstream (#159) ---
-    # Multi-group: the interpreter faithfully emits both group_by ops; promotion
-    # rejects the 2-group shape downstream via UNSUPPORTED_SHAPE (covered by
-    # promotion unit tests, not here). This case only checks the proposal.
+    # --- Degradation cases: shapes validation rejects downstream (#159) ---
+    # Multi-group: interpreter faithfully emits both group_by ops; Provider
+    # Proposal Validation rejects 2-group shape downstream via
+    # UNSUPPORTED_SHAPE (covered by validation unit tests, not here). This
+    # case only checks proposal.
     SharedQuestionFrameCase(
         name="multi_group_net_revenue_by_region_and_channel",
         question=(

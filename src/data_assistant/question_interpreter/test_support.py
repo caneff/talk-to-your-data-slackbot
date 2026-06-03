@@ -15,7 +15,7 @@ _DEFAULT_FIELD_OPERATIONS = object()
 
 
 def interpret_with_provider_proposal(
-    provider_proposal: question_interpreter.QuestionFrameProposal,
+    provider_proposal: question_interpreter.ProviderProposal,
 ) -> contracts.StageResult[contracts.QuestionFrame]:
     """Interpret the canonical question with a provider that returns one proposal."""
     return question_interpreter.interpret_question(
@@ -26,7 +26,7 @@ def interpret_with_provider_proposal(
 
 
 def fixed_proposal_provider(
-    provider_proposal: question_interpreter.QuestionFrameProposal,
+    provider_proposal: question_interpreter.ProviderProposal,
 ) -> question_interpreter.QuestionInterpreterProvider:
     """Build a fake provider that always returns one fixed proposal."""
 
@@ -36,7 +36,7 @@ def fixed_proposal_provider(
             *,
             question: str,
             semantic_layer_context: dict[str, object],
-        ) -> question_interpreter.QuestionFrameProposal:
+        ) -> question_interpreter.ProviderProposal:
             del question, semantic_layer_context
             return provider_proposal
 
@@ -54,7 +54,7 @@ def provider_that_must_not_be_called() -> (
             *,
             question: str,
             semantic_layer_context: dict[str, object],
-        ) -> question_interpreter.QuestionFrameProposal:
+        ) -> question_interpreter.ProviderProposal:
             del question, semantic_layer_context
             raise AssertionError("provider should not be called")
 
@@ -96,10 +96,10 @@ def invalid_result_provider(
             *,
             question: str,
             semantic_layer_context: dict[str, object],
-        ) -> question_interpreter.QuestionFrameProposal:
+        ) -> question_interpreter.ProviderProposal:
             del question, semantic_layer_context
             return typing.cast(
-                question_interpreter.QuestionFrameProposal,
+                question_interpreter.ProviderProposal,
                 provider_result,
             )
 
@@ -113,17 +113,17 @@ def question_frame_proposal(
     metric_ambiguity: str | None = None,
     all_time: bool = False,
     field_operations: (
-        tuple[question_interpreter.FieldOperationProposal, ...] | object
+        tuple[question_interpreter.ProviderFieldOperation, ...] | object
     ) = _DEFAULT_FIELD_OPERATIONS,
-) -> question_interpreter.QuestionFrameProposal:
-    """Build a valid proposal while allowing each promoted field to be varied."""
+) -> question_interpreter.ProviderProposal:
+    """Build a valid proposal while allowing each validated field to be varied."""
     if field_operations is _DEFAULT_FIELD_OPERATIONS:
         active_field_operations = (
-            question_interpreter.GroupByOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="group_by",
                 field="region",
             ),
-            question_interpreter.RangeFilterOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="range_filter",
                 field="order date",
                 lower="2026-01-01",
@@ -132,11 +132,11 @@ def question_frame_proposal(
         )
     else:
         active_field_operations = typing.cast(
-            tuple[question_interpreter.FieldOperationProposal, ...],
+            tuple[question_interpreter.ProviderFieldOperation, ...],
             field_operations,
         )
 
-    return question_interpreter.QuestionFrameProposal(
+    return question_interpreter.ProviderProposal(
         intent=intent,
         metric=metric,
         metric_ambiguity=metric_ambiguity,

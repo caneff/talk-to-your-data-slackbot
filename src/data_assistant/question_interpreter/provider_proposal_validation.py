@@ -1,4 +1,4 @@
-"""Promote untrusted Question Interpreter proposals to trusted Question Frames."""
+"""Validate Provider Proposals into trusted Question Frames."""
 
 from __future__ import annotations
 
@@ -12,9 +12,9 @@ import data_assistant.workflow.contracts as contracts
 from data_assistant.question_interpreter import guards as interpreter_guards
 from data_assistant.question_interpreter import semantic_context
 from data_assistant.question_interpreter.proposals import (
-    FieldOperationProposal,
     ProviderFailure,
-    QuestionFrameProposal,
+    ProviderFieldOperation,
+    ProviderProposal,
     QuestionInterpreterProvider,
 )
 
@@ -27,7 +27,7 @@ def interpret_question(
     semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
     provider: QuestionInterpreterProvider,
 ) -> contracts.StageResult[contracts.QuestionFrame]:
-    """Promote validated provider proposal into a trusted Question Frame."""
+    """Apply Provider Proposal Validation to produce a trusted Question Frame."""
     normalized_question = interpreter_guards.normalize_question(question)
     # Some requests are policy-level rejects; do not spend provider work on them.
     if interpreter_guards.mentions_unsupported_data(normalized_question):
@@ -62,12 +62,12 @@ def interpret_question(
             stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         )
 
-    # Provider output is only a proposal until workflow validation promotes it
-    # into the trusted Question Frame contract.
-    return _promote_provider_result(raw_provider_result, semantic_layer)
+    # Provider output stays untrusted until Provider Proposal Validation turns
+    # it into the trusted Question Frame contract.
+    return _validate_provider_result(raw_provider_result, semantic_layer)
 
 
-def _promote_provider_result(
+def _validate_provider_result(
     raw_provider_result: object,
     semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> contracts.StageResult[contracts.QuestionFrame]:
@@ -77,7 +77,7 @@ def _promote_provider_result(
             reason_code=contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
             context=_provider_failure_context(raw_provider_result),
         )
-    if not isinstance(raw_provider_result, QuestionFrameProposal):
+    if not isinstance(raw_provider_result, ProviderProposal):
         return non_answer_catalog.non_answer(
             contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
             stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
@@ -99,7 +99,8 @@ def _promote_provider_result(
             stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         )
     # The interpreter self-reports metric-qualifier ambiguity (ADR-0017).
-    # Promotion is the trust boundary that acts on it: a reported ambiguity
+    # Provider Proposal Validation is trust boundary that acts on it: a
+    # reported ambiguity
     # wins over both missing-metric and label-match so we never silently
     # conflate a dropped qualifier (e.g. "net revenue") with the nearest label.
     if proposal.metric_ambiguity:
@@ -119,16 +120,16 @@ def _promote_provider_result(
             "metric",
             stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         )
-    field_filters_result = _promote_field_filters(
+    field_filters_result = _validate_field_filters(
         proposal.field_operations,
         semantic_layer,
     )
     if isinstance(field_filters_result, contracts.NonAnswer):
         return field_filters_result
-    group_by_field, promoted_filters = field_filters_result
+    group_by_field, validated_filters = field_filters_result
     time_scope = _derive_time_scope(
         proposal=proposal,
-        field_filters=promoted_filters,
+        field_filters=validated_filters,
         semantic_layer=semantic_layer,
     )
     if isinstance(time_scope, contracts.NonAnswer):
@@ -139,7 +140,7 @@ def _promote_provider_result(
             intent=intent_value,
             metric=metric_value,
             group_by_field=group_by_field,
-            field_filters=promoted_filters,
+            field_filters=validated_filters,
             unresolved_ambiguities=(),
             time_scope=time_scope,
         )
@@ -156,7 +157,7 @@ def _provider_failure_context(
 
 def _derive_time_scope(
     *,
-    proposal: QuestionFrameProposal,
+    proposal: ProviderProposal,
     field_filters: tuple[contracts.FieldFilter[str], ...],
     semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> contracts.TimeScope | contracts.NonAnswer:
@@ -184,14 +185,14 @@ def _derive_time_scope(
     )
 
 
-def _promote_field_filters(
-    operation_proposals: tuple[FieldOperationProposal, ...],
+def _validate_field_filters(
+    operation_proposals: tuple[ProviderFieldOperation, ...],
     semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> contracts.NonAnswer | tuple[str | None, tuple[contracts.FieldFilter[str], ...]]:
     fields_by_label = {
         field.label: field for table in semantic_layer.tables for field in table.fields
     }
-    promoted_filters: list[contracts.FieldFilter[str]] = []
+    validated_filters: list[contracts.FieldFilter[str]] = []
     group_by_field: str | None = None
     for operation_proposal in operation_proposals:
         field = fields_by_label.get(operation_proposal.field)
@@ -215,12 +216,12 @@ def _promote_field_filters(
             group_by_field = field.label
             continue
         if operation == schema.FieldOperation.RANGE_FILTER:
-            result = _promote_range_filter(operation_proposal, field, operation)
+            result = _validate_range_filter(operation_proposal, field, operation)
         elif operation in {
             schema.FieldOperation.INCLUDE_FILTER,
             schema.FieldOperation.EXCLUDE_FILTER,
         }:
-            result = _promote_values_filter(operation_proposal, field, operation)
+            result = _validate_values_filter(operation_proposal, field, operation)
         else:
             return non_answer_catalog.non_answer(
                 contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
@@ -228,13 +229,13 @@ def _promote_field_filters(
             )
         if isinstance(result, contracts.NonAnswer):
             return result
-        promoted_filters.append(result)
+        validated_filters.append(result)
 
-    return group_by_field, tuple(promoted_filters)
+    return group_by_field, tuple(validated_filters)
 
 
-def _promote_range_filter(
-    operation_proposal: FieldOperationProposal,
+def _validate_range_filter(
+    operation_proposal: ProviderFieldOperation,
     field: schema.SemanticField,
     operation: schema.FieldOperation,
 ) -> contracts.NonAnswer | contracts.RangeFilter[str]:
@@ -285,8 +286,8 @@ def _range_bounds_are_reversed(
     return False
 
 
-def _promote_values_filter(
-    operation_proposal: FieldOperationProposal,
+def _validate_values_filter(
+    operation_proposal: ProviderFieldOperation,
     field: schema.SemanticField,
     operation: schema.FieldOperation,
 ) -> contracts.NonAnswer | contracts.ValuesFilter[str]:

@@ -11,7 +11,7 @@ from data_assistant.openai_support import OpenAIInputMessage
 from data_assistant.question_interpreter.proposals import (
     ProviderFailure,
     ProviderFailureDiagnosticClass,
-    QuestionFrameProposal,
+    ProviderProposal,
 )
 
 # Module-local private alias for the shared client protocol; the deterministic
@@ -72,7 +72,7 @@ class OpenAIQuestionInterpreterProvider:
         *,
         question: str,
         semantic_layer_context: dict[str, object],
-    ) -> QuestionFrameProposal | ProviderFailure:
+    ) -> ProviderProposal | ProviderFailure:
         return openai_support.run_parse(
             client=self._client,
             model=self._config.model,
@@ -80,7 +80,7 @@ class OpenAIQuestionInterpreterProvider:
                 question=question,
                 semantic_layer_context=semantic_layer_context,
             ),
-            text_format=QuestionFrameProposal,
+            text_format=ProviderProposal,
             failure_factory=lambda reason: ProviderFailure(reason=reason),
             failure_with_diagnostic_factory=lambda reason, diagnostic_class: (
                 ProviderFailure(

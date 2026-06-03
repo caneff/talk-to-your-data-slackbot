@@ -29,7 +29,7 @@ import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.slack_runtime as slack_runtime
 
 ProviderResult: typing.TypeAlias = (
-    question_interpreter.QuestionFrameProposal | question_interpreter.ProviderFailure
+    question_interpreter.ProviderProposal | question_interpreter.ProviderFailure
 )
 
 
@@ -39,7 +39,7 @@ class LiveEvalCase:
 
     name: str
     question: str
-    expected: question_interpreter.QuestionFrameProposal
+    expected: question_interpreter.ProviderProposal
     enabled: bool = True
     deferred: bool = False
 
@@ -50,7 +50,7 @@ class LiveEvalFailure:
 
     case_name: str
     question: str
-    expected: question_interpreter.QuestionFrameProposal
+    expected: question_interpreter.ProviderProposal
     actual: ProviderResult
     reasons: tuple[str, ...]
     pass_count: int = 0
@@ -63,8 +63,8 @@ class LiveEvalPass:
 
     case_name: str
     question: str
-    expected: question_interpreter.QuestionFrameProposal
-    actual: question_interpreter.QuestionFrameProposal
+    expected: question_interpreter.ProviderProposal
+    actual: question_interpreter.ProviderProposal
     pass_count: int = 1
     sample_count: int = 1
 
@@ -109,8 +109,8 @@ DEFAULT_FAILURES_DIR = pathlib.Path("eval_results")
 
 def compare_question_frame_meaning(
     *,
-    expected: question_interpreter.QuestionFrameProposal,
-    actual: question_interpreter.QuestionFrameProposal,
+    expected: question_interpreter.ProviderProposal,
+    actual: question_interpreter.ProviderProposal,
 ) -> tuple[str, ...]:
     """Return field-level mismatches for proposal meaning."""
     mismatches: list[str] = []
@@ -296,7 +296,7 @@ def run_live_question_interpreter_eval(
                 question=case.question,
                 expected=case.expected,
                 actual=typing.cast(
-                    question_interpreter.QuestionFrameProposal,
+                    question_interpreter.ProviderProposal,
                     last_actual,
                 ),
                 pass_count=pass_count,
@@ -323,7 +323,7 @@ def run_live_question_interpreter_eval(
 
 def _case_failure_reasons(
     *,
-    expected: question_interpreter.QuestionFrameProposal,
+    expected: question_interpreter.ProviderProposal,
     actual: ProviderResult,
 ) -> tuple[str, ...]:
     if isinstance(actual, question_interpreter.ProviderFailure):
@@ -647,8 +647,8 @@ _FIELD_OPERATION_ATTRIBUTES: tuple[str, ...] = (
 def _append_field_operations_mismatches(
     *,
     mismatches: list[str],
-    expected: tuple[question_interpreter.FieldOperationProposal, ...],
-    actual: tuple[question_interpreter.FieldOperationProposal, ...],
+    expected: tuple[question_interpreter.ProviderFieldOperation, ...],
+    actual: tuple[question_interpreter.ProviderFieldOperation, ...],
 ) -> None:
     """Report only the field operations (and attributes) that actually differ."""
     common = min(len(expected), len(actual))
@@ -676,8 +676,8 @@ def _append_field_operation_mismatch(
     *,
     mismatches: list[str],
     index: int,
-    expected: question_interpreter.FieldOperationProposal,
-    actual: question_interpreter.FieldOperationProposal,
+    expected: question_interpreter.ProviderFieldOperation,
+    actual: question_interpreter.ProviderFieldOperation,
 ) -> None:
     for attribute in _FIELD_OPERATION_ATTRIBUTES:
         field = f"field_operations[{index}].{attribute}"
@@ -741,13 +741,13 @@ def _debug_value(value: object) -> str:
 
 
 def _field_operation_debug_string(
-    operation: question_interpreter.FieldOperationProposal,
+    operation: question_interpreter.ProviderFieldOperation,
 ) -> str:
     return operation.model_dump_json()
 
 
 def _proposal_debug_string(
-    proposal: question_interpreter.QuestionFrameProposal,
+    proposal: question_interpreter.ProviderProposal,
 ) -> str:
     return proposal.model_dump_json()
 

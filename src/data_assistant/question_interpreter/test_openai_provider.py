@@ -242,14 +242,14 @@ def test_openai_provider_returns_question_frame_proposal_from_parsed_response() 
 
 
 def test_openai_provider_schema_avoids_union_items_for_field_operations() -> None:
-    response_schema = question_interpreter.QuestionFrameProposal.model_json_schema()
+    response_schema = question_interpreter.ProviderProposal.model_json_schema()
     field_operations_schema = response_schema["properties"]["field_operations"]
 
     assert "oneOf" not in json.dumps(field_operations_schema)
 
 
 def test_openai_provider_schema_guides_supported_summary_intent() -> None:
-    response_schema = question_interpreter.QuestionFrameProposal.model_json_schema()
+    response_schema = question_interpreter.ProviderProposal.model_json_schema()
     intent_schema = response_schema["properties"]["intent"]
 
     assert "Use summarize" in intent_schema["description"]
@@ -258,8 +258,8 @@ def test_openai_provider_schema_guides_supported_summary_intent() -> None:
 
 
 def test_openai_provider_schema_rejects_empty_implicit_filters() -> None:
-    response_schema = question_interpreter.QuestionFrameProposal.model_json_schema()
-    field_operation_schema = response_schema["$defs"]["FieldOperationProposal"]
+    response_schema = question_interpreter.ProviderProposal.model_json_schema()
+    field_operation_schema = response_schema["$defs"]["ProviderFieldOperation"]
     field_operations_schema = response_schema["properties"]["field_operations"]
     operation_schema = field_operation_schema["properties"]["operation"]
     values_schema = field_operation_schema["properties"]["values"]
