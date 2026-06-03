@@ -161,11 +161,11 @@ def test_compare_proposal_reports_field_level_mismatches() -> None:
         intent="trend",
         metric="gross margin",
         field_operations=(
-            question_interpreter.GroupByOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="group_by",
                 field="country",
             ),
-            question_interpreter.IncludeFilterOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="include_filter",
                 field="region",
                 values=("North",),
@@ -194,7 +194,7 @@ def test_compare_proposal_reports_missing_field_operation() -> None:
     expected = test_support.question_frame_proposal()
     actual = test_support.question_frame_proposal(
         field_operations=(
-            question_interpreter.GroupByOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="group_by",
                 field="region",
             ),
@@ -216,7 +216,7 @@ def test_compare_proposal_reports_missing_field_operation() -> None:
 def test_compare_proposal_reports_extra_field_operation() -> None:
     expected = test_support.question_frame_proposal(
         field_operations=(
-            question_interpreter.GroupByOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="group_by",
                 field="region",
             ),
@@ -224,11 +224,11 @@ def test_compare_proposal_reports_extra_field_operation() -> None:
     )
     actual = test_support.question_frame_proposal(
         field_operations=(
-            question_interpreter.GroupByOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="group_by",
                 field="region",
             ),
-            question_interpreter.ExcludeFilterOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="exclude_filter",
                 field="region",
                 values=("North",),
@@ -263,7 +263,7 @@ def test_compare_proposal_reports_all_time_mismatch() -> None:
 def test_compare_proposal_treats_filter_values_case_insensitively() -> None:
     expected = test_support.question_frame_proposal(
         field_operations=(
-            question_interpreter.IncludeFilterOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="include_filter",
                 field="priority",
                 values=("High",),
@@ -272,7 +272,7 @@ def test_compare_proposal_treats_filter_values_case_insensitively() -> None:
     )
     actual = test_support.question_frame_proposal(
         field_operations=(
-            question_interpreter.IncludeFilterOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="include_filter",
                 field="priority",
                 values=("high",),
@@ -291,7 +291,7 @@ def test_compare_proposal_treats_filter_values_case_insensitively() -> None:
 def test_compare_proposal_still_flags_genuine_filter_value_difference() -> None:
     expected = test_support.question_frame_proposal(
         field_operations=(
-            question_interpreter.IncludeFilterOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="include_filter",
                 field="priority",
                 values=("high",),
@@ -300,7 +300,7 @@ def test_compare_proposal_still_flags_genuine_filter_value_difference() -> None:
     )
     actual = test_support.question_frame_proposal(
         field_operations=(
-            question_interpreter.IncludeFilterOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="include_filter",
                 field="priority",
                 values=("urgent",),
@@ -458,7 +458,7 @@ def test_run_eval_suite_counts_provider_failure_as_sample_failure() -> None:
             self.results: list[live_eval.ProviderResult] = [
                 question_interpreter.ProviderFailure(
                     reason=(
-                        "1 validation error for QuestionFrameProposal\n"
+                        "1 validation error for ProviderProposal\n"
                         "  Invalid JSON: EOF while parsing a value at line 1 "
                         "column 0"
                     )
@@ -502,7 +502,7 @@ def test_run_eval_suite_counts_provider_failure_as_sample_failure() -> None:
     assert report.failures[0].sample_count == 3
     assert report.failures[0].reasons == (
         "sample 1: provider failure: "
-        "1 validation error for QuestionFrameProposal\n"
+        "1 validation error for ProviderProposal\n"
         "  Invalid JSON: EOF while parsing a value at line 1 column 0",
     )
     assert provider.calls == ["flaky provider", "flaky provider", "flaky provider"]
@@ -867,15 +867,15 @@ def test_default_live_eval_includes_customer_count_by_customer_region_case() -> 
     assert case.question == (
         "What was customer count by customer region in January 2026?"
     )
-    assert case.expected == question_interpreter.QuestionFrameProposal(
+    assert case.expected == question_interpreter.ProviderProposal(
         intent="summarize",
         metric="customer count",
         field_operations=(
-            question_interpreter.GroupByOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="group_by",
                 field="customer region",
             ),
-            question_interpreter.RangeFilterOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="range_filter",
                 field="customer created date",
                 lower="2026-01-01",
@@ -894,11 +894,11 @@ def test_default_live_eval_includes_exact_date_net_revenue_case() -> None:
 
     assert case.enabled is True
     assert case.question == "What was total net revenue on 2026-01-15?"
-    assert case.expected == question_interpreter.QuestionFrameProposal(
+    assert case.expected == question_interpreter.ProviderProposal(
         intent="summarize",
         metric="total net revenue",
         field_operations=(
-            question_interpreter.IncludeFilterOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="include_filter",
                 field="order date",
                 values=("2026-01-15",),
@@ -919,17 +919,17 @@ def test_default_live_eval_includes_multi_filter_net_revenue_case() -> None:
         "What was total net revenue for the Web order channel and Shipped "
         "fulfillment status for all time?"
     )
-    assert case.expected == question_interpreter.QuestionFrameProposal(
+    assert case.expected == question_interpreter.ProviderProposal(
         intent="summarize",
         metric="total net revenue",
         all_time=True,
         field_operations=(
-            question_interpreter.IncludeFilterOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="include_filter",
                 field="order channel",
                 values=("Web",),
             ),
-            question_interpreter.IncludeFilterOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="include_filter",
                 field="fulfillment status",
                 values=("Shipped",),

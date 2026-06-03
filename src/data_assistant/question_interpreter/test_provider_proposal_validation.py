@@ -1,4 +1,4 @@
-"""Deterministic promotion regression tests for metric-qualifier handling.
+"""Deterministic Provider Proposal Validation tests for metric qualifiers.
 
 These lock the ADR-0017 precedence both ways, independent of the LLM:
 an exact qualified label (e.g. "total net revenue") must promote, while a
@@ -49,7 +49,7 @@ class _StaticProvider:
 
     def __init__(
         self,
-        proposal: question_interpreter.QuestionFrameProposal,
+        proposal: question_interpreter.ProviderProposal,
     ) -> None:
         self._proposal = proposal
 
@@ -58,18 +58,18 @@ class _StaticProvider:
         *,
         question: str,
         semantic_layer_context: dict[str, object],
-    ) -> question_interpreter.QuestionFrameProposal:
+    ) -> question_interpreter.ProviderProposal:
         del question, semantic_layer_context
         return self._proposal
 
 
 def test_exact_net_revenue_label_promotes_to_question_frame() -> None:
-    proposal = question_interpreter.QuestionFrameProposal(
+    proposal = question_interpreter.ProviderProposal(
         intent="summarize",
         metric="total net revenue",
         metric_ambiguity=None,
         field_operations=(
-            question_interpreter.RangeFilterOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="range_filter",
                 field="order date",
                 lower="2026-01-01",
@@ -97,12 +97,12 @@ def test_exact_net_revenue_label_promotes_to_question_frame() -> None:
 
 
 def test_unreflected_metric_ambiguity_still_non_answers() -> None:
-    proposal = question_interpreter.QuestionFrameProposal(
+    proposal = question_interpreter.ProviderProposal(
         intent="summarize",
         metric=None,
         metric_ambiguity="recurring revenue",
         field_operations=(
-            question_interpreter.RangeFilterOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="range_filter",
                 field="order date",
                 lower="2026-01-01",
@@ -139,15 +139,15 @@ def test_group_by_requested_on_non_groupable_field_returns_unsupported_operation
             ),
         )
     )
-    proposal = question_interpreter.QuestionFrameProposal(
+    proposal = question_interpreter.ProviderProposal(
         intent="summarize",
         metric="total revenue",
         field_operations=(
-            question_interpreter.GroupByOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="group_by",
                 field="order date",
             ),
-            question_interpreter.RangeFilterOperationProposal(
+            question_interpreter.ProviderFieldOperation(
                 operation="range_filter",
                 field="order date",
                 lower="2026-01-01",

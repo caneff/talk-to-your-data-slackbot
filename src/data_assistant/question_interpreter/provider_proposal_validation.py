@@ -1,4 +1,4 @@
-"""Promote untrusted Question Interpreter proposals to trusted Question Frames."""
+"""Validate Provider Proposals into trusted Question Frames."""
 
 from __future__ import annotations
 
@@ -12,9 +12,9 @@ import data_assistant.workflow.contracts as contracts
 from data_assistant.question_interpreter import guards as interpreter_guards
 from data_assistant.question_interpreter import semantic_context
 from data_assistant.question_interpreter.proposals import (
-    FieldOperationProposal,
     ProviderFailure,
-    QuestionFrameProposal,
+    ProviderFieldOperation,
+    ProviderProposal,
     QuestionInterpreterProvider,
 )
 
@@ -27,7 +27,7 @@ def interpret_question(
     semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
     provider: QuestionInterpreterProvider,
 ) -> contracts.StageResult[contracts.QuestionFrame]:
-    """Promote validated provider proposal into a trusted Question Frame."""
+    """Apply Provider Proposal Validation to produce a trusted Question Frame."""
     normalized_question = interpreter_guards.normalize_question(question)
     # Some requests are policy-level rejects; do not spend provider work on them.
     if interpreter_guards.mentions_unsupported_data(normalized_question):
@@ -77,7 +77,7 @@ def _promote_provider_result(
             reason_code=contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
             context=_provider_failure_context(raw_provider_result),
         )
-    if not isinstance(raw_provider_result, QuestionFrameProposal):
+    if not isinstance(raw_provider_result, ProviderProposal):
         return non_answer_catalog.non_answer(
             contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
             stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
@@ -99,7 +99,8 @@ def _promote_provider_result(
             stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         )
     # The interpreter self-reports metric-qualifier ambiguity (ADR-0017).
-    # Promotion is the trust boundary that acts on it: a reported ambiguity
+    # Provider Proposal Validation is trust boundary that acts on it: a
+    # reported ambiguity
     # wins over both missing-metric and label-match so we never silently
     # conflate a dropped qualifier (e.g. "net revenue") with the nearest label.
     if proposal.metric_ambiguity:
@@ -156,7 +157,7 @@ def _provider_failure_context(
 
 def _derive_time_scope(
     *,
-    proposal: QuestionFrameProposal,
+    proposal: ProviderProposal,
     field_filters: tuple[contracts.FieldFilter[str], ...],
     semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> contracts.TimeScope | contracts.NonAnswer:
@@ -185,7 +186,7 @@ def _derive_time_scope(
 
 
 def _promote_field_filters(
-    operation_proposals: tuple[FieldOperationProposal, ...],
+    operation_proposals: tuple[ProviderFieldOperation, ...],
     semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> contracts.NonAnswer | tuple[str | None, tuple[contracts.FieldFilter[str], ...]]:
     fields_by_label = {
@@ -234,7 +235,7 @@ def _promote_field_filters(
 
 
 def _promote_range_filter(
-    operation_proposal: FieldOperationProposal,
+    operation_proposal: ProviderFieldOperation,
     field: schema.SemanticField,
     operation: schema.FieldOperation,
 ) -> contracts.NonAnswer | contracts.RangeFilter[str]:
@@ -286,7 +287,7 @@ def _range_bounds_are_reversed(
 
 
 def _promote_values_filter(
-    operation_proposal: FieldOperationProposal,
+    operation_proposal: ProviderFieldOperation,
     field: schema.SemanticField,
     operation: schema.FieldOperation,
 ) -> contracts.NonAnswer | contracts.ValuesFilter[str]:

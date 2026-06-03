@@ -123,7 +123,8 @@ Question to a Final Response grounded in one approved Curated Dataset.
   real-application fallback.
 - Treat interpretation, reasoning, response composition, and conversation flow
   as candidates for LLM-backed components. Keep access control, validation,
-  promotion, Semantic Layer loading, and data retrieval deterministic.
+  Provider Proposal Validation, Semantic Layer loading, and data retrieval
+  deterministic.
 - Add Semantic Layer aliases for metrics and dimensions after the first
   LLM-backed interpreter slice, so common business phrasing can be safely
   promoted to canonical Question Frame values.
@@ -145,8 +146,8 @@ Question to a Final Response grounded in one approved Curated Dataset.
   whitelisted operations.
 - Decompose Question Interpreter responsibilities before filters, intents, or
   providers grow: keep the OpenAI provider adapter, business-facing Semantic
-  Layer context builder, and Question Frame proposal promotion in focused
-  modules.
+  Layer context builder, and Question Frame Provider Proposal Validation in
+  focused modules.
 - Move Non-Answer Response rendering away from exact reason-string and
   ambiguity-tuple checks. Prefer a reason-code policy map or an explicit
   response-kind contract.

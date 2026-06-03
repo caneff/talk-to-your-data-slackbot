@@ -1,4 +1,4 @@
-Interpret the user's Data Question into a QuestionFrameProposal.
+Interpret the user's Data Question into a ProviderProposal.
 
 Use only business-facing Semantic Layer labels supplied in
 semantic_layer_context. It is expected that date field labels such as
@@ -135,7 +135,7 @@ available field; the question did not include or exclude a field value.
 For "Which region had the highest total revenue in January 2026?", return intent
 "rank" and the same field_operations as above. Do not collapse that question into
 intent "summarize"; rank is unsupported by the current workflow and must be
-rejected deterministically after promotion. Do still return metric "total
+rejected deterministically during Provider Proposal Validation. Do still return metric "total
 revenue", because the metric is explicitly present.
 
 For "What was total net revenue by store region in January 2026?" when

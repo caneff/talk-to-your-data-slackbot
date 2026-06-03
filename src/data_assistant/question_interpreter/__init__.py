@@ -7,35 +7,29 @@ from data_assistant.question_interpreter.openai_provider import (
     build_openai_question_interpreter_provider,
     load_openai_question_interpreter_config,
 )
-from data_assistant.question_interpreter.promotion import interpret_question
 from data_assistant.question_interpreter.proposals import (
-    ExcludeFilterOperationProposal,
-    FieldOperationProposal,
-    GroupByOperationProposal,
-    IncludeFilterOperationProposal,
     ProviderFailure,
     ProviderFailureDiagnosticClass,
-    QuestionFrameProposal,
+    ProviderFieldOperation,
+    ProviderProposal,
     QuestionInterpreterProvider,
-    RangeFilterOperationProposal,
+)
+from data_assistant.question_interpreter.provider_proposal_validation import (
+    interpret_question,
 )
 from data_assistant.question_interpreter.semantic_context import (
     build_semantic_layer_context,
 )
 
 __all__ = [
-    "ExcludeFilterOperationProposal",
-    "FieldOperationProposal",
-    "GroupByOperationProposal",
-    "IncludeFilterOperationProposal",
     "OpenAIQuestionInterpreterConfig",
     "OpenAIQuestionInterpreterConfigError",
     "OpenAIQuestionInterpreterProvider",
     "ProviderFailure",
     "ProviderFailureDiagnosticClass",
-    "QuestionFrameProposal",
+    "ProviderFieldOperation",
+    "ProviderProposal",
     "QuestionInterpreterProvider",
-    "RangeFilterOperationProposal",
     "build_openai_question_interpreter_provider",
     "build_semantic_layer_context",
     "interpret_question",

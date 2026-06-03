@@ -9,7 +9,7 @@ import typing
 import pydantic
 
 
-class FieldOperationProposal(pydantic.BaseModel):
+class ProviderFieldOperation(pydantic.BaseModel):
     """Untrusted provider proposal for one Semantic Field operation."""
 
     model_config = pydantic.ConfigDict(extra="forbid")
@@ -59,13 +59,7 @@ class FieldOperationProposal(pydantic.BaseModel):
     )
 
 
-GroupByOperationProposal = FieldOperationProposal
-RangeFilterOperationProposal = FieldOperationProposal
-IncludeFilterOperationProposal = FieldOperationProposal
-ExcludeFilterOperationProposal = FieldOperationProposal
-
-
-class QuestionFrameProposal(pydantic.BaseModel):
+class ProviderProposal(pydantic.BaseModel):
     """Untrusted provider proposal shape for a Question Frame."""
 
     model_config = pydantic.ConfigDict(extra="forbid")
@@ -101,7 +95,7 @@ class QuestionFrameProposal(pydantic.BaseModel):
             "with an available label."
         ),
     )
-    field_operations: tuple[FieldOperationProposal, ...] = pydantic.Field(
+    field_operations: tuple[ProviderFieldOperation, ...] = pydantic.Field(
         description=(
             "Every explicit grouping, date constraint, and filter from the "
             "Data Question, represented with Semantic Field labels. Do not add "
@@ -136,13 +130,13 @@ class ProviderFailure:
 
 
 class QuestionInterpreterProvider(typing.Protocol):
-    """Provider boundary for Question Frame proposals."""
+    """Provider boundary for Provider Proposals."""
 
     def propose_question_frame(
         self,
         *,
         question: str,
         semantic_layer_context: dict[str, object],
-    ) -> QuestionFrameProposal | ProviderFailure:
-        """Return an untrusted Question Frame proposal or failure."""
+    ) -> ProviderProposal | ProviderFailure:
+        """Return an untrusted Provider Proposal or failure."""
         ...

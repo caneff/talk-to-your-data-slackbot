@@ -139,15 +139,15 @@ def test_data_assistant_answers_empty_retail_q4_result_without_crashing(
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
     provider = _static_provider(
-        question_interpreter.QuestionFrameProposal(
+        question_interpreter.ProviderProposal(
             intent="summarize",
             metric="total revenue",
             field_operations=(
-                question_interpreter.GroupByOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="group_by",
                     field="region",
                 ),
-                question_interpreter.RangeFilterOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="range_filter",
                     field="order date",
                     lower="2025-10-01",
@@ -194,15 +194,15 @@ def test_data_assistant_runs_customer_count_by_customer_region_end_to_end(
         ("2026-02-01", "cust-006", "West"),
     )
     provider = _static_provider(
-        question_interpreter.QuestionFrameProposal(
+        question_interpreter.ProviderProposal(
             intent="summarize",
             metric="customer count",
             field_operations=(
-                question_interpreter.GroupByOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="group_by",
                     field="customer region",
                 ),
-                question_interpreter.RangeFilterOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="range_filter",
                     field="created date",
                     lower="2026-01-01",
@@ -258,15 +258,15 @@ def test_data_assistant_runs_order_date_grouping_end_to_end(
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
     provider = _static_provider(
-        question_interpreter.QuestionFrameProposal(
+        question_interpreter.ProviderProposal(
             intent="summarize",
             metric="total revenue",
             field_operations=(
-                question_interpreter.GroupByOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="group_by",
                     field="order date",
                 ),
-                question_interpreter.RangeFilterOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="range_filter",
                     field="order date",
                     lower="2026-01-01",
@@ -309,11 +309,11 @@ def test_data_assistant_runs_all_time_grouped_revenue_end_to_end(
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
     provider = _static_provider(
-        question_interpreter.QuestionFrameProposal(
+        question_interpreter.ProviderProposal(
             intent="summarize",
             metric="total revenue",
             field_operations=(
-                question_interpreter.GroupByOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="group_by",
                     field="region",
                 ),
@@ -354,7 +354,7 @@ def test_data_assistant_runs_all_time_scalar_revenue_end_to_end(
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
     provider = _static_provider(
-        question_interpreter.QuestionFrameProposal(
+        question_interpreter.ProviderProposal(
             intent="summarize",
             metric="total revenue",
             field_operations=(),
@@ -411,11 +411,11 @@ def test_data_assistant_runs_all_time_scalar_revenue_with_dimension_value_filter
     question: str,
 ) -> None:
     provider = _static_provider(
-        question_interpreter.QuestionFrameProposal(
+        question_interpreter.ProviderProposal(
             intent="summarize",
             metric="total revenue",
             field_operations=(
-                question_interpreter.IncludeFilterOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="include_filter",
                     field="region",
                     values=(region_value,),
@@ -464,15 +464,15 @@ def test_data_assistant_uses_supplied_reasoning_provider_for_final_narrative(
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
     provider = _static_provider(
-        question_interpreter.QuestionFrameProposal(
+        question_interpreter.ProviderProposal(
             intent="summarize",
             metric="total revenue",
             field_operations=(
-                question_interpreter.GroupByOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="group_by",
                     field="region",
                 ),
-                question_interpreter.RangeFilterOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="range_filter",
                     field="order date",
                     lower="2026-01-01",
@@ -523,15 +523,15 @@ def test_data_assistant_degrades_to_floor_when_reasoning_proposal_contains_digit
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
     provider = _static_provider(
-        question_interpreter.QuestionFrameProposal(
+        question_interpreter.ProviderProposal(
             intent="summarize",
             metric="total revenue",
             field_operations=(
-                question_interpreter.GroupByOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="group_by",
                     field="region",
                 ),
-                question_interpreter.RangeFilterOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="range_filter",
                     field="order date",
                     lower="2026-01-01",
@@ -644,7 +644,7 @@ def test_data_assistant_rejects_rank_intent_before_provider_call(
             *,
             question: str,
             semantic_layer_context: dict[str, object],
-        ) -> question_interpreter.QuestionFrameProposal:
+        ) -> question_interpreter.ProviderProposal:
             del question, semantic_layer_context
             raise AssertionError("rank intent guard should short-circuit provider")
 
@@ -676,7 +676,7 @@ def test_data_assistant_rejects_availability_question_before_provider_call(
             *,
             question: str,
             semantic_layer_context: dict[str, object],
-        ) -> question_interpreter.QuestionFrameProposal:
+        ) -> question_interpreter.ProviderProposal:
             del question, semantic_layer_context
             raise AssertionError("availability guard should short-circuit provider")
 
@@ -752,11 +752,11 @@ def test_data_assistant_returns_ambiguous_table_before_access_denial(
         allowed_identity_ids=("finance-team",),
     )
     provider = _static_provider(
-        question_interpreter.QuestionFrameProposal(
+        question_interpreter.ProviderProposal(
             intent="summarize",
             metric="total revenue",
             field_operations=(
-                question_interpreter.GroupByOperationProposal(
+                question_interpreter.ProviderFieldOperation(
                     operation="group_by",
                     field="region",
                 ),
@@ -825,18 +825,18 @@ def test_data_assistant_uses_required_question_interpreter_provider(
             *,
             question: str,
             semantic_layer_context: dict[str, object],
-        ) -> question_interpreter.QuestionFrameProposal:
+        ) -> question_interpreter.ProviderProposal:
             assert question == canonical_question
             assert "all_metric_labels" in semantic_layer_context
-            return question_interpreter.QuestionFrameProposal(
+            return question_interpreter.ProviderProposal(
                 intent="summarize",
                 metric="total revenue",
                 field_operations=(
-                    question_interpreter.GroupByOperationProposal(
+                    question_interpreter.ProviderFieldOperation(
                         operation="group_by",
                         field="region",
                     ),
-                    question_interpreter.RangeFilterOperationProposal(
+                    question_interpreter.ProviderFieldOperation(
                         operation="range_filter",
                         field="order date",
                         lower="2026-01-01",
@@ -908,7 +908,7 @@ def _ambiguous_table_semantic_layer(
 
 
 def _static_provider(
-    proposal: question_interpreter.QuestionFrameProposal,
+    proposal: question_interpreter.ProviderProposal,
 ) -> question_interpreter.QuestionInterpreterProvider:
     class StaticProvider:
         def propose_question_frame(
@@ -916,7 +916,7 @@ def _static_provider(
             *,
             question: str,
             semantic_layer_context: dict[str, object],
-        ) -> question_interpreter.QuestionFrameProposal:
+        ) -> question_interpreter.ProviderProposal:
             del question, semantic_layer_context
             return proposal
 
