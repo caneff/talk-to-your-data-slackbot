@@ -207,7 +207,6 @@ class AnswerDraft:
     metric_label: str
     time_range: str
     filters: tuple[str, ...]
-    freshness: str
     caveats: tuple[str, ...]
     limitations: tuple[str, ...] = ()
     group_by_label: str | None = None
@@ -221,7 +220,6 @@ class TrustSummary:
     dataset_tables: tuple[str, ...] = ()
     time_range: str | None = None
     filters: tuple[str, ...] = ()
-    freshness: str | None = None
     caveats: tuple[str, ...] = ()
     limitations: tuple[str, ...] = ()
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import datetime
 import enum
 import typing
 
@@ -11,13 +10,6 @@ import pydantic
 
 class _SemanticLayerModel(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(frozen=True)
-
-
-class Freshness(_SemanticLayerModel):
-    """Freshness context for a Curated Dataset."""
-
-    as_of: datetime.date
-    description: str
 
 
 class DatasetAccess(_SemanticLayerModel):
@@ -33,7 +25,6 @@ class CuratedDataset(_SemanticLayerModel):
     name: str
     tables: tuple[str, ...]
     information_types: tuple[str, ...]
-    freshness: Freshness
     example_questions: tuple[str, ...]
     dataset_access: DatasetAccess = DatasetAccess(allowed_identity_ids=())
 

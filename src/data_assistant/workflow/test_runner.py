@@ -87,9 +87,6 @@ def test_data_assistant_runs_end_to_end(
     assert "- Unknown: $250.00" in run.final_response.text
     assert "$5,150.00" in run.final_response.text
     assert run.final_response.response_kind == contracts.ResponseKind.ANSWER
-    assert run.final_response.trust_summary.freshness == (
-        "Commerce order data refreshed through 2026-01-31."
-    )
     assert run.final_response.trust_summary.caveats == (
         "1 row excluded because revenue was missing.",
         "1 row grouped under Unknown because region was missing.",
@@ -280,14 +277,6 @@ def test_data_assistant_runs_all_time_grouped_revenue_end_to_end(
         run.final_response.text
     )
     assert "Time range: all available data." in run.final_response.text
-    assert (
-        run.final_response.trust_summary.freshness
-        == "Commerce order data refreshed through 2026-01-31."
-    )
-    assert (
-        "Freshness: Commerce order data refreshed through 2026-01-31."
-        in run.final_response.text
-    )
     assert "Filters:" not in run.final_response.text
 
 
@@ -327,14 +316,6 @@ def test_data_assistant_runs_all_time_scalar_revenue_end_to_end(
         run.final_response.text
     )
     assert "Time range: all available data." in run.final_response.text
-    assert (
-        run.final_response.trust_summary.freshness
-        == "Commerce order data refreshed through 2026-01-31."
-    )
-    assert (
-        "Freshness: Commerce order data refreshed through 2026-01-31."
-        in run.final_response.text
-    )
     assert "Filters:" not in run.final_response.text
 
 
@@ -823,16 +804,11 @@ def _ambiguous_table_semantic_layer(
     *,
     allowed_identity_ids: tuple[str, ...],
 ) -> semantic_layer_catalog.SemanticLayerCatalog:
-    freshness = schema.Freshness(
-        as_of=datetime.date(2026, 1, 31),
-        description="Clean fixture rows for January 2026.",
-    )
     dataset = schema.CuratedDataset(
         dataset_id="commerce",
         name="Commerce",
         tables=("orders", "order_rollups"),
         information_types=("revenue",),
-        freshness=freshness,
         example_questions=(),
         dataset_access=schema.DatasetAccess(
             allowed_identity_ids=allowed_identity_ids,

@@ -16,9 +16,6 @@ information_types:
   - store operations
   - support operations
   - inventory health
-freshness:
-  as_of: "2026-05-31"
-  description: Retail operations demo data refreshed through 2026-05-31.
 example_questions:
   - What was total net revenue by store region in Q1 2026?
   - What was gross margin by product category in March 2026?

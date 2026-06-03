@@ -24,9 +24,6 @@ def test_reasoning_layer_produces_answer_draft_from_prepared_data() -> None:
     assert answer_draft.group_by_label == "region"
     assert answer_draft.time_range == "2026-01-01 through 2026-01-31"
     assert answer_draft.filters == ("order date >= 2026-01-01 and <= 2026-01-31",)
-    assert answer_draft.freshness == (
-        "Commerce order data refreshed through 2026-01-31."
-    )
     assert answer_draft.caveats == (
         "1 row excluded because revenue was missing.",
         "1 row grouped under Unknown because region was missing.",

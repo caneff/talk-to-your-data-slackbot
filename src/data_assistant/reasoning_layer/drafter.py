@@ -88,7 +88,6 @@ def _answer_draft(
         metric_label=request.metric.label,
         time_range=time_range,
         filters=request.filter_labels,
-        freshness=request.dataset.freshness.description,
         caveats=prepared_data.quality_notes,
         group_by_label=(
             request.group_by_field.label if request.group_by_field else None

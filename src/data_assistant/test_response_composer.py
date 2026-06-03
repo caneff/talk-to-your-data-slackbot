@@ -42,7 +42,6 @@ def test_response_composer_returns_plain_text_with_trust_summary() -> None:
             metric_label="total revenue",
             time_range="January 2026",
             filters=(),
-            freshness="Commerce order data refreshed through 2026-01-31.",
             caveats=("1 row excluded because revenue was missing.",),
             group_by_label="region",
         )
@@ -61,7 +60,6 @@ def test_response_composer_returns_plain_text_with_trust_summary() -> None:
         dataset_tables=("orders",),
         time_range="January 2026",
         filters=(),
-        freshness="Commerce order data refreshed through 2026-01-31.",
         caveats=("1 row excluded because revenue was missing.",),
         limitations=(),
     )
@@ -85,7 +83,6 @@ def test_response_composer_returns_visible_slack_blocks_for_answer_package() -> 
             metric_label="total revenue",
             time_range="January 2026",
             filters=(),
-            freshness="Commerce order data refreshed through 2026-01-31.",
             caveats=("1 row excluded because revenue was missing.",),
             group_by_label="region",
         )
@@ -109,8 +106,7 @@ def test_response_composer_returns_visible_slack_blocks_for_answer_package() -> 
                     "type": "plain_text",
                     "text": (
                         "Trust Summary: Curated Dataset: Commerce. Dataset Table: "
-                        "orders. Time range: January 2026. Freshness: Commerce "
-                        "order data refreshed through 2026-01-31. Caveats: 1 row "
+                        "orders. Time range: January 2026. Caveats: 1 row "
                         "excluded because revenue was missing."
                     ),
                 },
@@ -158,7 +154,6 @@ def test_response_composer_formats_count_rows_from_metric_kind() -> None:
             metric_label="customer count",
             time_range="January 2026",
             filters=(),
-            freshness="Commerce customer data refreshed through 2026-01-31.",
             caveats=(),
         )
     )
@@ -184,7 +179,6 @@ def test_response_composer_title_cases_each_word_in_table_headers() -> None:
             metric_label="customer count",
             time_range="all available data",
             filters=(),
-            freshness="Commerce customer data refreshed through 2026-01-31.",
             caveats=(),
         )
     )
@@ -261,7 +255,6 @@ def test_response_composer_leaves_non_answer_none_on_answer() -> None:
             metric_label="total revenue",
             time_range="January 2026",
             filters=(),
-            freshness="Commerce order data refreshed through 2026-01-31.",
             caveats=(),
             group_by_label="region",
         )
@@ -372,4 +365,3 @@ def test_response_composer_omits_sensitive_details_from_access_denial() -> None:
     assert "Curated Dataset: commerce." in response.text
     assert "Dataset Table:" not in response.text
     assert "Filters:" not in response.text
-    assert "Freshness:" not in response.text

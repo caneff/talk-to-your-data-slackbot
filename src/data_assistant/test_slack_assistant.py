@@ -621,10 +621,6 @@ def _curated_dataset() -> schema.CuratedDataset:
         name="Commerce",
         tables=("orders",),
         information_types=("orders",),
-        freshness=schema.Freshness(
-            as_of=datetime.date(2026, 1, 31),
-            description="Commerce order data refreshed daily.",
-        ),
         example_questions=("What was revenue by region?",),
     )
 
@@ -728,7 +724,6 @@ def _data_assistant_run() -> contracts.DataAssistantRun:
         metric_label="total revenue",
         time_range="January 2026",
         filters=("order date >= 2026-01-01 and <= 2026-01-31",),
-        freshness="Commerce order data refreshed through 2026-01-31.",
         caveats=(),
         group_by_label="region",
     )

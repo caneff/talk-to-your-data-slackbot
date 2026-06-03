@@ -173,6 +173,15 @@ Question to a Final Response grounded in one approved Curated Dataset.
   must preserve the exists-but-forbidden (`ACCESS_DENIED`) distinction.
 - Let the Reasoning Layer emit More Data Requests that return through the
   Workflow Orchestrator.
+- Reintroduce **data freshness / staleness** as a computed governance signal:
+  compare each **Curated Dataset**'s as-of boundary against the question's time
+  scope and the current date, warn or refuse when the requested window extends
+  past the data and the answer would otherwise be a silent partial total,
+  surface the data age in the **Trust Summary**, and require a freshness check
+  before any **Routing Cache** reuse. The bootcamp demo stripped the earlier
+  inert version — a static description string with an unread as-of date that no
+  stage acted on — to keep the trust path simple; the real version is the
+  window-past-freshness warning closed-as-deferred from issue #118.
 
 ### Richer Responses
 
