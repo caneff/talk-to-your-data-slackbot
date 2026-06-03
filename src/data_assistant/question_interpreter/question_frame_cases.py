@@ -26,6 +26,7 @@ class SharedQuestionFrameCase:
     question: str
     expected: question_interpreter.QuestionFrameProposal
     enabled: bool = True
+    deferred: bool = False
 
 
 @dataclasses.dataclass(frozen=True)
@@ -556,6 +557,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _group_by("order date"),
             _during("order date", Q1_2026),
         ),
+        deferred=True,
     ),
     SharedQuestionFrameCase(
         name="forecast_stockout_days_june",
@@ -566,6 +568,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _group_by("product category"),
             _during("inventory snapshot date", JUNE_2026),
         ),
+        deferred=True,
     ),
     SharedQuestionFrameCase(
         name="explain_gross_margin_by_brand_q1",
@@ -576,6 +579,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _group_by("brand"),
             _during("order date", Q1_2026),
         ),
+        deferred=True,
     ),
     SharedQuestionFrameCase(
         name="prescribe_units_returned_by_product_category_may",
@@ -589,6 +593,7 @@ SHARED_QUESTION_FRAME_CASES: tuple[SharedQuestionFrameCase, ...] = (
             _group_by("product category"),
             _during("order date", MAY_2026),
         ),
+        deferred=True,
     ),
     SharedQuestionFrameCase(
         name="diagnose_support_ticket_count_by_issue_category_april",

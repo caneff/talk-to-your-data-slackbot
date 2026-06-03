@@ -41,6 +41,7 @@ class LiveEvalCase:
     question: str
     expected: question_interpreter.QuestionFrameProposal
     enabled: bool = True
+    deferred: bool = False
 
 
 @dataclasses.dataclass(frozen=True)
@@ -75,6 +76,13 @@ class LiveEvalReport:
     total: int
     passes: tuple[LiveEvalPass, ...]
     failures: tuple[LiveEvalFailure, ...]
+    # Deferred cases (known unsupported intents #44-47) that still mismatch:
+    # reported but not counted as failures and not streamed to the failures
+    # snapshot. See ADR-0020.
+    known_deferred: tuple[LiveEvalFailure, ...] = ()
+    # Deferred cases that now fully pass — the model improved, so the marker
+    # should be removed. A tripwire fails the run (see ``main``).
+    tripwires: tuple[LiveEvalPass, ...] = ()
 
     @property
     def passed(self) -> int:
@@ -91,6 +99,7 @@ DEFAULT_CASES: tuple[LiveEvalCase, ...] = tuple(
         question=case.question,
         expected=case.expected,
         enabled=case.enabled,
+        deferred=case.deferred,
     )
     for case in question_frame_cases.SHARED_QUESTION_FRAME_CASES
 )
@@ -218,6 +227,8 @@ def run_live_question_interpreter_eval(
     )
     passes: list[LiveEvalPass] = []
     failures: list[LiveEvalFailure] = []
+    known_deferred: list[LiveEvalFailure] = []
+    tripwires: list[LiveEvalPass] = []
     progress_bar = _new_case_progress_bar(
         enabled=progress,
         total=len(selected),
@@ -265,6 +276,13 @@ def run_live_question_interpreter_eval(
                     pass_count=pass_count,
                     sample_count=sample_count,
                 )
+                if case.deferred:
+                    # Known-deferred (unsupported, not-yet-classified intent):
+                    # report separately, do not count as a failure, and keep it
+                    # out of the failures snapshot (ADR-0020).
+                    known_deferred.append(failure)
+                    _update_case_progress(progress_bar)
+                    continue
                 failures.append(failure)
                 _write_failure_line(
                     failures_file=failures_file,
@@ -273,19 +291,23 @@ def run_live_question_interpreter_eval(
                 )
                 _update_case_progress(progress_bar)
                 continue
-            passes.append(
-                LiveEvalPass(
-                    case_name=case.name,
-                    question=case.question,
-                    expected=case.expected,
-                    actual=typing.cast(
-                        question_interpreter.QuestionFrameProposal,
-                        last_actual,
-                    ),
-                    pass_count=pass_count,
-                    sample_count=sample_count,
-                )
+            passed_case = LiveEvalPass(
+                case_name=case.name,
+                question=case.question,
+                expected=case.expected,
+                actual=typing.cast(
+                    question_interpreter.QuestionFrameProposal,
+                    last_actual,
+                ),
+                pass_count=pass_count,
+                sample_count=sample_count,
             )
+            if case.deferred:
+                # The model now fully matches a case we marked deferred — a
+                # tripwire that the marker should be removed (ADR-0020).
+                tripwires.append(passed_case)
+            else:
+                passes.append(passed_case)
             _update_case_progress(progress_bar)
     finally:
         if progress_bar is not None:
@@ -294,6 +316,8 @@ def run_live_question_interpreter_eval(
         total=len(selected),
         passes=tuple(passes),
         failures=tuple(failures),
+        known_deferred=tuple(known_deferred),
+        tripwires=tuple(tripwires),
     )
 
 
@@ -345,6 +369,18 @@ def write_live_eval_report(
     stdout.write(f"Total cases: {report.total}\n")
     stdout.write(f"Passed: {report.passed}\n")
     stdout.write(f"Failed: {report.failed}\n")
+    stdout.write(
+        f"Known-deferred: {len(report.known_deferred)} (expected not-yet-supported)\n"
+    )
+    for deferred_case in report.known_deferred:
+        stdout.write(
+            f"[KNOWN-DEFERRED] {deferred_case.case_name} "
+            f"(pass rate: {deferred_case.pass_count}/{deferred_case.sample_count})\n"
+        )
+    for tripwire in report.tripwires:
+        stdout.write(
+            f"[TRIPWIRE] {tripwire.case_name} now passes — remove deferred=True\n"
+        )
     for passed_case in report.passes:
         stdout.write(_passed_case_summary_line(passed_case))
         if verbose:
@@ -429,7 +465,9 @@ def main(
         failures_file.close()
     _write_selection_notice(stdout=stdout, args=args, report=report)
     write_live_eval_report(stdout=stdout, report=report, verbose=args.verbose)
-    if report.failed:
+    # Known-deferred mismatches alone keep exit 0; a tripwire (a deferred case
+    # that now passes) fails the run so the marker gets removed (ADR-0020).
+    if report.failed or report.tripwires:
         return 1
     return 0
 
