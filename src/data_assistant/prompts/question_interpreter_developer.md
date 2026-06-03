@@ -64,7 +64,11 @@ current Data Question states them.
   for the selected metric as the compatible field set. Do not return
   field_operations for fields outside the selected metric's compatible fields. A
   field that appears only under a different metric_context is unrelated to the
-  selected metric and must not be used.
+  selected metric and must not be used. If a generic word like "channel" matches
+  a field in the selected metric's compatible set (such as "store channel") and
+  also a differently-scoped field under another metric_context (such as
+  "acquisition channel"), use the selected metric's own field — never the
+  closer-sounding name from another metric.
 - Use group_by when the user asks for grouping such as "by region".
 - Use include_filter when the user asks for one concrete value of a dimension
   field, such as "in the <value> <field label>" or "for <value>". Copy the
@@ -88,6 +92,15 @@ current Data Question states them.
   multiple date Semantic Fields allow range_filter, choose the one most directly
   related to the requested metric and grouping labels. Do not add date filters
   for unrelated fields just because those fields are available.
+- Never default to "order date". Use the date Semantic Field from the selected
+  metric's own compatible set; if that set excludes "order date" (e.g. a metric
+  whose date field is an inventory-snapshot date), use the metric's own date
+  field instead. "order date" must not appear in a date operation for a metric
+  whose metric_context excludes it.
+- "before <month> <year>" means strictly earlier than the first day of that
+  month: emit a range_filter with lower null and upper set to the last day of the
+  preceding month. "before January 2024" → upper "2023-12-31" (not "2024-01-01",
+  not "2024-01-31").
 - One explicit date phrase should produce at most one date field_operation.
   Never omit a complete calendar month or explicit date phrase when a date
   Semantic Field is available.
@@ -161,3 +174,22 @@ all_time true, and exactly one field_operation:
 Do not add group_by for that question, because "West" is the requested included
 region value, not a request to compare all regions. Apply the same pattern to
 any single requested dimension value.
+
+For "How many accounts were opened before January 2024?" when the selected
+metric's compatible set exposes "created date" with range_filter, return intent
+"summarize" and one date field_operation:
+
+- operation "range_filter", field "created date", lower null,
+  upper "2023-12-31", values []
+
+"before January 2024" is strictly earlier than 2024-01-01, so upper is
+"2023-12-31"; do not use "2024-01-01" or "2024-01-31", and do not fall back to
+"order date".
+
+For "How many stores by channel?" when the stores metric's compatible set exposes
+"store channel" with group_by, return intent "summarize" and one field_operation:
+
+- operation "group_by", field "store channel", lower null, upper null, values []
+
+Use "store channel" (the selected metric's field), not "acquisition channel",
+which belongs only to a different metric_context.
