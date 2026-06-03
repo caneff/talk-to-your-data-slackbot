@@ -262,7 +262,7 @@ _Avoid_: Answer draft, raw output, model response
 **Trust Summary**:
 The concise source and context summary included with every **Final Response**,
 covering **Curated Datasets** used, selected **Dataset Tables**, time range,
-freshness, major filters, important caveats, and limitations that shaped the
+major filters, important caveats, and limitations that shaped the
 answer or **Non-Answer Response**.
 _Avoid_: Citation, audit log, debug trace
 
@@ -305,13 +305,13 @@ _Avoid_: Rating, vote, reaction
 
 **Metadata Cache**:
 A cache for **Semantic Layer** metadata such as dataset definitions, metric
-definitions, join rules, permission rules, and freshness metadata.
+definitions, join rules, and permission rules.
 _Avoid_: Data cache, answer cache, result cache
 
 **Routing Cache**:
 An optional cache for repeated mappings from specific **Question Frames** to
 **Dataset Selections**. It should be used only when repeated questions are
-common and still requires access and freshness checks before use.
+common and still requires access checks before use.
 _Avoid_: Query cache, answer cache, dataframe cache
 
 **Non-Answer Response**:

@@ -1,5 +1,3 @@
-import datetime
-
 import data_assistant.non_answer_catalog as non_answer_catalog
 import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.schema as schema
@@ -61,16 +59,11 @@ def test_semantic_router_returns_non_answer_when_no_dataset_matches(
 def test_semantic_router_returns_ambiguous_table_for_two_tables_in_one_dataset() -> (
     None
 ):
-    freshness = schema.Freshness(
-        as_of=datetime.date(2026, 1, 31),
-        description="Clean fixture rows for January 2026.",
-    )
     dataset = schema.CuratedDataset(
         dataset_id="commerce",
         name="Commerce",
         tables=("orders", "order_rollups"),
         information_types=("revenue",),
-        freshness=freshness,
         example_questions=(),
     )
     metric = schema.Metric(
@@ -115,16 +108,11 @@ def test_semantic_router_returns_ambiguous_table_for_two_tables_in_one_dataset()
 
 
 def test_resolve_semantic_match_returns_no_matching_table_from_router() -> None:
-    freshness = schema.Freshness(
-        as_of=datetime.date(2026, 1, 31),
-        description="Clean fixture rows for January 2026.",
-    )
     selected_dataset = schema.CuratedDataset(
         dataset_id="commerce",
         name="Commerce",
         tables=("orders",),
         information_types=("revenue",),
-        freshness=freshness,
         example_questions=(),
     )
     other_dataset = schema.CuratedDataset(
@@ -132,7 +120,6 @@ def test_resolve_semantic_match_returns_no_matching_table_from_router() -> None:
         name="Support Tickets",
         tables=("tickets",),
         information_types=("support",),
-        freshness=freshness,
         example_questions=(),
     )
     metric = schema.Metric(

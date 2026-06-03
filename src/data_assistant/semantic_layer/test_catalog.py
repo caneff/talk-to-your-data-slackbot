@@ -1,5 +1,3 @@
-import datetime
-
 import pytest
 
 import data_assistant.semantic_layer.schema as schema
@@ -119,10 +117,6 @@ def _dataset(
         name=dataset_id.title(),
         tables=table_ids,
         information_types=("financial",),
-        freshness=schema.Freshness(
-            as_of=datetime.date(2026, 1, 31),
-            description="Daily refresh.",
-        ),
         example_questions=("What was total revenue?",),
     )
 

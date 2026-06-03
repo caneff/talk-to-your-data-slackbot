@@ -138,14 +138,13 @@ def test_draft_narrative_fills_slots_and_matches_floor_numbers() -> None:
         "Total revenue across 5 regions totaled $5,150.00 in "
         "2026-01-01 through 2026-01-31, with West on top at $1,600.00."
     )
-    # Numbers, caveats, freshness, datasets all match the deterministic floor.
+    # Numbers, caveats, datasets all match the deterministic floor.
     assert answer_draft.caveats == deterministic.caveats
     assert answer_draft.datasets_used == deterministic.datasets_used
     assert answer_draft.dataset_tables_used == deterministic.dataset_tables_used
     assert answer_draft.metric_kind == deterministic.metric_kind
     assert answer_draft.time_range == deterministic.time_range
     assert answer_draft.filters == deterministic.filters
-    assert answer_draft.freshness == deterministic.freshness
     assert answer_draft.key_data is prepared_data.data
 
 

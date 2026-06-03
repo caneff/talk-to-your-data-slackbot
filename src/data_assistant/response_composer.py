@@ -47,7 +47,6 @@ def compose_final_response(
         dataset_tables=answer_draft.dataset_tables_used,
         time_range=answer_draft.time_range,
         filters=answer_draft.filters,
-        freshness=answer_draft.freshness,
         caveats=answer_draft.caveats,
         limitations=answer_draft.limitations,
     )
@@ -114,8 +113,6 @@ def render_trust_summary(trust_summary: contracts.TrustSummary) -> str:
         segments.append(f"Time range: {trust_summary.time_range}.")
     if trust_summary.filters:
         segments.append(f"Filters: {', '.join(trust_summary.filters)}.")
-    if trust_summary.freshness is not None:
-        segments.append(f"Freshness: {trust_summary.freshness}")
     if trust_summary.caveats:
         segments.append(f"Caveats: {' '.join(trust_summary.caveats)}")
     if trust_summary.limitations:

@@ -40,10 +40,6 @@ def _commerce_revenue_dataset() -> schema.CuratedDataset:
         name="Commerce",
         tables=("orders",),
         information_types=("revenue",),
-        freshness=schema.Freshness(
-            as_of=datetime.date(2026, 1, 31),
-            description="Commerce order data refreshed through 2026-01-31.",
-        ),
         example_questions=(),
     )
 
@@ -162,10 +158,6 @@ def prepared_customer_count() -> contracts.PreparedData:
         name="Commerce Customers",
         tables=("customers",),
         information_types=("customers",),
-        freshness=schema.Freshness(
-            as_of=datetime.date(2026, 1, 31),
-            description="Commerce customer data refreshed through 2026-01-31.",
-        ),
         example_questions=(),
     )
     table = schema.DatasetTable(

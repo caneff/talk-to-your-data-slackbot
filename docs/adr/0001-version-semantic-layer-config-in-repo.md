@@ -4,7 +4,7 @@ For v1, Semantic Layer definitions will live as versioned configuration in this
 repo (originally at `semantic_layer/datasets/*.yaml`; see Amendment below for the
 current location), rather than in a database UI or
 external semantic service. This keeps dataset definitions, metrics, joins,
-permissions, freshness metadata, and example questions reviewable with the
+permissions, and example questions reviewable with the
 application code while leaving room to move to dbt metadata or a dedicated
 service later.
 

@@ -1,4 +1,3 @@
-import datetime
 import typing
 
 import data_assistant.question_interpreter as question_interpreter
@@ -14,10 +13,6 @@ def test_semantic_layer_context_exposes_business_labels_not_storage_details() ->
                 name="Commerce",
                 tables=("orders_internal", "customers_internal"),
                 information_types=("revenue", "regional performance"),
-                freshness=schema.Freshness(
-                    as_of=datetime.date(2026, 1, 31),
-                    description="Loaded nightly.",
-                ),
                 example_questions=(
                     "What was total revenue by customer region in January 2026?",
                 ),
