@@ -1,8 +1,38 @@
+import datetime
+import json
 import typing
 
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.schema as schema
+import data_assistant.semantic_layer.testing_support as testing_support
+
+
+def test_semantic_layer_context_emits_as_of_date_as_json_serializable_iso_string() -> (
+    None
+):
+    semantic_layer = testing_support.semantic_layer_with_table()
+    semantic_layer = semantic_layer_catalog.SemanticLayerCatalog(
+        datasets=(
+            semantic_layer.datasets[0].model_copy(
+                update={"as_of_date": datetime.date(2026, 6, 30)},
+            ),
+        ),
+        tables=semantic_layer.tables,
+    )
+
+    context = question_interpreter.build_semantic_layer_context(semantic_layer)
+
+    assert context["as_of_date"] == "2026-06-30"
+    json.dumps(context)
+
+
+def test_semantic_layer_context_omits_as_of_date_when_dataset_has_none() -> None:
+    semantic_layer = testing_support.semantic_layer_with_table()
+
+    context = question_interpreter.build_semantic_layer_context(semantic_layer)
+
+    assert "as_of_date" not in context
 
 
 def test_semantic_layer_context_exposes_business_labels_not_storage_details() -> None:
