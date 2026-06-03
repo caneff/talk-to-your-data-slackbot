@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import pathlib
 import textwrap
+import typing
 
 import pytest
 
 import data_assistant.assistant_thread_pointer as assistant_thread_pointer
 import data_assistant.known_qa_issues as known_qa_issues
 import data_assistant.slack_qa_driver as slack_qa_driver
+import data_assistant.workflow.contracts as contracts
 
 
 def test_parse_battery_cases_returns_identified_top_level_cases() -> None:
@@ -345,6 +347,90 @@ def test_resolve_thread_target(
         assert expected in target
     else:
         assert target == expected
+
+
+def test_replay_cases_passes_case_id_to_adapter_and_posts_blocks() -> None:
+    seen_calls: list[tuple[str, str | None]] = []
+    posted_messages: list[dict[str, object]] = []
+    pauses: list[str] = []
+
+    class FakeAdapter:
+        def answer_and_render(
+            self,
+            *,
+            text: str,
+            user: str,
+            qa_case_id: str | None = None,
+            set_status: contracts.ProgressSink,
+        ) -> tuple[str, contracts.FinalResponse, tuple[contracts.SlackBlock, ...]]:
+            del user
+            set_status("ignored")
+            seen_calls.append((text, qa_case_id))
+            return (
+                "interaction-1",
+                contracts.FinalResponse(
+                    text=f"Answer for {text}",
+                    trust_summary=contracts.TrustSummary(
+                        datasets=("Retail Operations",)
+                    ),
+                    response_kind=contracts.ResponseKind.ANSWER,
+                    blocks=(),
+                ),
+                (
+                    {
+                        "type": "section",
+                        "text": {"type": "mrkdwn", "text": f"Answer for {text}"},
+                    },
+                ),
+            )
+
+    def post_message(**payload: object) -> None:
+        posted_messages.append(payload)
+
+    def pause(prompt: str) -> str:
+        pauses.append(prompt)
+        return ""
+
+    slack_qa_driver.replay_cases(
+        cases=[
+            slack_qa_driver.QACase(
+                id="orders-net-revenue-by-store-region-q1-2026",
+                question="What was total revenue by region in January 2026?",
+            )
+        ],
+        adapter=typing.cast("typing.Any", FakeAdapter()),
+        channel="C123",
+        thread_ts="1710000000.654321",
+        post_message=post_message,
+        pause=pause,
+    )
+
+    assert seen_calls == [
+        (
+            "What was total revenue by region in January 2026?",
+            "orders-net-revenue-by-store-region-q1-2026",
+        )
+    ]
+    assert posted_messages == [
+        {
+            "channel": "C123",
+            "thread_ts": "1710000000.654321",
+            "text": "Answer for What was total revenue by region in January 2026?",
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": (
+                            "Answer for What was total revenue by region in "
+                            "January 2026?"
+                        ),
+                    },
+                }
+            ],
+        }
+    ]
+    assert pauses == ["  posted. Press Enter for the next question... "]
 
 
 def _sidecar_path(tmp_path: pathlib.Path) -> pathlib.Path:
