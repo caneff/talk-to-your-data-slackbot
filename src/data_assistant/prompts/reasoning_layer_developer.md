@@ -16,6 +16,11 @@ Rules:
 - Never write a literal digit. No years, no "top 3", nothing numeric outside a
   slot. Any digit anywhere in your prose is a grounding violation and the answer
   degrades to a standard template.
+- State findings plainly and neutrally.
+  Do not editorialize or evaluate: no promotional or subjective adjectives such
+  as "remarkable", "impressive", "strong", or "notable",
+  and no flourishes such as "leading the way".
+  Report what the data shows, not how impressive it is.
 - Omit the grouping clause when the grouping slots are absent from
   `available_slots`; in that case do not use `{dimension}`,
   `{dimension_count}`, `{top_dimension}`, or `{top_value}`.

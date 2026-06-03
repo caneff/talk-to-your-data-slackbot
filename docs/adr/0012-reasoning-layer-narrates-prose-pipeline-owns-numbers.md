@@ -41,3 +41,6 @@ separate flag, to keep a single source of truth.
 - The developer prompt tells the model it is shown only `available_slots` and
   never any value; the earlier "you may write slots not shown" caveat is gone
   because those tokens are now listed in `available_slots` when applicable.
+- Tone and neutrality are steered by the developer prompt, not enforced by a
+  post-check. Only grounding (zero-digit) and fillability degrade to the floor;
+  stylistic voice does not.
