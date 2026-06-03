@@ -83,9 +83,9 @@ Group cases by root-caused layer (several flags often share one cause). For each
 - Already-tracked root cause → if a flag's root cause is already covered by an open issue, just map the `id` to that issue number and move on. Do **not** file a duplicate, do **not** comment on the existing issue, and do **not** propose "repeat occurrence" / "additional occurrence" notes. Repeat flags on a known cause are confirmation noise, not new signal; the mapping in your triage output is the only record needed.
 Reference flags by `id` so the user can trace each back to its log line.
 
-When the user explicitly confirms issue mutation and the handled record is a
-manual-QA-driver flag with `qa_case_id`, update the matching Known QA Issue
-sidecar only after human judgment has confirmed the mapping:
+When a handled manual-QA-driver flag with `qa_case_id` has a confirmed mapping
+to a GitHub issue, update the matching Known QA Issue sidecar after that human
+judgment is locked in:
 - existing issue mapping confirmed → add `(qa_case_id, issue_number, flag_category)`
 - new issue created for the flag → add same sidecar entry as part of handling
 - do **not** add sidecar entries for unconfirmed flags, working-as-intended
@@ -97,7 +97,7 @@ Use `src/data_assistant/known_qa_issues.py` helper `record_known_issue(...)`
 for the in-memory update, then write the sidecar back. Keep serialization
 stable. Example shape:
 ```bash
-uv run python -c "from pathlib import Path; from data_assistant import known_qa_issues; valid_case_ids=['case-a']; path=Path('docs/qa-retail-questions.known-issues.json'); sidecar=known_qa_issues.load_sidecar(path, valid_case_ids=valid_case_ids, create_if_missing=True); updated=known_qa_issues.record_known_issue(sidecar, qa_case_id='case-a', issue_number=178, flag_category='correctness', valid_case_ids=valid_case_ids); known_qa_issues.write_sidecar(path, updated)"
+uv run python -c "from pathlib import Path; from data_assistant import known_qa_issues, slack_qa_driver; battery_path=Path(slack_qa_driver.DEFAULT_BATTERY_PATH); cases=slack_qa_driver.parse_battery_cases(battery_path.read_text(encoding='utf-8')); valid_case_ids=[case.id for case in cases if case.id is not None]; sidecar_path=known_qa_issues.default_sidecar_path(battery_path); sidecar=known_qa_issues.load_sidecar(sidecar_path, valid_case_ids=valid_case_ids, create_if_missing=True); updated=known_qa_issues.record_known_issue(sidecar, qa_case_id='case-a', issue_number=178, flag_category='correctness', valid_case_ids=valid_case_ids); known_qa_issues.write_sidecar(sidecar_path, updated)"
 ```
 
 When the user explicitly confirms filing an issue in the current turn, **apply the `priority:low` label to every issue you file from a flag** unless the user says a particular flag is urgent. Flagged-interaction issues are demand-driven noise that should NOT jump ahead of roadmap work; the label tells `handle-next-issue` not to favor them (it picks default-priority issues first). Create the label if absent, then file with it:
