@@ -16,7 +16,6 @@ import collections.abc as collections_abc
 import typing
 
 import data_assistant.interaction_log as interaction_log
-import data_assistant.workflow.contracts as contracts
 from data_assistant.slack.adapter import (
     AssistantAdapter,
     Sayer,
@@ -24,10 +23,12 @@ from data_assistant.slack.adapter import (
     SuggestedPromptsSetter,
 )
 from data_assistant.slack.payloads import (
+    action_target,
     apply_flag,
     apply_qa_done,
     apply_qa_review_note_save,
     build_qa_review_note_modal,
+    message_blocks,
     qa_done_target,
     render_note_saved_blocks,
     str_at,
@@ -135,21 +136,7 @@ def _register_message_actions(
         respond: typing.Any,
     ) -> None:
         ack()
-        actions: list[dict[str, typing.Any]] = body.get("actions") or [{}]
-        action = actions[0]
-        action_id = str(action.get("action_id", ""))
-        interaction_id = str(action.get("value", ""))
-        message = body.get("message")
-        raw_blocks: object = (
-            typing.cast("dict[str, object]", message).get("blocks")
-            if isinstance(message, dict)
-            else None
-        )
-        original_blocks: collections_abc.Sequence[contracts.SlackBlock] = (
-            typing.cast("list[contracts.SlackBlock]", raw_blocks)
-            if isinstance(raw_blocks, list)
-            else []
-        )
+        action_id, interaction_id = action_target(body)
 
         def flag_store(target_id: str, category: str) -> bool:
             return flag_interaction_for_triage(
@@ -161,7 +148,7 @@ def _register_message_actions(
         new_blocks = apply_flag(
             action_id=action_id,
             interaction_id=interaction_id,
-            blocks=original_blocks,
+            blocks=message_blocks(body),
             flag_store=flag_store,
         )
         if new_blocks is None:
@@ -199,9 +186,7 @@ def _register_message_actions(
         client: typing.Any,
     ) -> None:
         ack()
-        actions: list[dict[str, typing.Any]] = body.get("actions") or [{}]
-        action = actions[0]
-        interaction_id = str(action.get("value", ""))
+        _, interaction_id = action_target(body)
         trigger_id = str_at(body, "trigger_id")
         if not interaction_id or not trigger_id:
             return

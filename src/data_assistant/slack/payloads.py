@@ -129,6 +129,26 @@ def apply_flag(
     return render_flagged_message_blocks(blocks=blocks, category=category, found=found)
 
 
+def action_target(body: dict[str, typing.Any]) -> tuple[str, str]:
+    """(action_id, interaction_id) from the first action in a block_actions body."""
+    actions: list[dict[str, typing.Any]] = body.get("actions") or [{}]
+    action = actions[0]
+    return str(action.get("action_id", "")), str(action.get("value", ""))
+
+
+def message_blocks(body: dict[str, typing.Any]) -> list[contracts.SlackBlock]:
+    """The clicked message's blocks from a block_actions body ([] when absent)."""
+    message = body.get("message")
+    if not isinstance(message, dict):
+        return []
+    blocks = typing.cast("dict[str, object]", message).get("blocks")
+    return (
+        typing.cast("list[contracts.SlackBlock]", blocks)
+        if isinstance(blocks, list)
+        else []
+    )
+
+
 def qa_done_target(body: dict[str, typing.Any]) -> tuple[str, str]:
     """Extract Slack delete coordinates from a QA-done action payload."""
     channel_id = str_at(body, "channel", "id")

@@ -365,6 +365,45 @@ def test_apply_qa_done_catches_delete_failure_without_crashing() -> None:
     assert delete_message.calls == [("C123", "1748880000.123456")]
 
 
+def test_action_target_reads_first_action_id_and_value() -> None:
+    body = {
+        "actions": [
+            {"action_id": prompts.QA_DONE_ACTION_ID, "value": "interaction-123"},
+            {"action_id": "ignored", "value": "ignored"},
+        ]
+    }
+    assert payloads.action_target(body) == (
+        prompts.QA_DONE_ACTION_ID,
+        "interaction-123",
+    )
+
+
+def test_action_target_empty_actions_returns_empty_pair() -> None:
+    assert payloads.action_target({"actions": []}) == ("", "")
+
+
+def test_action_target_missing_keys_returns_empty_pair() -> None:
+    # No ``actions`` key at all, and an action with no action_id/value.
+    assert payloads.action_target({}) == ("", "")
+    assert payloads.action_target({"actions": [{}]}) == ("", "")
+
+
+def test_message_blocks_returns_clicked_message_blocks() -> None:
+    blocks_list = list(blocks.qa_action_blocks("interaction-123"))
+    body = {"message": {"ts": "1748880000.123456", "blocks": blocks_list}}
+    assert payloads.message_blocks(body) == blocks_list
+
+
+def test_message_blocks_missing_message_returns_empty_list() -> None:
+    assert payloads.message_blocks({}) == []
+    assert payloads.message_blocks({"message": "not-a-dict"}) == []
+
+
+def test_message_blocks_non_list_blocks_returns_empty_list() -> None:
+    assert payloads.message_blocks({"message": {"blocks": "not-a-list"}}) == []
+    assert payloads.message_blocks({"message": {}}) == []
+
+
 def test_build_qa_review_note_modal_prefills_existing_note_and_metadata() -> None:
     view = payloads.build_qa_review_note_modal(
         interaction_id="interaction-123",
