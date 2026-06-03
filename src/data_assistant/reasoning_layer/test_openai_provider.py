@@ -288,3 +288,24 @@ def test_openai_provider_developer_prompt_lists_slots_and_forbids_digits() -> No
     assert "Do not place aggregate words" in developer_prompt
     assert '"total", "sum", or "count"' in developer_prompt
     assert "metric slot already contains the business metric name" in developer_prompt
+
+
+def test_openai_provider_developer_prompt_steers_neutral_tone() -> None:
+    class FakeParsedResponse:
+        output_parsed = test_support.narrative_proposal()
+
+    parse_calls: list[dict[str, object]] = []
+    provider = _openai_provider_returning(
+        FakeParsedResponse(),
+        parse_calls=parse_calls,
+    )
+
+    provider.propose_narrative(result_shape={"metric": "Total revenue"})
+
+    input_messages = typing.cast(
+        list[dict[str, str]],
+        parse_calls[0]["input"],
+    )
+    developer_prompt = input_messages[0]["content"]
+    assert "Do not editorialize or evaluate" in developer_prompt
+    assert '"leading the way"' in developer_prompt
