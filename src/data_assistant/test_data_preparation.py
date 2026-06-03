@@ -195,6 +195,106 @@ def test_prepared_data_applies_exclude_filter_with_parameters(
     pd_testing.assert_frame_equal(prepared_data.data, expected_data)
 
 
+def test_prepared_data_include_filter_matches_string_value_case_insensitively(
+    data_request: contracts.DataRequest,
+    connect_orders: local_duckdb_fixture.OrdersConnector,
+) -> None:
+    assert data_request.group_by_field is not None
+    region_field = data_request.group_by_field
+    assert region_field.data_type == schema.DataType.STRING
+    data_request = dataclasses.replace(
+        data_request,
+        field_filters=(
+            contracts.ValuesFilter(
+                field=region_field,
+                mode=contracts.FilterMode.INCLUDE,
+                values=("north",),
+            ),
+        ),
+    )
+    order_rows = (
+        ("2026-01-03", "North", "1200.00"),
+        ("2026-01-08", "South", "850.00"),
+        ("2026-01-22", "North", "300.00"),
+    )
+    with connect_orders(order_rows) as connection:
+        prepared_data = data_preparation.prepare_data(data_request, connection)
+
+    expected_data = pd.DataFrame(
+        {
+            "dimension_value": ("North",),
+            "metric_value": (1500.0,),
+        },
+    )
+    pd_testing.assert_frame_equal(prepared_data.data, expected_data)
+
+
+def test_prepared_data_exclude_filter_matches_string_value_case_insensitively(
+    data_request: contracts.DataRequest,
+    connect_orders: local_duckdb_fixture.OrdersConnector,
+) -> None:
+    assert data_request.group_by_field is not None
+    region_field = data_request.group_by_field
+    assert region_field.data_type == schema.DataType.STRING
+    data_request = dataclasses.replace(
+        data_request,
+        field_filters=(
+            contracts.ValuesFilter(
+                field=region_field,
+                mode=contracts.FilterMode.EXCLUDE,
+                values=("south",),
+            ),
+        ),
+    )
+    order_rows = (
+        ("2026-01-03", "North", "1200.00"),
+        ("2026-01-08", "South", "850.00"),
+        ("2026-01-22", "North", "300.00"),
+    )
+    with connect_orders(order_rows) as connection:
+        prepared_data = data_preparation.prepare_data(data_request, connection)
+
+    expected_data = pd.DataFrame(
+        {
+            "dimension_value": ("North",),
+            "metric_value": (1500.0,),
+        },
+    )
+    pd_testing.assert_frame_equal(prepared_data.data, expected_data)
+
+
+def test_prepared_data_range_filter_on_date_field_stays_exact(
+    data_request: contracts.DataRequest,
+    connect_orders: local_duckdb_fixture.OrdersConnector,
+) -> None:
+    order_date_field = data_request.field_filters[0].field
+    assert order_date_field.data_type == schema.DataType.DATE
+    data_request = dataclasses.replace(
+        data_request,
+        field_filters=(
+            contracts.RangeFilter(
+                field=order_date_field,
+                lower=datetime.date(2026, 1, 1),
+                upper=datetime.date(2026, 1, 31),
+            ),
+        ),
+    )
+    order_rows = (
+        ("2026-01-15", "North", "1200.00"),
+        ("2026-02-01", "North", "9999.00"),
+    )
+    with connect_orders(order_rows) as connection:
+        prepared_data = data_preparation.prepare_data(data_request, connection)
+
+    expected_data = pd.DataFrame(
+        {
+            "dimension_value": ("North",),
+            "metric_value": (1200.0,),
+        },
+    )
+    pd_testing.assert_frame_equal(prepared_data.data, expected_data)
+
+
 def test_prepared_data_supports_scalar_aggregate_without_group_by(
     data_request: contracts.DataRequest,
     connect_orders: local_duckdb_fixture.OrdersConnector,

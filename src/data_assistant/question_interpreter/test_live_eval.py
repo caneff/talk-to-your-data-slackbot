@@ -260,6 +260,64 @@ def test_compare_proposal_reports_all_time_mismatch() -> None:
     assert mismatches == ("all_time: expected False, got True",)
 
 
+def test_compare_proposal_treats_filter_values_case_insensitively() -> None:
+    expected = test_support.question_frame_proposal(
+        field_operations=(
+            question_interpreter.IncludeFilterOperationProposal(
+                operation="include_filter",
+                field="priority",
+                values=("High",),
+            ),
+        ),
+    )
+    actual = test_support.question_frame_proposal(
+        field_operations=(
+            question_interpreter.IncludeFilterOperationProposal(
+                operation="include_filter",
+                field="priority",
+                values=("high",),
+            ),
+        ),
+    )
+
+    mismatches = live_eval.compare_question_frame_meaning(
+        expected=expected,
+        actual=actual,
+    )
+
+    assert mismatches == ()
+
+
+def test_compare_proposal_still_flags_genuine_filter_value_difference() -> None:
+    expected = test_support.question_frame_proposal(
+        field_operations=(
+            question_interpreter.IncludeFilterOperationProposal(
+                operation="include_filter",
+                field="priority",
+                values=("high",),
+            ),
+        ),
+    )
+    actual = test_support.question_frame_proposal(
+        field_operations=(
+            question_interpreter.IncludeFilterOperationProposal(
+                operation="include_filter",
+                field="priority",
+                values=("urgent",),
+            ),
+        ),
+    )
+
+    mismatches = live_eval.compare_question_frame_meaning(
+        expected=expected,
+        actual=actual,
+    )
+
+    assert mismatches == (
+        "field_operations[0].values: expected ('high',), got ('urgent',)",
+    )
+
+
 def test_run_eval_suite_reports_all_failures_without_fail_fast() -> None:
     class FakeProvider:
         def __init__(self) -> None:
