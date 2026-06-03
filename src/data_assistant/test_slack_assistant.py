@@ -1043,6 +1043,7 @@ def test_answer_and_render_returns_id_response_blocks_and_logs_one_record(
     assert records[0]["outcome"] == "non_answer"
     assert records[0]["model"] == "gpt-4o-mini"
     assert records[0]["user"] == "U123"
+    assert "qa_case_id" not in records[0]
 
 
 def test_answer_and_render_logs_optional_qa_case_id_without_changing_question(
