@@ -124,6 +124,8 @@ def record_known_issue_for_qa_record(
     qa_case_id = record.get("qa_case_id")
     if not isinstance(qa_case_id, str) or qa_case_id == "":
         return sidecar
+    if qa_case_id not in set(valid_case_ids):
+        return sidecar
 
     return record_known_issue(
         sidecar,

@@ -313,6 +313,24 @@ def test_record_known_issue_for_qa_record_noops_without_non_empty_case_id() -> N
     )
 
 
+def test_record_known_issue_for_qa_record_noops_for_unknown_case_id() -> None:
+    sidecar = _sidecar({})
+
+    assert (
+        known_qa_issues.record_known_issue_for_qa_record(
+            sidecar,
+            record={
+                "source": "qa_review",
+                "qa_case_id": "missing-case",
+            },
+            issue_number=165,
+            flag_category="correctness",
+            valid_case_ids=["case-a"],
+        )
+        == sidecar
+    )
+
+
 def test_record_known_issue_for_qa_record_appends_new_flag_for_existing_issue() -> None:
     updated = known_qa_issues.record_known_issue_for_qa_record(
         _sidecar({"case-a": [_issue(165)]}),
