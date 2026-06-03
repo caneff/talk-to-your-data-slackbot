@@ -1,4 +1,10 @@
-"""Manual live eval suite for the OpenAI-backed Question Interpreter."""
+"""Manual live eval suite for the OpenAI-backed Question Interpreter.
+
+Keep the committed sample default at ``DEFAULT_SAMPLE_COUNT`` (3). When hunting
+provider flakiness, pass ``--samples 10`` on the command line (the known
+``exact_date`` flake only surfaces at N>=10); never bump the committed default
+to chase flakes.
+"""
 
 from __future__ import annotations
 
@@ -307,6 +313,7 @@ def main(
         semantic_layer=semantic_layer_loader.load_semantic_layer(
             slack_runtime.RETAIL_SEMANTIC_LAYER_PATH
         ),
+        sample_count=args.samples,
         progress=args.progress,
         progress_file=stderr,
     )
@@ -320,6 +327,7 @@ def main(
 class _CliArgs:
     verbose: bool
     progress: bool
+    samples: int
 
 
 def _parse_args(argv: collections.abc.Sequence[str]) -> _CliArgs:
@@ -337,10 +345,21 @@ def _parse_args(argv: collections.abc.Sequence[str]) -> _CliArgs:
         action="store_true",
         help="disable the live case progress bar",
     )
+    parser.add_argument(
+        "--samples",
+        type=int,
+        default=DEFAULT_SAMPLE_COUNT,
+        help=(
+            "number of provider samples per case for flake hunting "
+            f"(default {DEFAULT_SAMPLE_COUNT}); try --samples 10 to surface "
+            "rare flakes"
+        ),
+    )
     args = parser.parse_args(list(argv))
     return _CliArgs(
         verbose=typing.cast(bool, args.verbose),
         progress=not typing.cast(bool, args.no_progress),
+        samples=typing.cast(int, args.samples),
     )
 
 

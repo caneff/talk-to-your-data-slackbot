@@ -441,10 +441,18 @@ def test_main_loads_openai_config_from_dotenv(
         cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
             live_eval.DEFAULT_CASES
         ),
+        sample_count: int = live_eval.DEFAULT_SAMPLE_COUNT,
         progress: bool = False,
         progress_file: typing.TextIO | None = None,
     ) -> live_eval.LiveEvalReport:
-        del provider, semantic_layer, cases, progress, progress_file
+        del (
+            provider,
+            semantic_layer,
+            cases,
+            sample_count,
+            progress,
+            progress_file,
+        )
         return live_eval.LiveEvalReport(total=0, passes=(), failures=())
 
     monkeypatch.setattr(
@@ -499,10 +507,18 @@ def test_main_passes_verbose_flag_to_report_writer(
         cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
             live_eval.DEFAULT_CASES
         ),
+        sample_count: int = live_eval.DEFAULT_SAMPLE_COUNT,
         progress: bool = False,
         progress_file: typing.TextIO | None = None,
     ) -> live_eval.LiveEvalReport:
-        del provider, semantic_layer, cases, progress, progress_file
+        del (
+            provider,
+            semantic_layer,
+            cases,
+            sample_count,
+            progress,
+            progress_file,
+        )
         return live_eval.LiveEvalReport(total=0, passes=(), failures=())
 
     def fake_write_report(
@@ -535,6 +551,74 @@ def test_main_passes_verbose_flag_to_report_writer(
 
     assert exit_code == 0
     assert captured_verbose == [True]
+
+
+def test_main_passes_samples_flag_to_live_eval(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    captured_sample_counts: list[int] = []
+
+    class FakeProvider:
+        def propose_question_frame(
+            self,
+            *,
+            question: str,
+            semantic_layer_context: dict[str, object],
+        ) -> live_eval.ProviderResult:
+            del question, semantic_layer_context
+            raise AssertionError("live eval runner is stubbed")
+
+    def fake_build_openai_provider(
+        environ: collections.abc.Mapping[str, str],
+    ) -> question_interpreter.QuestionInterpreterProvider:
+        assert environ["OPENAI_API_KEY"] == "dotenv-key"
+        return FakeProvider()
+
+    def fake_run_live_eval(
+        *,
+        provider: question_interpreter.QuestionInterpreterProvider,
+        semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
+        cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
+            live_eval.DEFAULT_CASES
+        ),
+        sample_count: int = live_eval.DEFAULT_SAMPLE_COUNT,
+        progress: bool = False,
+        progress_file: typing.TextIO | None = None,
+    ) -> live_eval.LiveEvalReport:
+        del provider, semantic_layer, cases, progress, progress_file
+        captured_sample_counts.append(sample_count)
+        return live_eval.LiveEvalReport(total=0, passes=(), failures=())
+
+    monkeypatch.setattr(
+        live_eval.question_interpreter,
+        "build_openai_question_interpreter_provider",
+        fake_build_openai_provider,
+    )
+    monkeypatch.setattr(
+        live_eval,
+        "run_live_question_interpreter_eval",
+        fake_run_live_eval,
+    )
+
+    default_exit_code = live_eval.main(
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+        env_file=env_file,
+    )
+    explicit_exit_code = live_eval.main(
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+        env_file=env_file,
+        argv=("--samples", "7"),
+    )
+
+    assert default_exit_code == 0
+    assert explicit_exit_code == 0
+    assert captured_sample_counts == [live_eval.DEFAULT_SAMPLE_COUNT, 7]
 
 
 def test_main_enables_progress_by_default_and_accepts_no_progress(
@@ -570,10 +654,11 @@ def test_main_enables_progress_by_default_and_accepts_no_progress(
         cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
             live_eval.DEFAULT_CASES
         ),
+        sample_count: int = live_eval.DEFAULT_SAMPLE_COUNT,
         progress: bool = False,
         progress_file: typing.TextIO | None = None,
     ) -> live_eval.LiveEvalReport:
-        del provider, semantic_layer, cases
+        del provider, semantic_layer, cases, sample_count
         captured_progress.append(progress)
         captured_progress_files.append(progress_file)
         return live_eval.LiveEvalReport(total=0, passes=(), failures=())
@@ -699,6 +784,60 @@ def test_default_live_eval_cases_come_from_shared_question_frame_cases() -> None
     )
 
 
+def test_shared_cases_cover_every_retail_metric() -> None:
+    covered_metrics = {
+        case.expected.metric
+        for case in question_frame_cases.SHARED_QUESTION_FRAME_CASES
+        if case.expected.metric is not None
+    }
+
+    assert covered_metrics == {
+        "total net revenue",
+        "total gross revenue",
+        "order count",
+        "total discount amount",
+        "total line revenue",
+        "gross margin",
+        "units sold",
+        "units returned",
+        "customer count",
+        "product count",
+        "store count",
+        "support ticket count",
+        "on hand units",
+        "stockout days",
+    }
+
+
+def test_shared_cases_cover_every_deferred_intent_once_classified() -> None:
+    covered_intents = {
+        case.expected.intent
+        for case in question_frame_cases.SHARED_QUESTION_FRAME_CASES
+    }
+
+    assert {
+        "summarize",
+        "rank",
+        "compare",
+        "trend",
+        "forecast",
+        "explain",
+        "prescribe",
+        "diagnose",
+    } <= covered_intents
+
+
+def test_shared_cases_use_exclude_filter_on_multiple_field_types() -> None:
+    exclude_fields = {
+        operation.field
+        for case in question_frame_cases.SHARED_QUESTION_FRAME_CASES
+        for operation in case.expected.field_operations
+        if operation.operation == "exclude_filter"
+    }
+
+    assert len(exclude_fields) >= 3
+
+
 def test_default_live_eval_includes_customer_count_by_customer_region_case() -> None:
     case = next(
         case
@@ -821,10 +960,11 @@ def test_main_loads_real_semantic_layer_for_live_eval(
         cases: collections.abc.Iterable[live_eval.LiveEvalCase] = (
             live_eval.DEFAULT_CASES
         ),
+        sample_count: int = live_eval.DEFAULT_SAMPLE_COUNT,
         progress: bool = False,
         progress_file: typing.TextIO | None = None,
     ) -> live_eval.LiveEvalReport:
-        del provider, cases, progress, progress_file
+        del provider, cases, sample_count, progress, progress_file
         captured_semantic_layers.append(semantic_layer)
         return live_eval.LiveEvalReport(total=0, passes=(), failures=())
 
