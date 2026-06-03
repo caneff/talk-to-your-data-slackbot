@@ -33,9 +33,9 @@ logger = logging.getLogger(__name__)
 INTERACTION_LOG_PATH_ENV_VAR: typing.Final[str] = "DATA_ASSISTANT_INTERACTION_LOG_PATH"
 
 # App-run defaults (one source of truth shared with slack_qa_driver). A no-flag
-# app run loads the retail layer + retail seed in :memory: — the app-run tier of
-# the two-tier default contract (ADR-0001). The library/test default stays on
-# commerce_smoke via DEFAULT_SEMANTIC_LAYER_PATH in the loader; do not conflate.
+# app run loads the retail layer + retail seed in :memory: (ADR-0001). Retail is
+# now the single dataset, so the loader's DEFAULT_SEMANTIC_LAYER_PATH points at
+# the same retail layer; these constants just pin the seed + :memory: app run.
 RETAIL_SEMANTIC_LAYER_PATH: typing.Final[pathlib.Path] = pathlib.Path(
     "examples/retail_ops_demo/semantic_layer"
 )
@@ -333,8 +333,8 @@ def _configured_answer_path(
     environ: collections_abc.Mapping[str, str],
     args: argparse.Namespace,
 ) -> slack_assistant.AnswerPath | None:
-    # No flag: load the retail app-run layer (the app-run tier of the two-tier
-    # default; the library default stays commerce_smoke in the loader).
+    # No flag: load the retail app-run layer (retail is the single dataset; the
+    # loader default points at the same retail layer).
     layer_path = (
         args.semantic_layer_path
         if args.semantic_layer_path is not None

@@ -34,10 +34,10 @@ class SharedNarrativeCase:
     enabled: bool = True
 
 
-def _commerce_revenue_dataset() -> schema.CuratedDataset:
+def _retail_revenue_dataset() -> schema.CuratedDataset:
     return schema.CuratedDataset(
-        dataset_id="commerce",
-        name="Commerce",
+        dataset_id="retail_ops",
+        name="Retail Operations",
         tables=("orders",),
         information_types=("revenue",),
         example_questions=(),
@@ -47,7 +47,7 @@ def _commerce_revenue_dataset() -> schema.CuratedDataset:
 def _orders_table() -> schema.DatasetTable:
     return schema.DatasetTable(
         table_id="orders",
-        dataset_id="commerce",
+        dataset_id="retail_ops",
         description="Orders by date and region.",
         columns=(
             schema.TableColumn(column_id="order_date", data_type="date"),
@@ -88,7 +88,7 @@ def prepared_revenue_by_region(*, all_time: bool = False) -> contracts.PreparedD
     With ``all_time=True`` the date range filter is dropped (everything else
     identical), exercising the "all available data" labelling path.
     """
-    dataset = _commerce_revenue_dataset()
+    dataset = _retail_revenue_dataset()
     table = _orders_table()
     field_filters: tuple[contracts.FieldFilter[schema.SemanticField], ...] = (
         ()
@@ -154,15 +154,15 @@ def prepared_empty_revenue_by_region() -> contracts.PreparedData:
 def prepared_customer_count() -> contracts.PreparedData:
     """Scalar customer-count fixture with no group-by ranking."""
     dataset = schema.CuratedDataset(
-        dataset_id="commerce",
-        name="Commerce Customers",
+        dataset_id="retail_ops",
+        name="Retail Customers",
         tables=("customers",),
         information_types=("customers",),
         example_questions=(),
     )
     table = schema.DatasetTable(
         table_id="customers",
-        dataset_id="commerce",
+        dataset_id="retail_ops",
         description="Customers by region.",
         columns=(
             schema.TableColumn(column_id="created_date", data_type="date"),

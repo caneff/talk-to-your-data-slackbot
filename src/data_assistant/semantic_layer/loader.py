@@ -9,7 +9,7 @@ import yaml
 import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.schema as schema
 
-DEFAULT_SEMANTIC_LAYER_PATH = pathlib.Path("examples/commerce_smoke/semantic_layer")
+DEFAULT_SEMANTIC_LAYER_PATH = pathlib.Path("examples/retail_ops_demo/semantic_layer")
 
 
 def load_semantic_layer(

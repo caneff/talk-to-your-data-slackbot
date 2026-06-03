@@ -484,7 +484,8 @@ def test_main_no_flags_wires_retail_default(
     """A no-flag app run loads the retail layer and seeds retail in :memory:.
 
     This is the app-run default (the old explicit Docker CMD): retail layer +
-    retail seed + ``:memory:``. The library/test default stays commerce_smoke.
+    retail seed + ``:memory:``. Retail is the single dataset, so the loader
+    default points at the same retail layer.
     """
     dev_identity_resolver: slack_assistant.AssistantIdentityResolver = (
         slack_assistant.dev_identity

@@ -9,8 +9,8 @@ def test_semantic_layer_context_exposes_business_labels_not_storage_details() ->
     semantic_layer = semantic_layer_catalog.SemanticLayerCatalog(
         datasets=(
             schema.CuratedDataset(
-                dataset_id="internal_commerce",
-                name="Commerce",
+                dataset_id="internal_retail",
+                name="Retail Operations",
                 tables=("orders_internal", "customers_internal"),
                 information_types=("revenue", "regional performance"),
                 example_questions=(
@@ -24,7 +24,7 @@ def test_semantic_layer_context_exposes_business_labels_not_storage_details() ->
         tables=(
             schema.DatasetTable(
                 table_id="orders_internal",
-                dataset_id="internal_commerce",
+                dataset_id="internal_retail",
                 description="Internal orders table.",
                 columns=(
                     schema.TableColumn(column_id="order_date", data_type="date"),
@@ -52,7 +52,7 @@ def test_semantic_layer_context_exposes_business_labels_not_storage_details() ->
             ),
             schema.DatasetTable(
                 table_id="customers_internal",
-                dataset_id="internal_commerce",
+                dataset_id="internal_retail",
                 description="Internal customers table.",
                 columns=(
                     schema.TableColumn(column_id="created_date", data_type="date"),
@@ -99,7 +99,7 @@ def test_semantic_layer_context_exposes_business_labels_not_storage_details() ->
         dataset_context["metric_contexts"],
     )
 
-    assert dataset_context["name"] == "Commerce"
+    assert dataset_context["name"] == "Retail Operations"
     assert "total revenue" in metric_labels
     assert "customer count" in metric_labels
     assert "What was total revenue by customer region in January 2026?" in (

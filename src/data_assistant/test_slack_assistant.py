@@ -135,7 +135,7 @@ def _final_response(
 ) -> contracts.FinalResponse:
     return contracts.FinalResponse(
         text=text,
-        trust_summary=contracts.TrustSummary(datasets=("Commerce",)),
+        trust_summary=contracts.TrustSummary(datasets=("Retail Operations",)),
         response_kind=response_kind,
         blocks=blocks,
     )
@@ -617,8 +617,8 @@ def test_final_response_from_workflow_result_unwraps_run() -> None:
 
 def _curated_dataset() -> schema.CuratedDataset:
     return schema.CuratedDataset(
-        dataset_id="commerce",
-        name="Commerce",
+        dataset_id="retail_ops",
+        name="Retail Operations",
         tables=("orders",),
         information_types=("orders",),
         example_questions=("What was revenue by region?",),
@@ -628,7 +628,7 @@ def _curated_dataset() -> schema.CuratedDataset:
 def _dataset_table() -> schema.DatasetTable:
     return schema.DatasetTable(
         table_id="orders",
-        dataset_id="commerce",
+        dataset_id="retail_ops",
         description="Order facts.",
         columns=(
             schema.TableColumn(column_id="region", data_type="string"),
@@ -718,7 +718,7 @@ def _data_assistant_run() -> contracts.DataAssistantRun:
                 "metric_value": (1200.0, 850.0),
             }
         ),
-        datasets_used=("Commerce",),
+        datasets_used=("Retail Operations",),
         dataset_tables_used=("orders",),
         metric_kind=schema.MetricKind.MONEY,
         metric_label="total revenue",
@@ -729,7 +729,7 @@ def _data_assistant_run() -> contracts.DataAssistantRun:
     )
     final_response = contracts.FinalResponse(
         text="Total revenue in January 2026 was $2,050.00.",
-        trust_summary=contracts.TrustSummary(datasets=("Commerce",)),
+        trust_summary=contracts.TrustSummary(datasets=("Retail Operations",)),
         response_kind=contracts.ResponseKind.ANSWER,
     )
     return contracts.DataAssistantRun(
@@ -813,7 +813,7 @@ def test_on_user_message_logs_answer_record_with_shape_and_key_data(
     assert isinstance(record["id"], str) and record["id"]
     assert isinstance(record["latency_ms"], int)
     assert record["intent"] == "summarize"
-    assert record["dataset"] == "Commerce"
+    assert record["dataset"] == "Retail Operations"
     assert record["metric"] == "total revenue"
     assert record["group_by"] == ["region"]
     assert record["result_limit"] == 10

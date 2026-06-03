@@ -64,11 +64,11 @@ def test_static_builder_produces_structured_non_answer(
 
 
 def test_access_denied_builder_names_the_dataset() -> None:
-    result = non_answer_catalog.access_denied_non_answer("commerce", stage=_STAGE)
+    result = non_answer_catalog.access_denied_non_answer("retail_ops", stage=_STAGE)
 
     assert result.stage == _STAGE
     assert result.reason_code == contracts.NonAnswerReasonCode.ACCESS_DENIED
-    assert result.datasets == ("commerce",)
+    assert result.datasets == ("retail_ops",)
 
 
 def test_missing_required_field_builder_records_the_field() -> None:
@@ -97,9 +97,9 @@ _GOLDEN_WORDING: tuple[
     tuple[contracts.NonAnswer, non_answer_catalog.NonAnswerWording], ...
 ] = (
     (
-        non_answer_catalog.access_denied_non_answer("commerce", stage=_STAGE),
+        non_answer_catalog.access_denied_non_answer("retail_ops", stage=_STAGE),
         non_answer_catalog.NonAnswerWording(
-            reason="You do not have access to commerce.",
+            reason="You do not have access to retail_ops.",
             next_step="Ask a data owner for access, or ask about data you can use.",
         ),
     ),

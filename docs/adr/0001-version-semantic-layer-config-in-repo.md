@@ -41,3 +41,25 @@ There are now two distinct "default layer" tiers, and they intentionally differ:
 Keeping the library default on Commerce avoids breaking the suite (the static
 provider and canonical question are Commerce-shaped); the retail default is an
 app-run concern only.
+
+## Amendment (2026-06-02, #157)
+
+The two-tier default is retired. `retail_ops_demo` is now the single example
+layer, and `examples/commerce_smoke/` has been deleted. The original decision
+still stands: Semantic Layer config is versioned in this repo.
+
+- **Single default** — `DEFAULT_SEMANTIC_LAYER_PATH` in
+  `semantic_layer/loader.py` now resolves to
+  `examples/retail_ops_demo/semantic_layer`, the same layer the app run already
+  loaded. There is no longer a separate Commerce library/test tier; nothing can
+  silently load Commerce.
+- **Commerce-shaped test layer moves in-code** — the canonical workflow tests
+  still exercise a small `orders(region, revenue, order_date)` + `customers`
+  layer, but it is now built in `data_assistant/conftest.py`
+  (`canonical_test_semantic_layer`) rather than parsed from the deleted
+  `commerce_smoke` YAML. The runner/`live_eval` offline tests inject it via an
+  autouse fixture, so the shipped retail layer is exercised only by
+  `semantic_layer/test_loader.py`.
+- Synthetic inline `dataset_id="commerce"` fixtures across the suite were renamed
+  to `retail_ops` (and `internal_commerce` to `internal_retail`) for consistency;
+  these objects never parsed YAML.

@@ -17,7 +17,7 @@ def test_reasoning_layer_produces_answer_draft_from_prepared_data() -> None:
         "grouped across 5 regions."
     )
     assert answer_draft.key_data is prepared_data.data
-    assert answer_draft.datasets_used == ("Commerce",)
+    assert answer_draft.datasets_used == ("Retail Operations",)
     assert answer_draft.dataset_tables_used == ("orders",)
     assert answer_draft.metric_kind == schema.MetricKind.MONEY
     assert answer_draft.metric_label == "total revenue"

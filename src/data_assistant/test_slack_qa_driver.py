@@ -18,9 +18,9 @@ import data_assistant.slack_qa_driver as slack_qa_driver
 def test_parse_battery_sends_only_top_level_bullets() -> None:
     markdown = textwrap.dedent(
         """\
-        # Commerce QA Questions
+        # Retail QA Questions
 
-        Use these questions to evaluate the standard Commerce dataset.
+        Use these questions to evaluate the standard Retail dataset.
 
         ## Revenue
 

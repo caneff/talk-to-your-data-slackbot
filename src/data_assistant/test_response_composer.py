@@ -36,7 +36,7 @@ def test_response_composer_returns_plain_text_with_trust_summary() -> None:
                     "metric_value": (1200.0, 850.0),
                 }
             ),
-            datasets_used=("Commerce",),
+            datasets_used=("Retail Operations",),
             dataset_tables_used=("orders",),
             metric_kind=schema.MetricKind.MONEY,
             metric_label="total revenue",
@@ -56,7 +56,7 @@ def test_response_composer_returns_plain_text_with_trust_summary() -> None:
     assert "- South: $850.00" in response.text
     assert "Trust Summary:" in response.text
     assert response.trust_summary == contracts.TrustSummary(
-        datasets=("Commerce",),
+        datasets=("Retail Operations",),
         dataset_tables=("orders",),
         time_range="January 2026",
         filters=(),
@@ -77,7 +77,7 @@ def test_response_composer_returns_visible_slack_blocks_for_answer_package() -> 
                     "metric_value": (1200.0, 850.0),
                 }
             ),
-            datasets_used=("Commerce",),
+            datasets_used=("Retail Operations",),
             dataset_tables_used=("orders",),
             metric_kind=schema.MetricKind.MONEY,
             metric_label="total revenue",
@@ -105,9 +105,9 @@ def test_response_composer_returns_visible_slack_blocks_for_answer_package() -> 
                 {
                     "type": "plain_text",
                     "text": (
-                        "Trust Summary: Curated Dataset: Commerce. Dataset Table: "
-                        "orders. Time range: January 2026. Caveats: 1 row "
-                        "excluded because revenue was missing."
+                        "Trust Summary: Curated Dataset: Retail Operations. "
+                        "Dataset Table: orders. Time range: January 2026. "
+                        "Caveats: 1 row excluded because revenue was missing."
                     ),
                 },
             ],
@@ -148,7 +148,7 @@ def test_response_composer_formats_count_rows_from_metric_kind() -> None:
                     "metric_value": (1200, 850),
                 }
             ),
-            datasets_used=("Commerce Customers",),
+            datasets_used=("Retail Customers",),
             dataset_tables_used=("customers",),
             metric_kind=schema.MetricKind.COUNT,
             metric_label="customer count",
@@ -173,7 +173,7 @@ def test_response_composer_title_cases_each_word_in_table_headers() -> None:
                     "metric_value": (2050,),
                 }
             ),
-            datasets_used=("Commerce Customers",),
+            datasets_used=("Retail Customers",),
             dataset_tables_used=("customers",),
             metric_kind=schema.MetricKind.COUNT,
             metric_label="customer count",
@@ -249,7 +249,7 @@ def test_response_composer_leaves_non_answer_none_on_answer() -> None:
                     "metric_value": (1200.0,),
                 }
             ),
-            datasets_used=("Commerce",),
+            datasets_used=("Retail Operations",),
             dataset_tables_used=("orders",),
             metric_kind=schema.MetricKind.MONEY,
             metric_label="total revenue",
@@ -356,12 +356,12 @@ def test_response_composer_marks_unsupported_non_answers_without_yet_wording(
 def test_response_composer_omits_sensitive_details_from_access_denial() -> None:
     response = response_composer.compose_non_answer_response(
         non_answer_catalog.access_denied_non_answer(
-            "commerce",
+            "retail_ops",
             stage=contracts.NonAnswerStage.ACCESS_CONTROLLER,
         ),
         wording_provider=non_answer_catalog.StaticCatalogWording(),
     )
 
-    assert "Curated Dataset: commerce." in response.text
+    assert "Curated Dataset: retail_ops." in response.text
     assert "Dataset Table:" not in response.text
     assert "Filters:" not in response.text
