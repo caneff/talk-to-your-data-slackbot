@@ -8,12 +8,24 @@ touch the canonical ``logs/interactions.jsonl``.
 
 from __future__ import annotations
 
+import ast
 import json
 import pathlib
 
 import pytest
 
 import data_assistant.interaction_log as interaction_log
+
+
+def _module_level_import_names(module_source: str) -> set[str]:
+    names: set[str] = set()
+    module = ast.parse(module_source)
+    for statement in module.body:
+        if isinstance(statement, ast.Import):
+            names.update(alias.name for alias in statement.names)
+        elif isinstance(statement, ast.ImportFrom) and statement.module is not None:
+            names.add(statement.module)
+    return names
 
 
 def _record(**overrides: object) -> dict[str, object]:
@@ -132,6 +144,21 @@ def test_flag_vocabulary_constant_is_correctness_formatting_investigate() -> Non
 def test_default_log_path_is_repo_root_logs_interactions_jsonl() -> None:
     assert interaction_log.DEFAULT_LOG_PATH.name == "interactions.jsonl"
     assert interaction_log.DEFAULT_LOG_PATH.parent.name == "logs"
+
+
+def test_interaction_log_module_level_imports_are_stdlib_only() -> None:
+    source_text = pathlib.Path(interaction_log.__file__).read_text(encoding="utf-8")
+
+    assert _module_level_import_names(source_text) == {
+        "__future__",
+        "contextlib",
+        "dataclasses",
+        "json",
+        "os",
+        "pathlib",
+        "tempfile",
+        "typing",
+    }
 
 
 # --- Interaction Log Retention Policy ---------------------------------------
