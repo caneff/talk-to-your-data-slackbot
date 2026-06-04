@@ -27,7 +27,7 @@ packages = ["src/data_assistant"]
 "src/data_assistant/prompts/reasoning_layer_developer.md" = "data_assistant/prompts/reasoning_layer_developer.md"
 
 [tool.pytest.ini_options]
-testpaths = ["src"]
+testpaths = ["src", "scripts"]
 
 [tool.ruff]
 line-length = 88
@@ -41,8 +41,8 @@ pythonVersion = "3.11"
 typeCheckingMode = "strict"
 venvPath = "."
 venv = ".venv"
-include = ["src"]
-extraPaths = ["src"]
+include = ["src", "scripts"]
+extraPaths = ["src", "."]
 
 [dependency-groups]
 dev = [
