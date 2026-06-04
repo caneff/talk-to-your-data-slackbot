@@ -325,6 +325,20 @@ CONTRACT_SNAPSHOT_CASES = (
         ),
         question="What was total net revenue in January 2026?",
     ),
+    # Issue #196: the interpreter self-reports a named-but-unavailable metric.
+    # Validation routes the report to UNKNOWN_SEMANTIC_LABEL (an unsupported
+    # label, distinct from the AMBIGUOUS_METRIC clarification above).
+    snapshot_case(
+        name="unknown_metric_reported",
+        proposal=interpreter_support.question_frame_proposal(
+            metric=None,
+            unknown_metric="return rate",
+        ),
+        expected=non_answer_catalog.unknown_semantic_label_non_answer(
+            "metric", stage=_STAGE
+        ),
+        question="What's our return rate in January 2026?",
+    ),
     snapshot_case(
         name="unknown_field",
         proposal=interpreter_support.question_frame_proposal(

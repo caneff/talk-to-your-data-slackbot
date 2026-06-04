@@ -95,6 +95,17 @@ class ProviderProposal(pydantic.BaseModel):
             "with an available label."
         ),
     )
+    unknown_metric: str | None = pydantic.Field(
+        default=None,
+        description=(
+            "Set to the verbatim metric wording from the Data Question when it "
+            "clearly names a metric and NO available metric label matches it at "
+            "all (no near label, and not a qualifier-ambiguity case). When set, "
+            "leave metric and metric_ambiguity null and do not guess a label. "
+            "Leave null when an available label matches or when the wording is "
+            "merely a metric-qualifier ambiguity (use metric_ambiguity instead)."
+        ),
+    )
     field_operations: tuple[ProviderFieldOperation, ...] = pydantic.Field(
         description=(
             "Every explicit grouping, date constraint, and filter from the "
