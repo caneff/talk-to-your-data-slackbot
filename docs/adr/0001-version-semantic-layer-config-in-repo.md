@@ -59,7 +59,7 @@ still stands: Semantic Layer config is versioned in this repo.
   (`canonical_test_semantic_layer`) rather than parsed from the deleted
   `commerce_smoke` YAML. The runner/`live_eval` offline tests inject it via an
   autouse fixture, so the shipped retail layer is exercised only by
-  `semantic_layer/test_loader.py`.
+  `semantic_layer/loader_test.py`.
 - Synthetic inline `dataset_id="commerce"` fixtures across the suite were renamed
   to `retail_ops` (and `internal_commerce` to `internal_retail`) for consistency;
   these objects never parsed YAML.

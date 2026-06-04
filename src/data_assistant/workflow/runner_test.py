@@ -23,7 +23,7 @@ def _runner_uses_canonical_layer(  # pyright: ignore[reportUnusedFunction]
 
     These end-to-end tests pair the in-memory ``orders``/``customers`` DuckDB
     fixtures with a layer of the same shape. The shipped retail layer (the loader
-    default) is exercised separately in ``semantic_layer/test_loader.py``.
+    default) is exercised separately in ``semantic_layer/loader_test.py``.
     """
     monkeypatch.setattr(
         workflow_runner.semantic_layer_loader,

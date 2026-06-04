@@ -54,7 +54,7 @@ def provider_snapshot_case(
 # Non-Answer expectations are built through the catalog builders — the same
 # dispatch production uses — so these cases assert routing (reason code, stage)
 # and context (the field/label threaded in), not user-facing copy. Copy is
-# pinned once in test_non_answer_catalog.py (ADR-0007).
+# pinned once in non_answer_catalog_test.py (ADR-0007).
 CONTRACT_SNAPSHOT_CASES = (
     snapshot_case(
         name="happy_path",
