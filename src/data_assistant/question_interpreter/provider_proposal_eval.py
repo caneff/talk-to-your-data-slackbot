@@ -117,6 +117,12 @@ def compare_provider_proposal_meaning(
     )
     _append_scalar_mismatch(
         mismatches=mismatches,
+        field="unknown_metric",
+        expected=expected.unknown_metric,
+        actual=actual.unknown_metric,
+    )
+    _append_scalar_mismatch(
+        mismatches=mismatches,
         field="all_time",
         expected=expected.all_time,
         actual=actual.all_time,

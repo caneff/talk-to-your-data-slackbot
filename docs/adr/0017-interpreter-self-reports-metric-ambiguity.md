@@ -89,3 +89,38 @@ target retail, and validation tests lock both directions deterministically: an
 exact `total net revenue` proposal validates to a Question Frame; a
 `metric_ambiguity="recurring revenue"` proposal (no reflecting label) still
 Non-Answers.
+
+## Amendment (2026-06-03): second self-report for a named-but-unavailable metric (#196)
+
+The interpreter now carries a SECOND self-report field, `unknown_metric: str |
+None`, fully symmetric to `metric_ambiguity`. The provider sets it to the verbatim
+metric wording when the Data Question clearly names a metric and NO available
+label matches it at all — not a near label, and not a qualifier-ambiguity case —
+leaving both `metric` and `metric_ambiguity` null. **Provider Proposal Validation**
+acts on it as a trust boundary: when `unknown_metric` is set it short-circuits to
+the existing `UNKNOWN_SEMANTIC_LABEL` Non-Answer (`response_kind=UNSUPPORTED`),
+checked immediately AFTER the `metric_ambiguity` branch and BEFORE the
+missing-metric and label-match checks. The two self-reports are mutually exclusive
+by prompt rule; the explicit order is a safety net. Full precedence:
+intent gates → `metric_ambiguity` → `unknown_metric` → missing-metric →
+label-match.
+
+**Reason code: reuse `UNKNOWN_SEMANTIC_LABEL`, not a new code.** This is the
+opposite call from this ADR's original "Considered Options" rejection of reuse —
+and deliberately so, because that rejection was about the *ambiguity* case. There,
+the user named a metric whose qualifier we cannot safely match: a CLARIFICATION,
+so a distinct `AMBIGUOUS_METRIC` clarification code was correct. Here, the user
+named a metric we genuinely do not carry: an UNSUPPORTED-label situation,
+indistinguishable in cause and remedy from a hallucinated or absent label, which
+already routes to `UNKNOWN_SEMANTIC_LABEL`. The existing copy ("I couldn't match
+part of your request to the available data") fits, so no new reason code, catalog
+entry, or ADR is warranted. The difference is *clarification vs unsupported*, not
+*two self-reports must share machinery*.
+
+`unknown_metric` remains an UNTRUSTED proposal field; only Provider Proposal
+Validation may act on it. Reversing later means dropping the field, its validation
+branch, the prompt rule, and the shared/eval cases — nothing downstream depends on
+it (it never reaches the trusted Question Frame). A retail live-eval/shared case
+set ("What's our return rate?", "...average order value...", "...conversion
+rate?") measures detection; a deterministic StaticProvider test locks the
+`unknown_metric` → `UNKNOWN_SEMANTIC_LABEL` routing.

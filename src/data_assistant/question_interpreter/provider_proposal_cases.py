@@ -9,6 +9,12 @@ loads. Two invariants hold for every case, with the table YAMLs under
 - Each case pairs its metric, groupable field, and date field from the SAME
   table, so the expected proposal is a coherent supported question; cross-table
   combinations are out-of-layer degradation cases handled elsewhere.
+
+The named-but-unavailable-metric cases (#196) are the one deliberate exception
+to the first invariant: their `unknown_metric` wording names a metric the retail
+layer does NOT carry, so it is intentionally absent from every table YAML. They
+sit in their own explicit subgroup, flagged with a comment; the invariant holds
+for the `metric`/`field` labels of every other case.
 """
 
 from __future__ import annotations
@@ -54,11 +60,13 @@ def _proposal(
     field_operations: tuple[question_interpreter.ProviderFieldOperation, ...],
     all_time: bool = False,
     metric_ambiguity: str | None = None,
+    unknown_metric: str | None = None,
 ) -> question_interpreter.ProviderProposal:
     return question_interpreter.ProviderProposal(
         intent=intent,
         metric=metric,
         metric_ambiguity=metric_ambiguity,
+        unknown_metric=unknown_metric,
         field_operations=field_operations,
         all_time=all_time,
     )
@@ -214,6 +222,42 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
             metric=None,
             metric_ambiguity="total recurring revenue",
             field_operations=(_during("order date", JANUARY_2026),),
+        ),
+    ),
+    # --- Named-but-unavailable metric self-report cases (#196) ---
+    # These intentionally break the verbatim-label invariant: each unknown_metric
+    # names a measure the retail layer does NOT carry (no return-rate, AOV, or
+    # conversion-rate metric exists in any table YAML). The interpreter must
+    # self-report rather than guess a near label; Provider Proposal Validation
+    # routes the report to UNKNOWN_SEMANTIC_LABEL.
+    SharedProviderProposalCase(
+        name="unknown_metric_return_rate",
+        question="What's our return rate?",
+        expected=_proposal(
+            intent="summarize",
+            metric=None,
+            unknown_metric="return rate",
+            field_operations=(),
+        ),
+    ),
+    SharedProviderProposalCase(
+        name="unknown_metric_average_order_value",
+        question="What was our average order value in January 2026?",
+        expected=_proposal(
+            intent="summarize",
+            metric=None,
+            unknown_metric="average order value",
+            field_operations=(_during("order date", JANUARY_2026),),
+        ),
+    ),
+    SharedProviderProposalCase(
+        name="unknown_metric_conversion_rate",
+        question="What's our conversion rate?",
+        expected=_proposal(
+            intent="summarize",
+            metric=None,
+            unknown_metric="conversion rate",
+            field_operations=(),
         ),
     ),
     SharedProviderProposalCase(

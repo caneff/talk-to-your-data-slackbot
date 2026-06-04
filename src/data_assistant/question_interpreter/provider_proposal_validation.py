@@ -86,6 +86,18 @@ def _validate_provider_result(
             contracts.NonAnswerReasonCode.AMBIGUOUS_METRIC,
             stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         )
+    # The interpreter also self-reports a named-but-unavailable metric (#196):
+    # the user clearly named a metric we genuinely do not carry. That is an
+    # unsupported-label situation, distinct from the qualifier-ambiguity
+    # clarification above, so it routes to UNKNOWN_SEMANTIC_LABEL. Checked after
+    # metric_ambiguity and before missing-metric/label-match; the two
+    # self-reports are mutually exclusive by prompt rule and this explicit order
+    # is a safety net.
+    if proposal.unknown_metric:
+        return non_answer_catalog.unknown_semantic_label_non_answer(
+            "metric",
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
     if not metric_value:
         return non_answer_catalog.missing_required_field_non_answer(
             "metric",

@@ -143,6 +143,37 @@ def test_unreflected_metric_ambiguity_still_non_answers() -> None:
     assert result.reason_code == contracts.NonAnswerReasonCode.AMBIGUOUS_METRIC
 
 
+def test_unknown_metric_non_answers_via_unknown_semantic_label() -> None:
+    """A self-reported named-but-unavailable metric Non-Answers (issue #196).
+
+    Mirrors the metric_ambiguity self-report but routes to UNKNOWN_SEMANTIC_LABEL:
+    the user named a metric we genuinely do not carry (an unsupported-label
+    situation), distinct from the qualifier-ambiguity clarification.
+    """
+    proposal = question_interpreter.ProviderProposal(
+        intent="summarize",
+        metric=None,
+        unknown_metric="return rate",
+        field_operations=(
+            question_interpreter.ProviderFieldOperation(
+                operation="range_filter",
+                field="order date",
+                lower="2026-01-01",
+                upper="2026-01-31",
+            ),
+        ),
+    )
+
+    result = question_interpreter.interpret_question(
+        question="What's our return rate in January 2026?",
+        semantic_layer=_retail_style_semantic_layer(),
+        provider=_StaticProvider(proposal),
+    )
+
+    assert isinstance(result, contracts.NonAnswer)
+    assert result.reason_code == contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL
+
+
 def test_availability_shape_non_answers_via_missing_time_scope() -> None:
     """A summarize proposal over a real metric with no time scope still rejects.
 
