@@ -16,9 +16,9 @@ def validate_field_filters(
     operation_proposals: tuple[proposals.ProviderFieldOperation, ...],
     semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> contracts.NonAnswer | tuple[str | None, tuple[contracts.FieldFilter[str], ...]]:
-    fields_by_label = {
-        field.label: field for table in semantic_layer.tables for field in table.fields
-    }
+    fields_by_label = _fields_by_label(semantic_layer)
+    if isinstance(fields_by_label, contracts.NonAnswer):
+        return fields_by_label
     validated_filters: list[contracts.FieldFilter[str]] = []
     group_by_field: str | None = None
     for operation_proposal in operation_proposals:
@@ -59,6 +59,31 @@ def validate_field_filters(
         validated_filters.append(result)
 
     return group_by_field, tuple(validated_filters)
+
+
+def _fields_by_label(
+    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
+) -> dict[str, schema.SemanticField] | contracts.NonAnswer:
+    fields_by_label: dict[str, schema.SemanticField] = {}
+    for table in semantic_layer.tables:
+        for field in table.fields:
+            existing_field = fields_by_label.get(field.label)
+            if existing_field is not None and not _same_validation_contract(
+                existing_field, field
+            ):
+                return non_answer_catalog.non_answer(
+                    contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+                    stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+                )
+            fields_by_label.setdefault(field.label, field)
+    return fields_by_label
+
+
+def _same_validation_contract(
+    left: schema.SemanticField,
+    right: schema.SemanticField,
+) -> bool:
+    return left.data_type == right.data_type and left.operations == right.operations
 
 
 def _validate_range_filter(
