@@ -4,9 +4,9 @@ import pandas as pd
 import pytest
 
 import data_assistant.non_answer_catalog as non_answer_catalog
-import data_assistant.response_composer as response_composer
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts
+import data_assistant.workflow.response_composer as response_composer
 
 
 def _non_answer(

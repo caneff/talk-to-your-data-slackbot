@@ -10,11 +10,11 @@ import data_assistant.data_requester as data_requester
 import data_assistant.non_answer_catalog as non_answer_catalog
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.reasoning_layer as reasoning_layer
-import data_assistant.response_composer as response_composer
 import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.semantic_router as semantic_router
 import data_assistant.workflow.contracts as contracts
+import data_assistant.workflow.response_composer as response_composer
 
 UNDERSTANDING_QUESTION_STATUS = "understanding your question..."
 FINDING_DATA_STATUS = "finding the right data..."
