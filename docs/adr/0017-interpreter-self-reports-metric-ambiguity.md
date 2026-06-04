@@ -124,3 +124,37 @@ it (it never reaches the trusted Question Frame). A retail live-eval/shared case
 set ("What's our return rate?", "...average order value...", "...conversion
 rate?") measures detection; a deterministic StaticProvider test locks the
 `unknown_metric` → `UNKNOWN_SEMANTIC_LABEL` routing.
+
+## Amendment (2026-06-04): metric aliases resolve business phrasing without changing trusted labels (#126)
+
+The Semantic Layer now allows `Metric.aliases: tuple[str, ...] = ()` for
+approved alternate business phrasing that should resolve to an existing
+canonical metric label. This is intentionally narrower than free-form synonym
+matching: aliases are explicit Semantic Layer data, table-scoped for collision
+validation, and they affect provider matching only. The trusted
+**Question Frame** still carries the canonical `metric` label; aliases never
+become trusted metric values.
+
+Provider context stays canonical-first. `available_metric_labels` and
+`all_metric_labels` remain canonical-only so downstream validation and trusted
+label checks are unchanged. Each `metric_context` now carries `aliases` beside
+its canonical `metric_label`, and the developer prompt tells the provider to
+match Data Question wording against canonical labels OR aliases while returning
+only the canonical label in `metric`. Deterministic validation still accepts
+canonical labels only; a provider that returns an alias text in `metric`
+continues to route to `UNKNOWN_SEMANTIC_LABEL`.
+
+Collision rules are table-scoped:
+
+- reject duplicate aliases within one `DatasetTable`
+- reject an alias that matches another metric's canonical label within the same
+  `DatasetTable`
+- allow the same alias phrase across different tables, preserving existing
+  cross-table ambiguity behavior
+
+Examples in the retail demo use non-qualifier business phrasing such as
+`transactions` or `purchases` → `order count`, `promo spend` or
+`markdown spend` → `total discount amount`, and `cases`, `incidents`, or
+`help requests` → `support ticket count`. Revenue-wording examples were avoided
+here so aliases do not blur with the separate qualifier/reflected-label logic
+that already governs `total net revenue` vs `total revenue`.

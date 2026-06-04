@@ -17,9 +17,10 @@ import data_assistant.workflow.contracts as contracts
 
 
 def _retail_style_semantic_layer() -> semantic_layer_catalog.SemanticLayerCatalog:
-    """Build a layer exposing both 'total revenue' and 'total net revenue'."""
+    """Build a layer exposing qualified revenue labels and a non-qualifier alias."""
     return semantic_layer_testing.semantic_layer_with_table(
         columns={
+            "order_id": "varchar",
             "order_date": "date",
             "region": "varchar",
             "revenue": "decimal",
@@ -39,6 +40,14 @@ def _retail_style_semantic_layer() -> semantic_layer_catalog.SemanticLayerCatalo
                 expression="sum(net_revenue)",
                 source_column="net_revenue",
                 kind=schema.MetricKind.MONEY,
+            ),
+            schema.Metric(
+                metric_id="order_count",
+                label="order count",
+                aliases=("transactions",),
+                expression="count(order_id)",
+                source_column="order_id",
+                kind=schema.MetricKind.COUNT,
             ),
         ),
     )
@@ -116,6 +125,56 @@ def test_exact_net_revenue_label_validates_to_question_frame() -> None:
             upper=datetime.date(2026, 1, 31),
         ),
     )
+
+
+def test_metric_alias_question_wording_can_resolve_to_canonical_metric_label() -> None:
+    proposal = question_interpreter.ProviderProposal(
+        intent="summarize",
+        metric="order count",
+        metric_ambiguity=None,
+        field_operations=(
+            question_interpreter.ProviderFieldOperation(
+                operation="range_filter",
+                field="order date",
+                lower="2026-01-01",
+                upper="2026-01-31",
+            ),
+        ),
+    )
+
+    result = question_interpreter.interpret_question(
+        question="How many transactions were there in January 2026?",
+        semantic_layer=_retail_style_semantic_layer(),
+        provider=_StaticProvider(proposal),
+    )
+
+    assert isinstance(result, contracts.Success)
+    assert result.value.metric == "order count"
+
+
+def test_metric_alias_label_is_not_trusted_as_canonical_metric_value() -> None:
+    proposal = question_interpreter.ProviderProposal(
+        intent="summarize",
+        metric="transactions",
+        metric_ambiguity=None,
+        field_operations=(
+            question_interpreter.ProviderFieldOperation(
+                operation="range_filter",
+                field="order date",
+                lower="2026-01-01",
+                upper="2026-01-31",
+            ),
+        ),
+    )
+
+    result = question_interpreter.interpret_question(
+        question="How many transactions were there in January 2026?",
+        semantic_layer=_retail_style_semantic_layer(),
+        provider=_StaticProvider(proposal),
+    )
+
+    assert isinstance(result, contracts.NonAnswer)
+    assert result.reason_code == contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL
 
 
 def test_unreflected_metric_ambiguity_still_non_answers() -> None:

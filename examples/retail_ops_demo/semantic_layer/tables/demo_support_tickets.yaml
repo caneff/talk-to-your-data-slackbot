@@ -31,6 +31,10 @@ columns:
 metrics:
   - metric_id: support_ticket_count
     label: support ticket count
+    aliases:
+      - cases
+      - incidents
+      - help requests
     expression: count(ticket_id)
     source_column: ticket_id
     kind: count

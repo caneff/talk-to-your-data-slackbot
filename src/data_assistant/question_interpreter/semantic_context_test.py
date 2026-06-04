@@ -93,6 +93,7 @@ def test_semantic_layer_context_exposes_business_labels_not_storage_details() ->
                     schema.Metric(
                         metric_id="metric_customer_count",
                         label="customer count",
+                        aliases=("orders",),
                         expression="count(customer_id)",
                         source_column="customer_id",
                         kind=schema.MetricKind.COUNT,
@@ -132,15 +133,25 @@ def test_semantic_layer_context_exposes_business_labels_not_storage_details() ->
     assert dataset_context["name"] == "Retail Operations"
     assert "total revenue" in metric_labels
     assert "customer count" in metric_labels
+    assert "orders" not in metric_labels
     assert "What was total revenue by customer region in January 2026?" in (
         example_questions
     )
     assert {
-        metric_context["metric_label"]: metric_context["available_field_labels"]
+        metric_context["metric_label"]: {
+            "aliases": metric_context["aliases"],
+            "available_field_labels": metric_context["available_field_labels"],
+        }
         for metric_context in metric_contexts
     } == {
-        "customer count": ["created date", "customer region"],
-        "total revenue": ["customer region"],
+        "customer count": {
+            "aliases": ["orders"],
+            "available_field_labels": ["created date", "customer region"],
+        },
+        "total revenue": {
+            "aliases": [],
+            "available_field_labels": ["customer region"],
+        },
     }
 
     context_text = repr(semantic_layer_context)

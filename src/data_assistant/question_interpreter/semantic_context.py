@@ -38,6 +38,7 @@ def build_semantic_layer_context(
                     [
                         {
                             "metric_label": metric.label,
+                            "aliases": sorted(metric.aliases),
                             "available_fields": _field_contexts(table.fields),
                             "available_field_labels": sorted(
                                 field.label for field in table.fields

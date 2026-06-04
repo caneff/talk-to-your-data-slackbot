@@ -30,6 +30,7 @@ class SemanticLayerCatalog:
             errors.append(
                 "Duplicate Dataset Table ids: " + ", ".join(duplicate_table_ids)
             )
+        errors.extend(_metric_alias_errors(self.tables))
         errors.extend(_relationship_errors(self.datasets, self.tables))
         if errors:
             raise ValueError("\n".join(_unique_messages(errors)))
@@ -122,6 +123,62 @@ def _relationship_errors(
         )
 
     return _unique_messages(errors)
+
+
+def _metric_alias_errors(
+    tables: tuple[schema.DatasetTable, ...],
+) -> tuple[str, ...]:
+    errors: list[str] = []
+    for table in tables:
+        aliases = tuple(alias for metric in table.metrics for alias in metric.aliases)
+        raw_aliases_by_normalized = _raw_metric_phrases_by_normalized(aliases)
+        duplicate_aliases = tuple(
+            raw_aliases_by_normalized[normalized_alias]
+            for normalized_alias in _duplicate_ids(
+                _normalize_metric_phrase(alias) for alias in aliases
+            )
+        )
+        if duplicate_aliases:
+            errors.append(
+                "Duplicate Metric aliases in Dataset Table "
+                f"{table.table_id}: {', '.join(duplicate_aliases)}"
+            )
+
+        metric_labels = tuple(metric.label for metric in table.metrics)
+        raw_metric_labels_by_normalized = _raw_metric_phrases_by_normalized(
+            metric_labels
+        )
+        alias_label_collisions = sorted(
+            set(raw_aliases_by_normalized) & set(raw_metric_labels_by_normalized)
+        )
+        if alias_label_collisions:
+            errors.append(
+                "Metric aliases collide with canonical Metric labels in Dataset "
+                "Table "
+                f"{table.table_id}: "
+                + ", ".join(
+                    raw_aliases_by_normalized[normalized_alias]
+                    for normalized_alias in alias_label_collisions
+                )
+            )
+
+    return _unique_messages(errors)
+
+
+def _normalize_metric_phrase(metric_phrase: str) -> str:
+    return metric_phrase.strip().casefold()
+
+
+def _raw_metric_phrases_by_normalized(
+    metric_phrases: collections.abc.Iterable[str],
+) -> dict[str, str]:
+    raw_metric_phrases_by_normalized: dict[str, str] = {}
+    for metric_phrase in metric_phrases:
+        raw_metric_phrases_by_normalized.setdefault(
+            _normalize_metric_phrase(metric_phrase),
+            metric_phrase.strip(),
+        )
+    return raw_metric_phrases_by_normalized
 
 
 def _unique_messages(messages: collections.abc.Iterable[str]) -> tuple[str, ...]:
