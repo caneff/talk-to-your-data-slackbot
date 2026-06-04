@@ -7,7 +7,7 @@ import data_assistant.data_requester as data_requester
 import data_assistant.local_duckdb_fixture as local_duckdb_fixture
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.reasoning_layer as reasoning_layer
-import data_assistant.reasoning_layer.test_support as reasoning_test_support
+import data_assistant.reasoning_layer.testing_support as reasoning_test_support
 import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.workflow.contracts as contracts

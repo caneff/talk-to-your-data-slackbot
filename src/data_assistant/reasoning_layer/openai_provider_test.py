@@ -6,7 +6,7 @@ import pytest
 import data_assistant.openai_support as openai_support
 import data_assistant.reasoning_layer as reasoning_layer
 import data_assistant.reasoning_layer.openai_provider as openai_provider
-import data_assistant.reasoning_layer.test_support as test_support
+import data_assistant.reasoning_layer.testing_support as test_support
 
 
 def test_load_openai_reasoning_config_requires_api_key() -> None:
