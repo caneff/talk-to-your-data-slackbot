@@ -32,7 +32,7 @@ rehearsed before the next starts. Tracked as issues #99 (resilience), #100
      NOT routed through the old `handle_slack_event` / `SlackGateway` envelope.
      Reuse only the pipeline (`answer_path`) and lift `_render_workflow_result`.
      The adapter speaks the assistant model directly: `thread_started` → greeting
-     + `set_suggested_prompts([retail Qs])`; `user_message` →
+     \+ `set_suggested_prompts([retail Qs])`; `user_message` →
      `set_status("analyzing your data…")` → run pipeline → `say(reply)` (posting
      the reply auto-clears the status, so there is no separate "working" message).
    - The interpret→…→compose pipeline, evals, and Non-Answer path stay untouched;
