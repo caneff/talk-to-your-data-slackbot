@@ -199,29 +199,6 @@ _GOLDEN_WORDING: tuple[
     ),
     (
         non_answer_catalog.non_answer(
-            contracts.NonAnswerReasonCode.UNSUPPORTED_AVAILABILITY, stage=_STAGE
-        ),
-        non_answer_catalog.NonAnswerWording(
-            reason=(
-                "The Data Assistant does not answer data-availability questions yet."
-            ),
-            next_step=(
-                "Ask for a metric over a known period, such as: "
-                "What was total revenue by region in January 2026?"
-            ),
-        ),
-    ),
-    (
-        non_answer_catalog.non_answer(
-            contracts.NonAnswerReasonCode.UNSUPPORTED_DATA, stage=_STAGE
-        ),
-        non_answer_catalog.NonAnswerWording(
-            reason="User-provided CSV files are not supported data sources.",
-            next_step="Ask about an approved dataset instead.",
-        ),
-    ),
-    (
-        non_answer_catalog.non_answer(
             contracts.NonAnswerReasonCode.UNSUPPORTED_FILTER, stage=_STAGE
         ),
         non_answer_catalog.NonAnswerWording(

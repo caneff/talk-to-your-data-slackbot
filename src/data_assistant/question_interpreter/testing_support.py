@@ -43,24 +43,6 @@ def fixed_proposal_provider(
     return FixedProposalProvider()
 
 
-def provider_that_must_not_be_called() -> (
-    question_interpreter.QuestionInterpreterProvider
-):
-    """Build a fake provider that fails if the interpreter calls it."""
-
-    class MustNotBeCalledProvider:
-        def propose_question_frame(
-            self,
-            *,
-            question: str,
-            semantic_layer_context: dict[str, object],
-        ) -> question_interpreter.ProviderProposal:
-            del question, semantic_layer_context
-            raise AssertionError("provider should not be called")
-
-    return MustNotBeCalledProvider()
-
-
 def provider_failure_provider(
     reason: str = "provider unavailable",
     diagnostic_class: (

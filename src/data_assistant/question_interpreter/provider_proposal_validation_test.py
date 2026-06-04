@@ -121,6 +121,89 @@ def test_unreflected_metric_ambiguity_still_non_answers() -> None:
     assert result.reason_code == contracts.NonAnswerReasonCode.AMBIGUOUS_METRIC
 
 
+def test_availability_shape_non_answers_via_missing_time_scope() -> None:
+    """A summarize proposal over a real metric with no time scope still rejects.
+
+    The deterministic availability guard is gone; the data-availability question
+    shape now reaches the provider, and the surviving time-scope gate (ADR-0011)
+    rejects it as MISSING_TIME_SCOPE rather than returning a Success.
+    """
+    proposal = question_interpreter.ProviderProposal(
+        intent="summarize",
+        metric="total revenue",
+        all_time=False,
+        field_operations=(),
+    )
+
+    result = question_interpreter.interpret_question(
+        question="What months do have revenue data?",
+        semantic_layer=_retail_style_semantic_layer(),
+        provider=_StaticProvider(proposal),
+    )
+
+    assert isinstance(result, contracts.NonAnswer)
+    assert result.reason_code == contracts.NonAnswerReasonCode.MISSING_TIME_SCOPE
+
+
+def test_rank_shape_non_answers_via_unsupported_intent() -> None:
+    """A rank proposal still rejects, now through provider-output validation.
+
+    The deterministic rank guard is gone; a non-summarize intent reaches the
+    surviving intent gate, which rejects it as UNSUPPORTED_INTENT.
+    """
+    proposal = question_interpreter.ProviderProposal(
+        intent="rank",
+        metric="total revenue",
+        field_operations=(
+            question_interpreter.ProviderFieldOperation(
+                operation="range_filter",
+                field="order date",
+                lower="2026-01-01",
+                upper="2026-01-31",
+            ),
+        ),
+    )
+
+    result = question_interpreter.interpret_question(
+        question="Which region had the highest total revenue in January 2026?",
+        semantic_layer=_retail_style_semantic_layer(),
+        provider=_StaticProvider(proposal),
+    )
+
+    assert isinstance(result, contracts.NonAnswer)
+    assert result.reason_code == contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT
+
+
+def test_unsupported_data_shape_non_answers_via_unknown_semantic_label() -> None:
+    """A summarize proposal over an unknown metric label still rejects.
+
+    The deterministic unsupported-data guard is gone; a label outside the
+    Semantic Layer reaches the surviving label gate, which rejects it as
+    UNKNOWN_SEMANTIC_LABEL.
+    """
+    proposal = question_interpreter.ProviderProposal(
+        intent="summarize",
+        metric="rows in my uploaded csv",
+        field_operations=(
+            question_interpreter.ProviderFieldOperation(
+                operation="range_filter",
+                field="order date",
+                lower="2026-01-01",
+                upper="2026-01-31",
+            ),
+        ),
+    )
+
+    result = question_interpreter.interpret_question(
+        question="How many rows are in the CSV I uploaded?",
+        semantic_layer=_retail_style_semantic_layer(),
+        provider=_StaticProvider(proposal),
+    )
+
+    assert isinstance(result, contracts.NonAnswer)
+    assert result.reason_code == contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL
+
+
 def test_group_by_requested_on_non_groupable_field_returns_unsupported_operation() -> (
     None
 ):

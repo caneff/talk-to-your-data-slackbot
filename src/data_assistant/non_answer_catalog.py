@@ -25,8 +25,6 @@ _StaticReasonCode: typing.TypeAlias = typing.Literal[
     contracts.NonAnswerReasonCode.NO_MATCHING_DATASET,
     contracts.NonAnswerReasonCode.NO_MATCHING_TABLE,
     contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
-    contracts.NonAnswerReasonCode.UNSUPPORTED_AVAILABILITY,
-    contracts.NonAnswerReasonCode.UNSUPPORTED_DATA,
     contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION,
     contracts.NonAnswerReasonCode.UNSUPPORTED_FILTER,
     contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT,
@@ -106,21 +104,6 @@ _DEFINITIONS: dict[contracts.NonAnswerReasonCode, _NonAnswerDefinition] = {
             "Try naming the measure or grouping more plainly, such as total "
             "revenue by region."
         ),
-    ),
-    contracts.NonAnswerReasonCode.UNSUPPORTED_AVAILABILITY: _NonAnswerDefinition(
-        response_kind=contracts.ResponseKind.UNSUPPORTED,
-        reason="The Data Assistant does not answer data-availability questions yet.",
-        context=("data availability",),
-        next_step=(
-            "Ask for a metric over a known period, such as: "
-            "What was total revenue by region in January 2026?"
-        ),
-    ),
-    contracts.NonAnswerReasonCode.UNSUPPORTED_DATA: _NonAnswerDefinition(
-        response_kind=contracts.ResponseKind.UNSUPPORTED,
-        reason="User-provided CSV files are not supported data sources.",
-        context=("unsupported data",),
-        next_step="Ask about an approved dataset instead.",
     ),
     contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.UNSUPPORTED,

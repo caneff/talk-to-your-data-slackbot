@@ -631,74 +631,101 @@ def test_data_assistant_stops_progress_after_question_interpreter_non_answer(
     )
 
 
-def test_data_assistant_rejects_rank_intent_before_provider_call(
+def test_data_assistant_rejects_rank_intent_through_provider_output(
     monkeypatch: pytest.MonkeyPatch,
     connect_orders: local_duckdb_fixture.OrdersConnector,
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
-    sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
+    """Rank intent rejects via provider-output validation (ADR-0023).
 
-    class ProviderThatMustNotBeCalled:
+    The pre-provider rank guard is gone, so the provider IS called; a
+    non-summarize intent then fails the surviving intent gate.
+    """
+    sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
+    provider_calls: list[str] = []
+
+    class RankIntentProvider:
         def propose_question_frame(
             self,
             *,
             question: str,
             semantic_layer_context: dict[str, object],
         ) -> question_interpreter.ProviderProposal:
-            del question, semantic_layer_context
-            raise AssertionError("rank intent guard should short-circuit provider")
+            del semantic_layer_context
+            provider_calls.append(question)
+            return question_interpreter.ProviderProposal(
+                intent="rank",
+                metric="total revenue",
+                field_operations=(
+                    question_interpreter.ProviderFieldOperation(
+                        operation="range_filter",
+                        field="order date",
+                        lower="2026-01-01",
+                        upper="2026-01-31",
+                    ),
+                ),
+            )
 
     with connect_orders((("2026-01-03", "North", "1200.00"),)) as connection:
         result = workflow_runner.run_data_assistant(
             connection,
             "Which region had the highest total revenue in January 2026?",
-            question_interpreter_provider=ProviderThatMustNotBeCalled(),
+            question_interpreter_provider=RankIntentProvider(),
             internal_identity=allowed_internal_identity,
         )
 
     assert result is sentinel_response
+    assert len(provider_calls) == 1
     assert len(captured_non_answers) == 1
     non_answer = captured_non_answers[0]
     assert non_answer.stage == contracts.NonAnswerStage.QUESTION_INTERPRETER
     assert non_answer.reason_code == contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT
 
 
-def test_data_assistant_rejects_availability_question_before_provider_call(
+def test_data_assistant_rejects_availability_question_through_time_scope_gate(
     monkeypatch: pytest.MonkeyPatch,
     connect_orders: local_duckdb_fixture.OrdersConnector,
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
-    sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
+    """Availability shape rejects via the time-scope gate (ADR-0023, ADR-0011).
 
-    class ProviderThatMustNotBeCalled:
+    The pre-provider availability guard is gone, so the provider IS called; a
+    summarize proposal with no time scope then fails the surviving time-scope
+    gate as MISSING_TIME_SCOPE.
+    """
+    sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
+    provider_calls: list[str] = []
+
+    class AvailabilityProvider:
         def propose_question_frame(
             self,
             *,
             question: str,
             semantic_layer_context: dict[str, object],
         ) -> question_interpreter.ProviderProposal:
-            del question, semantic_layer_context
-            raise AssertionError("availability guard should short-circuit provider")
+            del semantic_layer_context
+            provider_calls.append(question)
+            return question_interpreter.ProviderProposal(
+                intent="summarize",
+                metric="total revenue",
+                all_time=False,
+                field_operations=(),
+            )
 
     with connect_orders((("2026-01-03", "North", "1200.00"),)) as connection:
         result = workflow_runner.run_data_assistant(
             connection,
             "What months do have revenue data?",
-            question_interpreter_provider=ProviderThatMustNotBeCalled(),
+            question_interpreter_provider=AvailabilityProvider(),
             internal_identity=allowed_internal_identity,
         )
 
     assert result is sentinel_response
+    assert len(provider_calls) == 1
     assert len(captured_non_answers) == 1
     non_answer = captured_non_answers[0]
     assert non_answer.stage == contracts.NonAnswerStage.QUESTION_INTERPRETER
-    assert (
-        non_answer.reason_code == contracts.NonAnswerReasonCode.UNSUPPORTED_AVAILABILITY
-    )
-    # The honest availability reject must not masquerade as a clarification.
-    assert (
-        non_answer.reason_code != contracts.NonAnswerReasonCode.MISSING_REQUIRED_FIELD
-    )
+    assert non_answer.reason_code == contracts.NonAnswerReasonCode.MISSING_TIME_SCOPE
 
 
 def test_data_assistant_denies_dataset_access_before_request_or_preparation(
@@ -784,10 +811,36 @@ def test_data_assistant_returns_ambiguous_table_before_access_denial(
 def test_data_assistant_short_circuits_unsupported_question_before_preparing_data(
     monkeypatch: pytest.MonkeyPatch,
     connect_orders: local_duckdb_fixture.OrdersConnector,
-    canonical_question_provider: question_interpreter.QuestionInterpreterProvider,
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
+    """An interpreter Non-Answer stops the workflow before data preparation.
+
+    The unsupported-data ask now reaches the provider (ADR-0023); a proposal
+    over a label outside the Semantic Layer is rejected as an unknown semantic
+    label, and that Non-Answer must short-circuit before prepare_data runs.
+    """
     sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
+
+    class UnknownLabelProvider:
+        def propose_question_frame(
+            self,
+            *,
+            question: str,
+            semantic_layer_context: dict[str, object],
+        ) -> question_interpreter.ProviderProposal:
+            del question, semantic_layer_context
+            return question_interpreter.ProviderProposal(
+                intent="summarize",
+                metric="rows in my uploaded csv",
+                field_operations=(
+                    question_interpreter.ProviderFieldOperation(
+                        operation="range_filter",
+                        field="order date",
+                        lower="2026-01-01",
+                        upper="2026-01-31",
+                    ),
+                ),
+            )
 
     def fail_prepare_data(
         data_request: contracts.DataRequest,
@@ -802,7 +855,7 @@ def test_data_assistant_short_circuits_unsupported_question_before_preparing_dat
         result = workflow_runner.run_data_assistant(
             connection,
             "Can you use my CSV file to show total revenue by region in January 2026?",
-            question_interpreter_provider=canonical_question_provider,
+            question_interpreter_provider=UnknownLabelProvider(),
             internal_identity=allowed_internal_identity,
         )
 
@@ -810,7 +863,9 @@ def test_data_assistant_short_circuits_unsupported_question_before_preparing_dat
     assert len(captured_non_answers) == 1
     non_answer = captured_non_answers[0]
     assert non_answer.stage == contracts.NonAnswerStage.QUESTION_INTERPRETER
-    assert non_answer.context == ("unsupported data",)
+    assert (
+        non_answer.reason_code == contracts.NonAnswerReasonCode.UNKNOWN_SEMANTIC_LABEL
+    )
     assert non_answer.datasets == ()
 
 

@@ -11,7 +11,7 @@ import data_assistant.workflow.contracts as contracts
 
 def _non_answer(
     reason_code: contracts.NonAnswerReasonCode = (
-        contracts.NonAnswerReasonCode.UNSUPPORTED_DATA
+        contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT
     ),
     *,
     stage: contracts.NonAnswerStage = contracts.NonAnswerStage.QUESTION_INTERPRETER,
@@ -211,7 +211,7 @@ def test_response_composer_renders_through_injected_wording_provider() -> None:
             )
 
     response = response_composer.compose_non_answer_response(
-        _non_answer(contracts.NonAnswerReasonCode.UNSUPPORTED_DATA),
+        _non_answer(contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT),
         wording_provider=_SentinelWordingProvider(),
     )
 
@@ -269,7 +269,7 @@ def test_response_composer_renders_non_answer_copy_into_text() -> None:
     Exact wording is the catalog golden test's job; here we assert the composer
     threads whatever the catalog renders through its template and trust summary.
     """
-    non_answer = _non_answer(contracts.NonAnswerReasonCode.UNSUPPORTED_DATA)
+    non_answer = _non_answer(contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT)
     wording = non_answer_catalog.render_wording(non_answer)
     lowercased_reason = wording.reason[0].lower() + wording.reason[1:]
 
@@ -330,7 +330,7 @@ def test_response_composer_marks_ambiguity_as_clarification(
 @pytest.mark.parametrize(
     "reason_code",
     [
-        contracts.NonAnswerReasonCode.UNSUPPORTED_DATA,
+        contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT,
         contracts.NonAnswerReasonCode.NO_MATCHING_DATASET,
         contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
     ],

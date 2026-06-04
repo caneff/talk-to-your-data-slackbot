@@ -8,7 +8,6 @@ import data_assistant.question_interpreter._time_scope as time_scope
 import data_assistant.question_interpreter.proposals as proposals
 import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.workflow.contracts as contracts
-from data_assistant.question_interpreter import guards as interpreter_guards
 from data_assistant.question_interpreter import semantic_context
 
 _SUPPORTED_PROVIDER_INTENTS = frozenset({"summarize"})
@@ -21,24 +20,10 @@ def interpret_question(
     provider: proposals.QuestionInterpreterProvider,
 ) -> contracts.StageResult[contracts.QuestionFrame]:
     """Apply Provider Proposal Validation to produce a trusted Question Frame."""
-    normalized_question = interpreter_guards.normalize_question(question)
-    # Some requests are policy-level rejects; do not spend provider work on them.
-    if interpreter_guards.mentions_unsupported_data(normalized_question):
-        return non_answer_catalog.non_answer(
-            contracts.NonAnswerReasonCode.UNSUPPORTED_DATA,
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-        )
-    if interpreter_guards.mentions_rank_intent(normalized_question):
-        return non_answer_catalog.non_answer(
-            contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT,
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-        )
-    if interpreter_guards.mentions_availability_intent(normalized_question):
-        return non_answer_catalog.non_answer(
-            contracts.NonAnswerReasonCode.UNSUPPORTED_AVAILABILITY,
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-        )
-
+    # No deterministic pre-provider rejects (ADR-0023): support-boundary
+    # classification has a single source of truth in provider intent
+    # classification plus the surviving time-scope, metric-label, and
+    # output-validation gates below.
     # Semantic Layer context is intentionally business-facing: labels and
     # examples, not table names, SQL, column names, or access internals.
     semantic_layer_context = semantic_context.build_semantic_layer_context(
