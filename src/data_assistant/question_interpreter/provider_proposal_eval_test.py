@@ -7,7 +7,7 @@ import pytest
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.question_interpreter.provider_proposal_cases as proposal_cases
 import data_assistant.question_interpreter.provider_proposal_eval as proposal_eval
-import data_assistant.question_interpreter.test_support as test_support
+import data_assistant.question_interpreter.testing_support as test_support
 import data_assistant.semantic_layer.testing_support as semantic_layer_testing
 
 

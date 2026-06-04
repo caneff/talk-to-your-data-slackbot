@@ -7,7 +7,7 @@ import pytest
 import data_assistant.openai_support as openai_support
 import data_assistant.question_interpreter as question_interpreter
 import data_assistant.question_interpreter.openai_provider as openai_provider
-import data_assistant.question_interpreter.test_support as test_support
+import data_assistant.question_interpreter.testing_support as test_support
 
 
 def test_load_openai_provider_config_requires_api_key_only_when_selected() -> None:

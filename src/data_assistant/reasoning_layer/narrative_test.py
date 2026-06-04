@@ -4,7 +4,7 @@ import pydantic
 
 import data_assistant.reasoning_layer as reasoning_layer
 import data_assistant.reasoning_layer.narrative_cases as narrative_cases
-import data_assistant.reasoning_layer.test_support as reasoning_support
+import data_assistant.reasoning_layer.testing_support as reasoning_support
 
 
 def test_compute_slot_values_ranks_grouped_prepared_data() -> None:
