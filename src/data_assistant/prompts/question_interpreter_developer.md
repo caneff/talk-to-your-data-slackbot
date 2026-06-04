@@ -115,18 +115,28 @@ current Data Question states them.
   `as_of_date` by one principle: a relative window covers the most recent
   COMPLETE unit(s) and excludes the in-progress unit that contains `as_of_date`,
   because `as_of_date` is the notional today and counts as an incomplete day.
-  Then emit one full `range_filter` on the selected metric's own compatible date
-  field, exactly as for an explicit month. Formula, where unit = day, month, or
+  A relative phrase ALWAYS produces a SINGLE `range_filter` on the selected
+  metric's own compatible date field — one date operation, never one per
+  month/quarter and never more than one date operation for a single relative
+  phrase. Its lower bound is the first day of the EARLIEST unit in the window
+  and its upper bound is the last day of the most recent COMPLETE unit; the span
+  in between is one continuous range. Formula, where unit = day, month, or
   quarter: the window ends at the last complete unit before the in-progress one
   and spans N (or M) units back. Days: "yesterday" is `as_of − 1`; "last N days"
   is `(as_of − N)..(as_of − 1)` (exactly N days, never including `as_of`).
   Months: "last month" is the whole calendar month before `as_of`'s month; "last
   M months" lower is the first day of `(currentMonth − M)`, upper is the last day
-  of `(currentMonth − 1)`. Quarters: the same count-back over whole calendar
-  quarters. The in-progress unit is always excluded even when `as_of_date` is its
-  last day: with `as_of_date` "2026-06-30", June and Q2 are in progress, so "last
-  month" is May (2026-05-01..2026-05-31) and "last quarter" is Q1
-  (2026-01-01..2026-03-31), not June or Q2.
+  of `(currentMonth − 1)`. Quarters: "last quarter" is the whole calendar quarter
+  before `as_of`'s quarter; "last M quarters" lower is the first day of
+  `(currentQuarter − M)`, upper is the last day of `(currentQuarter − 1)`. The
+  in-progress-unit exclusion applies to EVERY family — singular and multi, month
+  AND quarter — even when `as_of_date` is that unit's last day. With `as_of_date`
+  "2026-06-30", June is the in-progress month and Q2 is the in-progress quarter,
+  so they are excluded from every relative window: "last month" is May
+  (2026-05-01..2026-05-31), "last two months" is April–May
+  (2026-04-01..2026-05-31, June excluded, ONE range), "last quarter" is Q1
+  (2026-01-01..2026-03-31), and "last three quarters" is Q3 2025–Q1 2026
+  (2025-07-01..2026-03-31, Q2 excluded, ONE range) — never June or Q2.
 - "before <month> <year>" means strictly earlier than the first day of that
   month: emit a range_filter with lower null and upper set to the last day of the
   preceding month. "before January 2024" → upper "2023-12-31" (not "2024-01-01",
@@ -241,6 +251,19 @@ date field_operation:
 The window is the 7 most recent complete days. as_of_date 2026-06-30 is the
 notional today and counts as incomplete, so the last day in the window is
 2026-06-29 and the window never includes 2026-06-30.
+
+For "What was total net revenue in the last two months?" with the same
+as_of_date, June is the in-progress month, so the two most recent complete
+months are April and May. Return one date field_operation — a SINGLE
+range_filter spanning both months, not one per month:
+
+- operation "range_filter", field "order date", lower "2026-04-01",
+  upper "2026-05-31", values []
+
+Lower is the first day of the earliest month in the window (April 1) and upper
+is the last day of the most recent complete month (May 31). Do not emit a second
+range_filter, and do not include June: a multi-period window is always one
+continuous range with the in-progress month excluded.
 
 For "What was total net revenue last quarter?" with the same as_of_date, the
 in-progress quarter is Q2 2026 (April–June) because 2026-06-30 falls in it, so
