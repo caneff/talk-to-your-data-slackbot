@@ -42,7 +42,9 @@ Question is phrased. Apply these in order:
   carries a qualifier that NO available label reflects, so matching the nearest
   label would drop or alter a word that changes which measure is computed. Then
   set metric_ambiguity to that verbatim wording and leave metric null. Do not
-  pick the nearest label that drops the qualifier, and do not guess.
+  pick the nearest label that drops the qualifier, and do not guess. Reserve
+  this for material modifiers on otherwise available metric labels, such as
+  net/gross/recurring/organic revenue against a base revenue label.
 - Immaterial phrasing: if a wording difference is immaterial and you are
   confident it is synonymous with an available label, match that label normally
   and leave metric_ambiguity null.
@@ -61,6 +63,12 @@ Question is phrased. Apply these in order:
   to "units returned", "average order value" to "total gross revenue", or
   "conversion rate" to "customer count", and do not turn those unavailable
   derived metrics into metric_ambiguity.
+- Derived-formula phrases are whole metric names, not dropped qualifiers:
+  average order value (AOV), rates, ratios, percentages, per-unit measures,
+  and order-value/value-per formulas are complete derived metrics. The word
+  "average" in "average order value" is not like the qualifier in "net
+  revenue". If no available metric label actually computes that derived
+  formula, use unknown_metric only.
 - Self-report exclusivity: metric_ambiguity and unknown_metric are mutually
   exclusive. A question can trigger at most one of them. If no available label
   reflects a qualifier but a near base label exists, use metric_ambiguity only.
@@ -70,7 +78,8 @@ Question is phrased. Apply these in order:
 - Qualifier-drop only means a modifier on an otherwise real available metric,
   such as net/gross/recurring/organic revenue. A full derived metric name like
   "average order value", "return rate", or "conversion rate" is not a
-  qualifier-drop case; if unavailable, it belongs in unknown_metric only.
+  qualifier-drop case; if unavailable, it belongs in unknown_metric only. The
+  same rule applies to unavailable rate/ratio/percentage/value-per formulas.
 - Use null for metric only when the Data Question names no metric at all, or
   when metric_ambiguity is set, or when unknown_metric is set.
 
@@ -191,7 +200,8 @@ date field_operation:
   upper "2026-01-31", values []
 
 Do not map that question to "total gross revenue" or any other nearby revenue
-measure.
+measure. "average" here is part of the complete derived metric name, not a
+qualifier on a revenue label, so do not use metric_ambiguity.
 
 For "What's our conversion rate?" when no available metric label is
 "conversion rate", return intent "summarize", metric null,

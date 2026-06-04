@@ -93,10 +93,12 @@ class ProviderProposal(pydantic.BaseModel):
             "computed. When set, leave metric null, leave unknown_metric null, "
             "and do not guess a label. Never set metric_ambiguity together with "
             "unknown_metric, and never copy the same wording into both fields. "
-            "Use this only for qualifier-drop cases, not for full derived metric "
-            "names such as average order value or conversion rate. Leave null "
-            "when the metric is unambiguous or genuinely synonymous with an "
-            "available label."
+            "Use this only for qualifier-drop cases on otherwise available "
+            "metric labels, not for full derived metric names such as average "
+            "order value (AOV), conversion rate, return rate, or other "
+            "rate/ratio/percentage/value-per formulas. Leave null when the "
+            "metric is unambiguous or genuinely synonymous with an available "
+            "label."
         ),
     )
     unknown_metric: str | None = pydantic.Field(
@@ -109,7 +111,10 @@ class ProviderProposal(pydantic.BaseModel):
             "metric_ambiguity null, and do not guess a label. Never set "
             "unknown_metric together with metric_ambiguity. Leave null when an "
             "available label matches or when the wording is merely a "
-            "metric-qualifier ambiguity (use metric_ambiguity instead)."
+            "metric-qualifier ambiguity (use metric_ambiguity instead). "
+            "Unavailable derived formulas such as AOV, rates, ratios, "
+            "percentages, or value-per measures belong here, not in "
+            "metric_ambiguity."
         ),
     )
     field_operations: tuple[ProviderFieldOperation, ...] = pydantic.Field(
