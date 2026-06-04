@@ -73,7 +73,7 @@ class OpenAIQuestionInterpreterProvider:
         question: str,
         semantic_layer_context: dict[str, object],
     ) -> ProviderProposal | ProviderFailure:
-        return openai_support.run_parse(
+        result = openai_support.run_parse(
             client=self._client,
             model=self._config.model,
             input_messages=_build_openai_input(
@@ -91,6 +91,15 @@ class OpenAIQuestionInterpreterProvider:
             extra_parse_kwargs={"temperature": 0},
             structured_output_attempts=_STRUCTURED_OUTPUT_ATTEMPTS,
         )
+        if isinstance(result, ProviderProposal):
+            return _canonicalize_provider_proposal(result)
+        return result
+
+
+def _canonicalize_provider_proposal(proposal: ProviderProposal) -> ProviderProposal:
+    if proposal.unknown_metric and proposal.metric_ambiguity:
+        return proposal.model_copy(update={"metric_ambiguity": None})
+    return proposal
 
 
 def _build_openai_input(
