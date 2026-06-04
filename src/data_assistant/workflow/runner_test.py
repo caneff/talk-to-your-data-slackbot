@@ -846,6 +846,7 @@ def test_data_assistant_short_circuits_unsupported_question_before_preparing_dat
         data_request: contracts.DataRequest,
         connection: object,
     ) -> contracts.PreparedData:
+        del data_request, connection
         raise AssertionError("prepare_data should not be called")
 
     monkeypatch.setattr(data_preparation, "prepare_data", fail_prepare_data)
