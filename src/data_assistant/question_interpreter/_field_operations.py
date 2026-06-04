@@ -16,18 +16,22 @@ def validate_field_filters(
     operation_proposals: tuple[proposals.ProviderFieldOperation, ...],
     semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> contracts.NonAnswer | tuple[str | None, tuple[contracts.FieldFilter[str], ...]]:
-    fields_by_label = _fields_by_label(semantic_layer)
-    if isinstance(fields_by_label, contracts.NonAnswer):
-        return fields_by_label
+    field_candidates_by_label = _field_candidates_by_label(semantic_layer)
     validated_filters: list[contracts.FieldFilter[str]] = []
     group_by_field: str | None = None
     for operation_proposal in operation_proposals:
-        field = fields_by_label.get(operation_proposal.field)
-        if field is None:
+        field_candidates = field_candidates_by_label.get(operation_proposal.field)
+        if field_candidates is None:
             return non_answer_catalog.unknown_semantic_label_non_answer(
                 "field",
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
             )
+        if len(field_candidates) > 1:
+            return non_answer_catalog.non_answer(
+                contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+                stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+            )
+        field = field_candidates[0]
         operation = schema.FieldOperation(operation_proposal.operation)
         if operation not in field.operations:
             return non_answer_catalog.non_answer(
@@ -61,19 +65,14 @@ def validate_field_filters(
     return group_by_field, tuple(validated_filters)
 
 
-def _fields_by_label(
+def _field_candidates_by_label(
     semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
-) -> dict[str, schema.SemanticField] | contracts.NonAnswer:
-    fields_by_label: dict[str, schema.SemanticField] = {}
+) -> dict[str, list[schema.SemanticField]]:
+    field_candidates_by_label: dict[str, list[schema.SemanticField]] = {}
     for table in semantic_layer.tables:
         for field in table.fields:
-            if field.label in fields_by_label:
-                return non_answer_catalog.non_answer(
-                    contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
-                    stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-                )
-            fields_by_label[field.label] = field
-    return fields_by_label
+            field_candidates_by_label.setdefault(field.label, []).append(field)
+    return field_candidates_by_label
 
 
 def _validate_range_filter(
