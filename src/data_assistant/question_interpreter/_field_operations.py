@@ -67,23 +67,13 @@ def _fields_by_label(
     fields_by_label: dict[str, schema.SemanticField] = {}
     for table in semantic_layer.tables:
         for field in table.fields:
-            existing_field = fields_by_label.get(field.label)
-            if existing_field is not None and not _same_validation_contract(
-                existing_field, field
-            ):
+            if field.label in fields_by_label:
                 return non_answer_catalog.non_answer(
                     contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
                     stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
                 )
-            fields_by_label.setdefault(field.label, field)
+            fields_by_label[field.label] = field
     return fields_by_label
-
-
-def _same_validation_contract(
-    left: schema.SemanticField,
-    right: schema.SemanticField,
-) -> bool:
-    return left.data_type == right.data_type and left.operations == right.operations
 
 
 def _validate_range_filter(

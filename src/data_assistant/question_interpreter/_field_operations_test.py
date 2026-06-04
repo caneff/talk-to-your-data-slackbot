@@ -50,6 +50,47 @@ def test_validate_field_filters_rejects_duplicate_semantic_field_labels() -> Non
     assert result.reason_code == contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT
 
 
+def test_duplicate_field_labels_are_rejected_even_when_contracts_match() -> None:
+    semantic_layer = semantic_layer_testing.semantic_layer_with_table(
+        columns={
+            "order_date": "date",
+            "region_east": "varchar",
+            "region_west": "varchar",
+            "revenue": "decimal",
+        },
+        fields=(
+            schema.SemanticField(
+                field_id="region_east",
+                label="region",
+                source_column="region_east",
+                data_type=schema.DataType.STRING,
+                operations=(schema.FieldOperation.INCLUDE_FILTER,),
+            ),
+            schema.SemanticField(
+                field_id="region_west",
+                label="region",
+                source_column="region_west",
+                data_type=schema.DataType.STRING,
+                operations=(schema.FieldOperation.INCLUDE_FILTER,),
+            ),
+        ),
+    )
+
+    result = field_operations.validate_field_filters(
+        (
+            question_interpreter.ProviderFieldOperation(
+                operation="include_filter",
+                field="region",
+                values=("east",),
+            ),
+        ),
+        semantic_layer,
+    )
+
+    assert isinstance(result, contracts.NonAnswer)
+    assert result.reason_code == contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT
+
+
 def test_validate_field_filters_coerces_decimal_values_filters() -> None:
     semantic_layer = semantic_layer_testing.semantic_layer_with_table(
         fields=(
