@@ -94,10 +94,6 @@ class NonAnswerReasonCode(enum.StrEnum):
     PROVIDER_FAILURE = "provider_failure"
     # Provider proposed a label outside the Semantic Layer.
     UNKNOWN_SEMANTIC_LABEL = "unknown_semantic_label"
-    # Question asks which data or periods exist rather than for a metric.
-    UNSUPPORTED_AVAILABILITY = "unsupported_availability"
-    # Question asks about data outside approved Curated Datasets.
-    UNSUPPORTED_DATA = "unsupported_data"
     # Question uses filters not supported by the current workflow.
     UNSUPPORTED_FILTER = "unsupported_filter"
     # Question asks for a Semantic Field operation outside approved uses.

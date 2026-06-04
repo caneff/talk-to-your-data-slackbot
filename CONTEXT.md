@@ -36,14 +36,10 @@ _Avoid_: Invalid question, parser failure, unsupported shape
 **Rank Intent**:
 An **Unsupported Intent** for Data Questions that ask for top, bottom, highest,
 lowest, most, least, biggest, or smallest results. v1 rejects this intent rather
-than collapsing it into a grouped summarize answer.
+than collapsing it into a grouped summarize answer. The rejection comes from
+provider output validation (the provider classifies the non-summarize intent),
+not a deterministic pre-provider check (ADR-0023).
 _Avoid_: Grouped summary, comparison, sort request
-
-**Unsupported Intent Guard**:
-A deterministic **Question Interpreter** check that rejects high-confidence
-**Unsupported Intent** wording before provider calls, backed by provider-output
-validation that rejects every non-summarize intent.
-_Avoid_: Prompt-only support policy, LLM fallback, best-effort classification
 
 **Slack Acknowledgement**:
 The quick confirmation sent to Slack that a request was received, before the

@@ -251,28 +251,26 @@ CONTRACT_SNAPSHOT_CASES = (
             contracts.NonAnswerReasonCode.MISSING_TIME_SCOPE, stage=_STAGE
         ),
     ),
-    provider_snapshot_case(
-        name="unsupported_data",
+    # No deterministic pre-provider rejects (ADR-0023): these support-boundary
+    # shapes reach the provider and reject through the surviving gates. An
+    # unsupported-data ask resolves to an unknown Semantic Layer label, and a
+    # rank ask resolves to a non-summarize intent.
+    snapshot_case(
+        name="unsupported_data_unknown_label",
         question=(
             "Can you use my CSV file to show total revenue by region in January 2026?"
         ),
-        provider=interpreter_support.provider_that_must_not_be_called(),
-        expected=non_answer_catalog.non_answer(
-            contracts.NonAnswerReasonCode.UNSUPPORTED_DATA, stage=_STAGE
+        proposal=interpreter_support.question_frame_proposal(
+            metric="rows in my uploaded csv",
+        ),
+        expected=non_answer_catalog.unknown_semantic_label_non_answer(
+            "metric", stage=_STAGE
         ),
     ),
-    provider_snapshot_case(
-        name="rank_intent_pre_provider_guard",
+    snapshot_case(
+        name="rank_intent",
         question="Which region had the highest total revenue in January 2026?",
-        provider=interpreter_support.provider_that_must_not_be_called(),
-        expected=non_answer_catalog.non_answer(
-            contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT, stage=_STAGE
-        ),
-    ),
-    provider_snapshot_case(
-        name="rank_intent_most_money_pre_provider_guard",
-        question="Which region made most money in January?",
-        provider=interpreter_support.provider_that_must_not_be_called(),
+        proposal=interpreter_support.question_frame_proposal(intent="rank"),
         expected=non_answer_catalog.non_answer(
             contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT, stage=_STAGE
         ),
