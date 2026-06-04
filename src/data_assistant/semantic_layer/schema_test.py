@@ -70,3 +70,17 @@ def test_metric_requires_kind() -> None:
                 "source_column": "revenue",
             }
         )
+
+
+def test_metric_aliases_default_to_empty_tuple() -> None:
+    metric = schema.Metric.model_validate(
+        {
+            "metric_id": "total_revenue",
+            "label": "total revenue",
+            "expression": "sum(revenue)",
+            "source_column": "revenue",
+            "kind": "money",
+        }
+    )
+
+    assert metric.aliases == ()

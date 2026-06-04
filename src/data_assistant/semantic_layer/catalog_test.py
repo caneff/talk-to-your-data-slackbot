@@ -107,6 +107,102 @@ def test_catalog_lookup_methods_reject_invalid_ids() -> None:
         catalog.tables_for_dataset_id("missing")
 
 
+def test_catalog_rejects_duplicate_metric_aliases_within_one_table() -> None:
+    with pytest.raises(
+        ValueError,
+        match="Duplicate Metric aliases in Dataset Table orders: order volume",
+    ):
+        SemanticLayerCatalog(
+            datasets=(_dataset(dataset_id="retail_ops", table_ids=("orders",)),),
+            tables=(
+                _table(
+                    table_id="orders",
+                    dataset_id="retail_ops",
+                    metrics=(
+                        _metric(
+                            metric_id="order_count",
+                            label="order count",
+                            aliases=("order volume",),
+                        ),
+                        _metric(
+                            metric_id="gross_margin",
+                            label="gross margin",
+                            aliases=("order volume",),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+
+def test_catalog_rejects_metric_alias_matching_other_metric_label() -> None:
+    with pytest.raises(
+        ValueError,
+        match=(
+            "Metric aliases collide with canonical Metric labels in Dataset Table "
+            "orders: order count"
+        ),
+    ):
+        SemanticLayerCatalog(
+            datasets=(_dataset(dataset_id="retail_ops", table_ids=("orders",)),),
+            tables=(
+                _table(
+                    table_id="orders",
+                    dataset_id="retail_ops",
+                    metrics=(
+                        _metric(
+                            metric_id="total_orders",
+                            label="total orders",
+                            aliases=("order count",),
+                        ),
+                        _metric(
+                            metric_id="order_count",
+                            label="order count",
+                            aliases=("orders",),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+
+def test_catalog_allows_metric_alias_reuse_across_tables() -> None:
+    catalog = SemanticLayerCatalog(
+        datasets=(
+            _dataset(
+                dataset_id="retail_ops",
+                table_ids=("orders", "support_tickets"),
+            ),
+        ),
+        tables=(
+            _table(
+                table_id="orders",
+                dataset_id="retail_ops",
+                metrics=(
+                    _metric(
+                        metric_id="order_count",
+                        label="order count",
+                        aliases=("order volume",),
+                    ),
+                ),
+            ),
+            _table(
+                table_id="support_tickets",
+                dataset_id="retail_ops",
+                metrics=(
+                    _metric(
+                        metric_id="support_ticket_count",
+                        label="support ticket count",
+                        aliases=("order volume",),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    assert len(catalog.tables) == 2
+
+
 def _dataset(
     *,
     dataset_id: str,
@@ -125,6 +221,7 @@ def _table(
     *,
     table_id: str,
     dataset_id: str,
+    metrics: tuple[schema.Metric, ...] | None = None,
 ) -> schema.DatasetTable:
     return schema.DatasetTable(
         table_id=table_id,
@@ -135,15 +232,7 @@ def _table(
             schema.TableColumn(column_id="region", data_type="string"),
             schema.TableColumn(column_id="revenue", data_type="decimal"),
         ),
-        metrics=(
-            schema.Metric(
-                metric_id="total_revenue",
-                label="total revenue",
-                expression="sum(revenue)",
-                source_column="revenue",
-                kind=schema.MetricKind.MONEY,
-            ),
-        ),
+        metrics=metrics or (_metric(),),
         fields=(
             schema.SemanticField(
                 field_id="region",
@@ -153,4 +242,20 @@ def _table(
                 operations=(schema.FieldOperation.GROUP_BY,),
             ),
         ),
+    )
+
+
+def _metric(
+    *,
+    metric_id: str = "total_revenue",
+    label: str = "total revenue",
+    aliases: tuple[str, ...] = (),
+) -> schema.Metric:
+    return schema.Metric(
+        metric_id=metric_id,
+        label=label,
+        aliases=aliases,
+        expression="sum(revenue)",
+        source_column="revenue",
+        kind=schema.MetricKind.MONEY,
     )

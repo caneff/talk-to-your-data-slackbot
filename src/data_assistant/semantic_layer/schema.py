@@ -51,6 +51,7 @@ class Metric(_SemanticLayerModel):
 
     metric_id: str
     label: str
+    aliases: tuple[str, ...] = ()
     expression: str
     source_column: str
     kind: MetricKind

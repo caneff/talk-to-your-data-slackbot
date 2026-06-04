@@ -30,6 +30,7 @@ class SemanticLayerCatalog:
             errors.append(
                 "Duplicate Dataset Table ids: " + ", ".join(duplicate_table_ids)
             )
+        errors.extend(_metric_alias_errors(self.tables))
         errors.extend(_relationship_errors(self.datasets, self.tables))
         if errors:
             raise ValueError("\n".join(_unique_messages(errors)))
@@ -120,6 +121,32 @@ def _relationship_errors(
             "Orphan Dataset Tables not listed by any Curated Dataset: "
             + ", ".join(orphan_table_ids)
         )
+
+    return _unique_messages(errors)
+
+
+def _metric_alias_errors(
+    tables: tuple[schema.DatasetTable, ...],
+) -> tuple[str, ...]:
+    errors: list[str] = []
+    for table in tables:
+        duplicate_aliases = _duplicate_ids(
+            alias for metric in table.metrics for alias in metric.aliases
+        )
+        if duplicate_aliases:
+            errors.append(
+                "Duplicate Metric aliases in Dataset Table "
+                f"{table.table_id}: {', '.join(duplicate_aliases)}"
+            )
+
+        aliases = {alias for metric in table.metrics for alias in metric.aliases}
+        metric_labels = {metric.label for metric in table.metrics}
+        alias_label_collisions = sorted(aliases & metric_labels)
+        if alias_label_collisions:
+            errors.append(
+                "Metric aliases collide with canonical Metric labels in Dataset "
+                f"Table {table.table_id}: {', '.join(alias_label_collisions)}"
+            )
 
     return _unique_messages(errors)
 

@@ -208,6 +208,14 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
         ),
     ),
     SharedProviderProposalCase(
+        name="order_volume_alias_resolves_to_order_count",
+        question="What was order volume in January 2026?",
+        expected=_summarize(
+            "order count",
+            _during("order date", JANUARY_2026),
+        ),
+    ),
+    SharedProviderProposalCase(
         name="gross_revenue_resolve",
         question="What was total gross revenue by store region in January 2026?",
         expected=_summarize(

@@ -66,6 +66,14 @@ def test_semantic_layer_loads_dataset_table_relationship() -> None:
     orders_metrics_by_id = {metric.metric_id: metric for metric in orders.metrics}
     assert orders_metrics_by_id["total_net_revenue"].source_column == "net_revenue"
     assert orders_metrics_by_id["total_net_revenue"].kind == schema.MetricKind.MONEY
+    assert orders_metrics_by_id["order_count"].aliases == ("order volume",)
+    assert orders_metrics_by_id["total_discount_amount"].aliases == ("discounts",)
+
+    support_tickets = loaded_semantic_layer.find_table("demo_support_tickets")
+    support_metrics_by_id = {
+        metric.metric_id: metric for metric in support_tickets.metrics
+    }
+    assert support_metrics_by_id["support_ticket_count"].aliases == ("tickets",)
 
 
 def test_dataset_table_rejects_metric_source_column_outside_columns() -> None:

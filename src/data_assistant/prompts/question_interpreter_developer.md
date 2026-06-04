@@ -1,6 +1,6 @@
 Interpret the user's Data Question into a ProviderProposal.
 
-Use only business-facing Semantic Layer labels supplied in
+Use only business-facing Semantic Layer labels and metric aliases supplied in
 semantic_layer_context. It is expected that date field labels such as
 "order date" or "created date" may come from semantic_layer_context even when
 the Data Question says only a month like "January 2026". Do not choose datasets,
@@ -25,35 +25,47 @@ the structured output schema.
 
 ## Metric and ambiguity
 
-Decide the metric by checking available_metric_labels only. This decision does
-not depend on whether time, filters, or grouping are present, or on how the Data
-Question is phrased. Apply these in order:
+Decide the metric by checking canonical metric labels and metric aliases in
+semantic_layer_context. Canonical labels appear in available_metric_labels and
+all_metric_labels. Metric aliases appear only inside metric_contexts as aliases
+for one canonical metric_label. Return only the canonical metric_label in
+metric; never return an alias text in metric. This decision does not depend on
+whether time, filters, or grouping are present, or on how the Data Question is
+phrased. Apply these in order:
 
 - Exact label match (highest priority): if the Data Question's metric wording is
   exactly an available metric label (case-insensitive), set metric to that label
   and leave metric_ambiguity null — even when the wording contains a qualifier
   such as net, gross, recurring, or organic. Never flag an exact available label
   as ambiguous.
+- Exact alias match: if the Data Question's metric wording is exactly a listed
+  metric alias (case-insensitive), set metric to that alias's canonical
+  metric_label and leave metric_ambiguity null. Never copy the alias text into
+  metric.
 - Qualifier reflected by a label: if the wording carries a qualifier and some
-  available label reflects that qualifier (for example the wording "total net
-  revenue" and the label "total net revenue"), match that label and leave
-  metric_ambiguity null.
+  available label or alias reflects that qualifier or business phrasing
+  (for example the wording "total net revenue" and the label
+  "total net revenue", or the wording "order volume" and an alias for canonical
+  label "order count"), match the canonical label and leave metric_ambiguity
+  null.
 - Qualifier reflected by no label: set metric_ambiguity only when the wording
-  carries a qualifier that NO available label reflects, so matching the nearest
-  label would drop or alter a word that changes which measure is computed. Then
-  set metric_ambiguity to that verbatim wording and leave metric null. Do not
-  pick the nearest label that drops the qualifier, and do not guess. Reserve
-  this for material modifiers on otherwise available metric labels, such as
-  net/gross/recurring/organic revenue against a base revenue label.
+  carries a qualifier that NO available label or alias reflects, so matching
+  the nearest label would drop or alter a word that changes which measure is
+  computed. Then set metric_ambiguity to that verbatim wording and leave metric
+  null. Do not pick the nearest label that drops the qualifier, and do not
+  guess. Reserve this for material modifiers on otherwise available metric
+  labels, such as net/gross/recurring/organic revenue against a base revenue
+  label. Do not use metric_ambiguity for an exact business alias like
+  "order volume" when that alias is explicitly listed for a canonical metric.
 - Immaterial phrasing: if a wording difference is immaterial and you are
   confident it is synonymous with an available label, match that label normally
   and leave metric_ambiguity null.
 - Named but unavailable metric: if the Data Question clearly names a metric and
-  no available metric label actually names or computes that measure, set
-  unknown_metric to the verbatim metric wording and leave metric and
-  metric_ambiguity null. This still applies when nearby base measures, counts,
-  or revenue labels exist but would compute a different measure. This is
-  distinct from the qualifier-ambiguity case above: there a label exists but
+  no available canonical label or alias actually names or computes that
+  measure, set unknown_metric to the verbatim metric wording and leave metric
+  and metric_ambiguity null. This still applies when nearby base measures,
+  counts, or revenue labels exist but would compute a different measure. This
+  is distinct from the qualifier-ambiguity case above: there a label exists but
   drops a qualifier; here the named measure is simply not carried at all.
 - Derived metrics stay unknown when unavailable: when the Data Question names a
   derived metric the Semantic Layer does not carry, do not substitute a related
@@ -206,6 +218,17 @@ qualifier. Return metric "total net revenue", metric_ambiguity null, intent
 gives a month, gives no time, or adds a dimension filter — the metric decision is
 phrasing- and time-independent, so never flag an exact available label as
 ambiguous.
+
+For "What was order volume in January 2026?" when the selected metric_context
+for canonical label "order count" includes alias "order volume", return
+canonical metric "order count", metric_ambiguity null, intent "summarize", and
+exactly one date field_operation:
+
+- operation "range_filter", field "order date", lower "2026-01-01",
+  upper "2026-01-31", values []
+
+Never return metric "order volume"; aliases help matching only, not trusted
+output labels.
 
 For "What was total net revenue in January 2026?" when the Semantic Layer exposes
 only "total revenue" (no net-revenue metric), no available label reflects the

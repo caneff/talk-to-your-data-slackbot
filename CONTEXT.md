@@ -96,6 +96,12 @@ customer count, that the **Data Assistant** can aggregate to answer a **Data
 Question**.
 _Avoid_: Aggregate, KPI, calculation
 
+**Metric Alias**:
+Approved alternate business phrasing for a **Metric**. A **Metric Alias** lets a
+**Data Question** use common team language while the trusted **Question Frame**
+still carries the canonical **Metric** label.
+_Avoid_: Synonym, nickname, duplicate metric
+
 **Metric Kind**:
 The kind of quantity a **Metric** represents — for example money, count, or
 ratio — which determines how its value is presented. Distinct from the
