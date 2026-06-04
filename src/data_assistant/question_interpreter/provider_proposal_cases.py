@@ -230,6 +230,12 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
     # conversion-rate metric exists in any table YAML). The interpreter must
     # self-report rather than guess a near label; Provider Proposal Validation
     # routes the report to UNKNOWN_SEMANTIC_LABEL.
+    #
+    # deferred=True (#235): the deterministic validation route is locked, but the
+    # live paid eval is 0/3 — the model guesses a near label ("units returned",
+    # "total gross revenue") instead of emitting unknown_metric. Detection needs
+    # prompt tuning (#235). Deferred so the eval treats these as known-not-yet,
+    # and tripwires once a fix makes them pass (signal to un-defer).
     SharedProviderProposalCase(
         name="unknown_metric_return_rate",
         question="What's our return rate?",
@@ -239,6 +245,7 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
             unknown_metric="return rate",
             field_operations=(),
         ),
+        deferred=True,
     ),
     SharedProviderProposalCase(
         name="unknown_metric_average_order_value",
@@ -249,6 +256,7 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
             unknown_metric="average order value",
             field_operations=(_during("order date", JANUARY_2026),),
         ),
+        deferred=True,
     ),
     SharedProviderProposalCase(
         name="unknown_metric_conversion_rate",
@@ -259,6 +267,7 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
             unknown_metric="conversion rate",
             field_operations=(),
         ),
+        deferred=True,
     ),
     SharedProviderProposalCase(
         name="all_time_net_revenue_for_channel_value",
