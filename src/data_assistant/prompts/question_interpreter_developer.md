@@ -46,8 +46,14 @@ Question is phrased. Apply these in order:
 - Immaterial phrasing: if a wording difference is immaterial and you are
   confident it is synonymous with an available label, match that label normally
   and leave metric_ambiguity null.
+- Named but unavailable metric: if the Data Question clearly names a metric and
+  NO available label matches it at all (no near label, and it is not a
+  qualifier-ambiguity case), set unknown_metric to the verbatim metric wording
+  and leave metric and metric_ambiguity null. This is distinct from the
+  qualifier-ambiguity case above: there a label exists but drops a qualifier;
+  here the named measure is simply not carried at all.
 - Use null for metric only when the Data Question names no metric at all, or
-  when metric_ambiguity is set.
+  when metric_ambiguity is set, or when unknown_metric is set.
 
 ## Field operations
 

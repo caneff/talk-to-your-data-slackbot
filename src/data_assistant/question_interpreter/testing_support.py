@@ -93,6 +93,7 @@ def question_frame_proposal(
     intent: str | None = "summarize",
     metric: str | None = "total revenue",
     metric_ambiguity: str | None = None,
+    unknown_metric: str | None = None,
     all_time: bool = False,
     field_operations: (
         tuple[question_interpreter.ProviderFieldOperation, ...] | object
@@ -122,6 +123,7 @@ def question_frame_proposal(
         intent=intent,
         metric=metric,
         metric_ambiguity=metric_ambiguity,
+        unknown_metric=unknown_metric,
         all_time=all_time,
         field_operations=active_field_operations,
     )
