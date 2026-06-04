@@ -90,20 +90,31 @@ class ProviderProposal(pydantic.BaseModel):
             "when its metric carries a qualifier (e.g. net, gross, recurring, "
             "organic) that no available metric label reflects, such that matching "
             "a label would drop or alter a word that changes which measure is "
-            "computed. When set, leave metric null and do not guess a label. "
-            "Leave null when the metric is unambiguous or genuinely synonymous "
-            "with an available label."
+            "computed. When set, leave metric null, leave unknown_metric null, "
+            "and do not guess a label. Never set metric_ambiguity together with "
+            "unknown_metric, and never copy the same wording into both fields. "
+            "Use this only for qualifier-drop cases on otherwise available "
+            "metric labels, not for full derived metric names such as average "
+            "order value (AOV), conversion rate, return rate, or other "
+            "rate/ratio/percentage/value-per formulas. Leave null when the "
+            "metric is unambiguous or genuinely synonymous with an available "
+            "label."
         ),
     )
     unknown_metric: str | None = pydantic.Field(
         default=None,
         description=(
             "Set to the verbatim metric wording from the Data Question when it "
-            "clearly names a metric and NO available metric label matches it at "
-            "all (no near label, and not a qualifier-ambiguity case). When set, "
-            "leave metric and metric_ambiguity null and do not guess a label. "
-            "Leave null when an available label matches or when the wording is "
-            "merely a metric-qualifier ambiguity (use metric_ambiguity instead)."
+            "clearly names a metric and no available metric label actually names "
+            "or computes that measure, even if nearby base measures or related "
+            "counts exist. When set, leave metric null, leave "
+            "metric_ambiguity null, and do not guess a label. Never set "
+            "unknown_metric together with metric_ambiguity. Leave null when an "
+            "available label matches or when the wording is merely a "
+            "metric-qualifier ambiguity (use metric_ambiguity instead). "
+            "Unavailable derived formulas such as AOV, rates, ratios, "
+            "percentages, or value-per measures belong here, not in "
+            "metric_ambiguity."
         ),
     )
     field_operations: tuple[ProviderFieldOperation, ...] = pydantic.Field(

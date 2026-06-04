@@ -241,6 +241,35 @@ def test_openai_provider_returns_question_frame_proposal_from_parsed_response() 
     assert "prompt_context" not in user_payload
 
 
+def test_openai_provider_clears_ambiguity_when_unknown_metric_is_reported() -> None:
+    class FakeParsedResponse:
+        output_parsed = question_interpreter.ProviderProposal(
+            intent="summarize",
+            metric=None,
+            metric_ambiguity="average order value",
+            unknown_metric="average order value",
+            field_operations=(
+                question_interpreter.ProviderFieldOperation(
+                    operation="range_filter",
+                    field="order date",
+                    lower="2026-01-01",
+                    upper="2026-01-31",
+                ),
+            ),
+        )
+
+    provider = _openai_provider_returning(FakeParsedResponse())
+
+    result = provider.propose_question_frame(
+        question="What was our average order value in January 2026?",
+        semantic_layer_context={"datasets": []},
+    )
+
+    assert result == FakeParsedResponse.output_parsed.model_copy(
+        update={"metric_ambiguity": None}
+    )
+
+
 def test_openai_provider_schema_avoids_union_items_for_field_operations() -> None:
     response_schema = question_interpreter.ProviderProposal.model_json_schema()
     field_operations_schema = response_schema["properties"]["field_operations"]
