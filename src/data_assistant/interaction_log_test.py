@@ -8,12 +8,46 @@ touch the canonical ``logs/interactions.jsonl``.
 
 from __future__ import annotations
 
+import ast
 import json
 import pathlib
+import sys
+import textwrap
 
 import pytest
 
 import data_assistant.interaction_log as interaction_log
+
+_INTERACTION_LOG_ALLOWED_NON_STDLIB_ROOTS: frozenset[str] = frozenset()
+
+
+def _module_level_import_names(module_source: str) -> set[str]:
+    names: set[str] = set()
+    module = ast.parse(module_source)
+    for statement in module.body:
+        if isinstance(statement, ast.Import):
+            names.update(alias.name for alias in statement.names)
+        elif isinstance(statement, ast.ImportFrom) and statement.module is not None:
+            names.add(statement.module)
+    return names
+
+
+def _module_level_import_roots(module_source: str) -> set[str]:
+    return {name.split(".", 1)[0] for name in _module_level_import_names(module_source)}
+
+
+def _assert_stdlib_only_module_level_imports(module_source: str) -> None:
+    import_names = _module_level_import_names(module_source)
+    forbidden_imports = sorted(
+        name
+        for name in import_names
+        if name.split(".", 1)[0] not in sys.stdlib_module_names
+        and name.split(".", 1)[0] not in _INTERACTION_LOG_ALLOWED_NON_STDLIB_ROOTS
+    )
+    assert not forbidden_imports, (
+        "interaction_log.py must stay stdlib-only at module scope; "
+        f"forbidden imports: {forbidden_imports}"
+    )
 
 
 def _record(**overrides: object) -> dict[str, object]:
@@ -132,6 +166,45 @@ def test_flag_vocabulary_constant_is_correctness_formatting_investigate() -> Non
 def test_default_log_path_is_repo_root_logs_interactions_jsonl() -> None:
     assert interaction_log.DEFAULT_LOG_PATH.name == "interactions.jsonl"
     assert interaction_log.DEFAULT_LOG_PATH.parent.name == "logs"
+
+
+def test_interaction_log_module_level_imports_are_stdlib_only() -> None:
+    module_source = (
+        interaction_log.DEFAULT_LOG_PATH.parents[1]
+        / "src"
+        / "data_assistant"
+        / "interaction_log.py"
+    )
+    source_text = module_source.read_text(encoding="utf-8")
+
+    _assert_stdlib_only_module_level_imports(source_text)
+
+    assert _module_level_import_roots(source_text) == {
+        "__future__",
+        "contextlib",
+        "dataclasses",
+        "json",
+        "os",
+        "pathlib",
+        "tempfile",
+        "typing",
+    }
+
+
+def test_stdlib_guard_rejects_pandas_and_data_assistant_imports() -> None:
+    with pytest.raises(AssertionError) as excinfo:
+        _assert_stdlib_only_module_level_imports(
+            textwrap.dedent(
+                """
+                import json
+                import pandas
+                from data_assistant.workflow import contracts
+                """
+            )
+        )
+
+    assert "pandas" in str(excinfo.value)
+    assert "data_assistant.workflow" in str(excinfo.value)
 
 
 # --- Interaction Log Retention Policy ---------------------------------------
