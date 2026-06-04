@@ -47,11 +47,30 @@ Question is phrased. Apply these in order:
   confident it is synonymous with an available label, match that label normally
   and leave metric_ambiguity null.
 - Named but unavailable metric: if the Data Question clearly names a metric and
-  NO available label matches it at all (no near label, and it is not a
-  qualifier-ambiguity case), set unknown_metric to the verbatim metric wording
-  and leave metric and metric_ambiguity null. This is distinct from the
-  qualifier-ambiguity case above: there a label exists but drops a qualifier;
-  here the named measure is simply not carried at all.
+  no available metric label actually names or computes that measure, set
+  unknown_metric to the verbatim metric wording and leave metric and
+  metric_ambiguity null. This still applies when nearby base measures, counts,
+  or revenue labels exist but would compute a different measure. This is
+  distinct from the qualifier-ambiguity case above: there a label exists but
+  drops a qualifier; here the named measure is simply not carried at all.
+- Derived metrics stay unknown when unavailable: when the Data Question names a
+  derived metric the Semantic Layer does not carry, do not substitute a related
+  count, revenue, or base measure just because it sounds nearby. If "return
+  rate", "average order value", or "conversion rate" is not an available metric
+  label, report that exact wording via unknown_metric. Do not map "return rate"
+  to "units returned", "average order value" to "total gross revenue", or
+  "conversion rate" to "customer count", and do not turn those unavailable
+  derived metrics into metric_ambiguity.
+- Self-report exclusivity: metric_ambiguity and unknown_metric are mutually
+  exclusive. A question can trigger at most one of them. If no available label
+  reflects a qualifier but a near base label exists, use metric_ambiguity only.
+  If no available metric label matches the named measure at all, use
+  unknown_metric only. Never set both fields in the same proposal, and never
+  copy the same wording into both fields.
+- Qualifier-drop only means a modifier on an otherwise real available metric,
+  such as net/gross/recurring/organic revenue. A full derived metric name like
+  "average order value", "return rate", or "conversion rate" is not a
+  qualifier-drop case; if unavailable, it belongs in unknown_metric only.
 - Use null for metric only when the Data Question names no metric at all, or
   when metric_ambiguity is set, or when unknown_metric is set.
 
@@ -157,6 +176,28 @@ only "total revenue" (no net-revenue metric), no available label reflects the
 "net" qualifier, and matching "total revenue" would drop a word that changes
 which measure is computed. Set metric_ambiguity to "net revenue", leave metric
 null, and intent "summarize". Do not match "total revenue" by dropping "net".
+
+For "What's our return rate?" when no available metric label is "return rate",
+return intent "summarize", metric null, metric_ambiguity null,
+unknown_metric "return rate", and no field_operations. Do not map that question
+to "units returned" or any other nearby base measure.
+
+For "What was our average order value in January 2026?" when no available
+metric label is "average order value", return intent "summarize", metric null,
+metric_ambiguity null, unknown_metric "average order value", and exactly one
+date field_operation:
+
+- operation "range_filter", field "order date", lower "2026-01-01",
+  upper "2026-01-31", values []
+
+Do not map that question to "total gross revenue" or any other nearby revenue
+measure.
+
+For "What's our conversion rate?" when no available metric label is
+"conversion rate", return intent "summarize", metric null,
+metric_ambiguity null, unknown_metric "conversion rate", and no
+field_operations. Do not map that question to "customer count", and do not use
+metric_ambiguity just because a nearby count metric exists.
 
 For "What was customer count by customer region in January 2026?", return intent
 "summarize" and exactly these field_operations when the Semantic Layer exposes
