@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Reject commits that stage a test file using the legacy test_*.py prefix.
+#
+# Convention: test files use the *_test.py suffix; non-test helpers carry no
+# test_ prefix (e.g. testing_support.py). pytest collection is allow-list only,
+# so a mis-prefixed file is silently skipped/collected rather than erroring --
+# this hook makes it a hard, commit-time failure instead.
+#
+# Activated via the repo's shared `core.hooksPath = .githooks`. Checks staged
+# files under src/ and scripts/. Bypass (at your own risk) with
+# `git commit --no-verify`.
+set -euo pipefail
+
+offenders=$(
+  git diff --cached --name-only --diff-filter=d \
+    | grep -E '^(src|scripts)/(.*/)?test_[^/]*\.py$' || true
+)
+
+if [ -n "$offenders" ]; then
+  {
+    echo "Test files must use the '*_test.py' suffix, not the 'test_*.py' prefix:"
+    echo "$offenders" | sed 's/^/  - /'
+    echo "Rename each (test_foo.py -> foo_test.py); a non-test helper should drop"
+    echo "the test_ prefix entirely (e.g. testing_support.py)."
+  } >&2
+  exit 1
+fi
