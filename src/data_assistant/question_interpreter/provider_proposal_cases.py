@@ -52,6 +52,16 @@ MAY_2026 = _DateRange("2026-05-01", "2026-05-31")
 JUNE_2026 = _DateRange("2026-06-01", "2026-06-30")
 YEAR_2026 = _DateRange("2026-01-01", "2026-12-31")
 
+# Relative-date windows resolved against as_of_date 2026-06-30 (#197). Each
+# covers the most recent COMPLETE unit(s), excluding the in-progress unit that
+# contains as_of_date (June / Q2 are excluded; 2026-06-30 itself never lands in
+# a window). See ADR-0024.
+YESTERDAY = _DateRange("2026-06-29", "2026-06-29")
+LAST_7_DAYS = _DateRange("2026-06-23", "2026-06-29")
+LAST_30_DAYS = _DateRange("2026-05-31", "2026-06-29")
+LAST_TWO_MONTHS = _DateRange("2026-04-01", "2026-05-31")
+LAST_THREE_QUARTERS = _DateRange("2025-07-01", "2026-03-31")
+
 
 def _proposal(
     *,
@@ -744,6 +754,67 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
         expected=_summarize(
             "store count",
             _group_by("store channel"),
+        ),
+    ),
+    # --- Relative date resolution (#197) ---
+    # With as_of_date 2026-06-30, a relative window covers the most recent
+    # COMPLETE unit(s), excluding the in-progress unit containing as_of_date.
+    # June and Q2 are in progress, so "last month" is May and "last quarter" is
+    # Q1; 2026-06-29 is the most recent complete day. See ADR-0024.
+    SharedProviderProposalCase(
+        name="relative_yesterday",
+        question="What was total net revenue yesterday?",
+        expected=_summarize(
+            "total net revenue",
+            _during("order date", YESTERDAY),
+        ),
+    ),
+    SharedProviderProposalCase(
+        name="relative_last_7_days",
+        question="What was total net revenue in the last 7 days?",
+        expected=_summarize(
+            "total net revenue",
+            _during("order date", LAST_7_DAYS),
+        ),
+    ),
+    SharedProviderProposalCase(
+        name="relative_last_30_days",
+        question="What was total net revenue in the last 30 days?",
+        expected=_summarize(
+            "total net revenue",
+            _during("order date", LAST_30_DAYS),
+        ),
+    ),
+    SharedProviderProposalCase(
+        name="relative_last_month",
+        question="What was total net revenue last month?",
+        expected=_summarize(
+            "total net revenue",
+            _during("order date", MAY_2026),
+        ),
+    ),
+    SharedProviderProposalCase(
+        name="relative_last_two_months",
+        question="What was total net revenue in the last two months?",
+        expected=_summarize(
+            "total net revenue",
+            _during("order date", LAST_TWO_MONTHS),
+        ),
+    ),
+    SharedProviderProposalCase(
+        name="relative_last_quarter",
+        question="What was total net revenue last quarter?",
+        expected=_summarize(
+            "total net revenue",
+            _during("order date", Q1_2026),
+        ),
+    ),
+    SharedProviderProposalCase(
+        name="relative_last_three_quarters",
+        question="What was total net revenue in the last three quarters?",
+        expected=_summarize(
+            "total net revenue",
+            _during("order date", LAST_THREE_QUARTERS),
         ),
     ),
 )

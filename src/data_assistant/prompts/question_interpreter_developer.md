@@ -110,6 +110,23 @@ current Data Question states them.
   range_filter on the selected metric's compatible date field, exactly as for an
   explicit month and year. With `as_of_date` "2026-06-30", a bare "may" resolves
   to "2026-05-01"..."2026-05-31".
+- If the Data Question names a relative window (yesterday, last N days, last
+  month, last M months, last quarter, last M quarters), resolve it against
+  `as_of_date` by one principle: a relative window covers the most recent
+  COMPLETE unit(s) and excludes the in-progress unit that contains `as_of_date`,
+  because `as_of_date` is the notional today and counts as an incomplete day.
+  Then emit one full `range_filter` on the selected metric's own compatible date
+  field, exactly as for an explicit month. Formula, where unit = day, month, or
+  quarter: the window ends at the last complete unit before the in-progress one
+  and spans N (or M) units back. Days: "yesterday" is `as_of − 1`; "last N days"
+  is `(as_of − N)..(as_of − 1)` (exactly N days, never including `as_of`).
+  Months: "last month" is the whole calendar month before `as_of`'s month; "last
+  M months" lower is the first day of `(currentMonth − M)`, upper is the last day
+  of `(currentMonth − 1)`. Quarters: the same count-back over whole calendar
+  quarters. The in-progress unit is always excluded even when `as_of_date` is its
+  last day: with `as_of_date` "2026-06-30", June and Q2 are in progress, so "last
+  month" is May (2026-05-01..2026-05-31) and "last quarter" is Q1
+  (2026-01-01..2026-03-31), not June or Q2.
 - "before <month> <year>" means strictly earlier than the first day of that
   month: emit a range_filter with lower null and upper set to the last day of the
   preceding month. "before January 2024" → upper "2023-12-31" (not "2024-01-01",
@@ -212,6 +229,28 @@ ticket count metric's compatible set exposes "ticket priority" with group_by and
 "may" carries no year; because May (month 5) is on-or-before as_of_date's month
 (June, month 6), it resolves to as_of_date's year 2026, then becomes the full
 month 2026-05-01..2026-05-31 on the metric's own date field.
+
+For "What was total net revenue in the last 7 days?" when `as_of_date` is
+"2026-06-30" and the metric's compatible set exposes "order date" with
+range_filter, return intent "summarize", metric "total net revenue", and one
+date field_operation:
+
+- operation "range_filter", field "order date", lower "2026-06-23",
+  upper "2026-06-29", values []
+
+The window is the 7 most recent complete days. as_of_date 2026-06-30 is the
+notional today and counts as incomplete, so the last day in the window is
+2026-06-29 and the window never includes 2026-06-30.
+
+For "What was total net revenue last quarter?" with the same as_of_date, the
+in-progress quarter is Q2 2026 (April–June) because 2026-06-30 falls in it, so
+the most recent complete quarter is Q1 2026:
+
+- operation "range_filter", field "order date", lower "2026-01-01",
+  upper "2026-03-31", values []
+
+Use Q1 (not Q2) even though 2026-06-30 is the last day of Q2; the unit
+containing as_of_date is always in progress and excluded.
 
 For "How many stores by channel?" when the stores metric's compatible set exposes
 "store channel" with group_by, return intent "summarize" and one field_operation:
