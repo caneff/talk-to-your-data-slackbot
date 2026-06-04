@@ -44,7 +44,7 @@ def _retail_style_semantic_layer() -> semantic_layer_catalog.SemanticLayerCatalo
             schema.Metric(
                 metric_id="order_count",
                 label="order count",
-                aliases=("order volume",),
+                aliases=("transactions",),
                 expression="count(order_id)",
                 source_column="order_id",
                 kind=schema.MetricKind.COUNT,
@@ -143,7 +143,7 @@ def test_metric_alias_question_wording_can_resolve_to_canonical_metric_label() -
     )
 
     result = question_interpreter.interpret_question(
-        question="What was order volume in January 2026?",
+        question="How many transactions were there in January 2026?",
         semantic_layer=_retail_style_semantic_layer(),
         provider=_StaticProvider(proposal),
     )
@@ -155,7 +155,7 @@ def test_metric_alias_question_wording_can_resolve_to_canonical_metric_label() -
 def test_metric_alias_label_is_not_trusted_as_canonical_metric_value() -> None:
     proposal = question_interpreter.ProviderProposal(
         intent="summarize",
-        metric="order volume",
+        metric="transactions",
         metric_ambiguity=None,
         field_operations=(
             question_interpreter.ProviderFieldOperation(
@@ -168,7 +168,7 @@ def test_metric_alias_label_is_not_trusted_as_canonical_metric_value() -> None:
     )
 
     result = question_interpreter.interpret_question(
-        question="What was order volume in January 2026?",
+        question="How many transactions were there in January 2026?",
         semantic_layer=_retail_style_semantic_layer(),
         provider=_StaticProvider(proposal),
     )

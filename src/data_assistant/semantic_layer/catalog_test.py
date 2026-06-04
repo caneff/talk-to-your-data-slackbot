@@ -110,7 +110,7 @@ def test_catalog_lookup_methods_reject_invalid_ids() -> None:
 def test_catalog_rejects_duplicate_metric_aliases_within_one_table() -> None:
     with pytest.raises(
         ValueError,
-        match="Duplicate Metric aliases in Dataset Table orders: order volume",
+        match="Duplicate Metric aliases in Dataset Table orders: transactions",
     ):
         SemanticLayerCatalog(
             datasets=(_dataset(dataset_id="retail_ops", table_ids=("orders",)),),
@@ -122,12 +122,12 @@ def test_catalog_rejects_duplicate_metric_aliases_within_one_table() -> None:
                         _metric(
                             metric_id="order_count",
                             label="order count",
-                            aliases=("order volume",),
+                            aliases=("transactions",),
                         ),
                         _metric(
                             metric_id="gross_margin",
                             label="gross margin",
-                            aliases=("order volume",),
+                            aliases=("transactions",),
                         ),
                     ),
                 ),
@@ -138,7 +138,7 @@ def test_catalog_rejects_duplicate_metric_aliases_within_one_table() -> None:
 def test_catalog_rejects_duplicate_metric_aliases_case_insensitively() -> None:
     with pytest.raises(
         ValueError,
-        match="Duplicate Metric aliases in Dataset Table orders: Order Volume",
+        match="Duplicate Metric aliases in Dataset Table orders: Transactions",
     ):
         SemanticLayerCatalog(
             datasets=(_dataset(dataset_id="retail_ops", table_ids=("orders",)),),
@@ -150,12 +150,12 @@ def test_catalog_rejects_duplicate_metric_aliases_case_insensitively() -> None:
                         _metric(
                             metric_id="order_count",
                             label="order count",
-                            aliases=(" Order Volume ",),
+                            aliases=(" Transactions ",),
                         ),
                         _metric(
                             metric_id="gross_margin",
                             label="gross margin",
-                            aliases=("order volume",),
+                            aliases=("transactions",),
                         ),
                     ),
                 ),
@@ -241,7 +241,7 @@ def test_catalog_allows_metric_alias_reuse_across_tables() -> None:
                     _metric(
                         metric_id="order_count",
                         label="order count",
-                        aliases=("order volume",),
+                        aliases=("transactions",),
                     ),
                 ),
             ),
@@ -252,7 +252,7 @@ def test_catalog_allows_metric_alias_reuse_across_tables() -> None:
                     _metric(
                         metric_id="support_ticket_count",
                         label="support ticket count",
-                        aliases=("order volume",),
+                        aliases=("transactions",),
                     ),
                 ),
             ),

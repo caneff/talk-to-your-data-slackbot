@@ -45,7 +45,7 @@ phrased. Apply these in order:
 - Qualifier reflected by a label: if the wording carries a qualifier and some
   available label or alias reflects that qualifier or business phrasing
   (for example the wording "total net revenue" and the label
-  "total net revenue", or the wording "order volume" and an alias for canonical
+  "total net revenue", or the wording "transactions" and an alias for canonical
   label "order count"), match the canonical label and leave metric_ambiguity
   null.
 - Qualifier reflected by no label: set metric_ambiguity only when the wording
@@ -56,7 +56,7 @@ phrased. Apply these in order:
   guess. Reserve this for material modifiers on otherwise available metric
   labels, such as net/gross/recurring/organic revenue against a base revenue
   label. Do not use metric_ambiguity for an exact business alias like
-  "order volume" when that alias is explicitly listed for a canonical metric.
+  "transactions" when that alias is explicitly listed for a canonical metric.
 - Immaterial phrasing: if a wording difference is immaterial and you are
   confident it is synonymous with an available label, match that label normally
   and leave metric_ambiguity null.
@@ -219,15 +219,15 @@ gives a month, gives no time, or adds a dimension filter — the metric decision
 phrasing- and time-independent, so never flag an exact available label as
 ambiguous.
 
-For "What was order volume in January 2026?" when the selected metric_context
-for canonical label "order count" includes alias "order volume", return
+For "How many transactions were there in January 2026?" when the selected
+metric_context for canonical label "order count" includes alias "transactions", return
 canonical metric "order count", metric_ambiguity null, intent "summarize", and
 exactly one date field_operation:
 
 - operation "range_filter", field "order date", lower "2026-01-01",
   upper "2026-01-31", values []
 
-Never return metric "order volume"; aliases help matching only, not trusted
+Never return metric "transactions"; aliases help matching only, not trusted
 output labels.
 
 For "What was total net revenue in January 2026?" when the Semantic Layer exposes

@@ -153,7 +153,8 @@ Collision rules are table-scoped:
   cross-table ambiguity behavior
 
 Examples in the retail demo use non-qualifier business phrasing such as
-`order volume` → `order count`, `discounts` → `total discount amount`, and
-`tickets` → `support ticket count`. Revenue-wording examples were avoided here
-so aliases do not blur with the separate qualifier/reflected-label logic that
-already governs `total net revenue` vs `total revenue`.
+`transactions` or `purchases` → `order count`, `promo spend` or
+`markdown spend` → `total discount amount`, and `cases`, `incidents`, or
+`help requests` → `support ticket count`. Revenue-wording examples were avoided
+here so aliases do not blur with the separate qualifier/reflected-label logic
+that already governs `total net revenue` vs `total revenue`.

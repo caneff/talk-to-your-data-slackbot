@@ -54,14 +54,16 @@ metrics:
   - metric_id: order_count
     label: order count
     aliases:
-      - order volume
+      - transactions
+      - purchases
     expression: count(order_id)
     source_column: order_id
     kind: count
   - metric_id: total_discount_amount
     label: total discount amount
     aliases:
-      - discounts
+      - promo spend
+      - markdown spend
     expression: sum(discount_amount)
     source_column: discount_amount
     kind: money
