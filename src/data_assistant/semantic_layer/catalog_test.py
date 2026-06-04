@@ -135,6 +135,34 @@ def test_catalog_rejects_duplicate_metric_aliases_within_one_table() -> None:
         )
 
 
+def test_catalog_rejects_duplicate_metric_aliases_case_insensitively() -> None:
+    with pytest.raises(
+        ValueError,
+        match="Duplicate Metric aliases in Dataset Table orders: Order Volume",
+    ):
+        SemanticLayerCatalog(
+            datasets=(_dataset(dataset_id="retail_ops", table_ids=("orders",)),),
+            tables=(
+                _table(
+                    table_id="orders",
+                    dataset_id="retail_ops",
+                    metrics=(
+                        _metric(
+                            metric_id="order_count",
+                            label="order count",
+                            aliases=(" Order Volume ",),
+                        ),
+                        _metric(
+                            metric_id="gross_margin",
+                            label="gross margin",
+                            aliases=("order volume",),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+
 def test_catalog_rejects_metric_alias_matching_other_metric_label() -> None:
     with pytest.raises(
         ValueError,
@@ -154,6 +182,37 @@ def test_catalog_rejects_metric_alias_matching_other_metric_label() -> None:
                             metric_id="total_orders",
                             label="total orders",
                             aliases=("order count",),
+                        ),
+                        _metric(
+                            metric_id="order_count",
+                            label="order count",
+                            aliases=("orders",),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+
+def test_catalog_rejects_alias_label_collision_case_insensitively() -> None:
+    with pytest.raises(
+        ValueError,
+        match=(
+            "Metric aliases collide with canonical Metric labels in Dataset Table "
+            "orders: ORDER COUNT"
+        ),
+    ):
+        SemanticLayerCatalog(
+            datasets=(_dataset(dataset_id="retail_ops", table_ids=("orders",)),),
+            tables=(
+                _table(
+                    table_id="orders",
+                    dataset_id="retail_ops",
+                    metrics=(
+                        _metric(
+                            metric_id="total_orders",
+                            label="total orders",
+                            aliases=(" ORDER COUNT ",),
                         ),
                         _metric(
                             metric_id="order_count",
