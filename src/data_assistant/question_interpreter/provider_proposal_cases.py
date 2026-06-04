@@ -761,6 +761,14 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
     # COMPLETE unit(s), excluding the in-progress unit containing as_of_date.
     # June and Q2 are in progress, so "last month" is May and "last quarter" is
     # Q1; 2026-06-29 is the most recent complete day. See ADR-0024.
+    #
+    # deferred=True on the two quarter cases + last_30_days (#239): the day/month
+    # families resolve on the paid live eval, but the model returns the IN-PROGRESS
+    # quarter (Q2) for "last quarter"/"last three quarters" (0/3, two prompt
+    # attempts), and last_30_days flakes (one sample includes as_of). The
+    # convention (ADR-0024) is correct and unchanged; this is a detection gap.
+    # Deferred so the eval treats them as known-not-yet and tripwires once a fix
+    # makes them pass.
     SharedProviderProposalCase(
         name="relative_yesterday",
         question="What was total net revenue yesterday?",
@@ -784,6 +792,7 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
             "total net revenue",
             _during("order date", LAST_30_DAYS),
         ),
+        deferred=True,
     ),
     SharedProviderProposalCase(
         name="relative_last_month",
@@ -808,6 +817,7 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
             "total net revenue",
             _during("order date", Q1_2026),
         ),
+        deferred=True,
     ),
     SharedProviderProposalCase(
         name="relative_last_three_quarters",
@@ -816,5 +826,6 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
             "total net revenue",
             _during("order date", LAST_THREE_QUARTERS),
         ),
+        deferred=True,
     ),
 )

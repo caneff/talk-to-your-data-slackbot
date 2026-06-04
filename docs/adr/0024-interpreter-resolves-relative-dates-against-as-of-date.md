@@ -88,6 +88,16 @@ end date — the same determinism ADR-0021 bought for bare months. The behaviora
 proof is the scoped paid live eval run after this change; the cases here prove the
 expectations are well-formed and validate.
 
+The initial scoped paid live eval confirms the day and month families
+("yesterday", "last 7 days", "last month", "last two months"), but the model does
+not yet honor the convention for **quarters** — asked on the last day of Q2 it
+returns the in-progress quarter (Q2) rather than Q1, across two prompt attempts —
+and "last 30 days" flakes by one day. Those three cases are marked `deferred`
+(detection gap tracked in the follow-up issue), so the eval reports them as
+known-not-yet and tripwires once a fix makes them pass. The convention itself is
+unchanged and confirmed correct: any day into a quarter, "last quarter" is the
+prior quarter. The gap is model detection, not the boundary rule.
+
 This is the sibling of ADR-0021 and the dual of ADR-0008: there is no new schema
 or validation code. A resolved relative window is just another date
 `range_filter`, which Provider Proposal Validation already types from untrusted
