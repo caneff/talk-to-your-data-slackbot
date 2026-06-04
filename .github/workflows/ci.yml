@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # Tests are network-free and secret-free (AGENTS.md "Paid OpenAI API
+      # guard"), so no secrets are wired into this workflow.
+      - name: Sync (includes the dev group)
+        run: uv sync
+
+      # Authoritative, unbypassable mirror of .githooks/pre-commit: the local
+      # hook can be skipped with --no-verify, this cannot.
+      - name: Enforce *_test.py naming
+        run: |
+          offenders=$(git ls-files src scripts | grep -E '(^|/)test_[^/]*\.py$' || true)
+          if [ -n "$offenders" ]; then
+            echo "::error::Test files must use the *_test.py suffix, not the test_*.py prefix:"
+            echo "$offenders"
+            exit 1
+          fi
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        run: uv run ruff format --check .
+
+      - name: Pyright
+        run: uv run pyright
+
+      - name: Pytest
+        run: uv run pytest
+
+      - name: Build wheel
+        run: uv build --wheel
