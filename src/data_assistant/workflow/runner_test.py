@@ -770,7 +770,7 @@ def test_data_assistant_denies_dataset_access_before_request_or_preparation(
     assert non_answer.datasets == ("retail_ops",)
 
 
-def test_data_assistant_returns_ambiguous_table_before_access_denial(
+def test_data_assistant_rejects_duplicate_field_labels_before_access_denial(
     monkeypatch: pytest.MonkeyPatch,
     connect_orders: local_duckdb_fixture.OrdersConnector,
 ) -> None:
@@ -804,8 +804,10 @@ def test_data_assistant_returns_ambiguous_table_before_access_denial(
     assert result is sentinel_response
     assert len(captured_non_answers) == 1
     non_answer = captured_non_answers[0]
-    assert non_answer.stage == contracts.NonAnswerStage.SEMANTIC_ROUTER
-    assert non_answer.reason_code == contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE
+    assert non_answer.stage == contracts.NonAnswerStage.QUESTION_INTERPRETER
+    assert (
+        non_answer.reason_code == contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT
+    )
 
 
 def test_data_assistant_short_circuits_unsupported_question_before_preparing_data(

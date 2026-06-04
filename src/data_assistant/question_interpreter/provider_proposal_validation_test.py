@@ -63,6 +63,28 @@ class _StaticProvider:
         return self._proposal
 
 
+class _RaisingProvider:
+    def propose_question_frame(
+        self,
+        *,
+        question: str,
+        semantic_layer_context: dict[str, object],
+    ) -> question_interpreter.ProviderProposal:
+        del question, semantic_layer_context
+        raise RuntimeError("boom")
+
+
+def test_provider_exception_returns_provider_failure_non_answer() -> None:
+    result = question_interpreter.interpret_question(
+        question="What was total revenue in January 2026?",
+        semantic_layer=_retail_style_semantic_layer(),
+        provider=_RaisingProvider(),
+    )
+
+    assert isinstance(result, contracts.NonAnswer)
+    assert result.reason_code == contracts.NonAnswerReasonCode.PROVIDER_FAILURE
+
+
 def test_exact_net_revenue_label_validates_to_question_frame() -> None:
     proposal = question_interpreter.ProviderProposal(
         intent="summarize",

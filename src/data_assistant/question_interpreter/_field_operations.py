@@ -16,18 +16,22 @@ def validate_field_filters(
     operation_proposals: tuple[proposals.ProviderFieldOperation, ...],
     semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> contracts.NonAnswer | tuple[str | None, tuple[contracts.FieldFilter[str], ...]]:
-    fields_by_label = {
-        field.label: field for table in semantic_layer.tables for field in table.fields
-    }
+    field_candidates_by_label = _field_candidates_by_label(semantic_layer)
     validated_filters: list[contracts.FieldFilter[str]] = []
     group_by_field: str | None = None
     for operation_proposal in operation_proposals:
-        field = fields_by_label.get(operation_proposal.field)
-        if field is None:
+        field_candidates = field_candidates_by_label.get(operation_proposal.field)
+        if field_candidates is None:
             return non_answer_catalog.unknown_semantic_label_non_answer(
                 "field",
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
             )
+        if len(field_candidates) > 1:
+            return non_answer_catalog.non_answer(
+                contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+                stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+            )
+        field = field_candidates[0]
         operation = schema.FieldOperation(operation_proposal.operation)
         if operation not in field.operations:
             return non_answer_catalog.non_answer(
@@ -59,6 +63,16 @@ def validate_field_filters(
         validated_filters.append(result)
 
     return group_by_field, tuple(validated_filters)
+
+
+def _field_candidates_by_label(
+    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
+) -> dict[str, list[schema.SemanticField]]:
+    field_candidates_by_label: dict[str, list[schema.SemanticField]] = {}
+    for table in semantic_layer.tables:
+        for field in table.fields:
+            field_candidates_by_label.setdefault(field.label, []).append(field)
+    return field_candidates_by_label
 
 
 def _validate_range_filter(
