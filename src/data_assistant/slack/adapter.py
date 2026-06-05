@@ -102,7 +102,7 @@ def default_identity(user: str) -> contracts.InternalIdentity:
 
 
 def dev_identity(user: str) -> contracts.InternalIdentity:
-    """Use the local allowed identity for manual development smoke testing."""
+    """Use the local allowed identity for the manual development acceptance check."""
     del user
     return access_controller.DEFAULT_LOCAL_ALLOWED_IDENTITY
 

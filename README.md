@@ -151,7 +151,7 @@ Non-Answer path. Live provider failures and refusals also use that Non-Answer
 path; the runtime does not fall back to a deterministic interpreter.
 
 For local development, the runtime uses a tiny in-memory DuckDB `orders` table.
-It is only there to support a manual Slack smoke test. No DuckDB database file
+It is only there to support a manual Slack acceptance check. No DuckDB database file
 is committed.
 
 To run the same Slack bot against a different Semantic Layer and DuckDB
@@ -194,7 +194,7 @@ standalone Semantic Layer and deterministic DuckDB seed under
 connection to Slack and binds no inbound port, so no `-p` flag is needed for
 local Docker runs.
 
-Override the command only if you want the tiny local smoke-test fixture instead:
+Override the command only if you want the tiny local acceptance-check fixture instead:
 
 ```bash
 docker run --env-file .env talk-to-your-data-slackbot:local python -m data_assistant.slack.runtime_main
@@ -242,7 +242,12 @@ Render Worker (or delete the Blueprint) so the paid Worker stops billing. The
 standing-charge tradeoff is only accepted for the boxed demo window; see
 `docs/adr/0013-demo-runs-via-local-docker-not-render.md`.
 
-## Manual Slack smoke test
+## Manual Slack acceptance check
+
+This is an acceptance check, not a smoke test: it asserts answer correctness
+(named store regions and money figures) and exercises both the Final Response
+and Non-Answer branches, each with a Trust Summary. A smoke test would only
+confirm the bot boots and replies in-thread without crashing (steps 1-4).
 
 A no-flag app run loads the **Retail Operations** layer
 (`examples/retail_ops_demo/semantic_layer`) and seeds the retail demo data into
@@ -401,7 +406,7 @@ Step by step:
    > **Note:** point the driver at your **local dev bot**, not the production
    > Slack app your team uses for real data questions. This drives the dev/test
    > instance: the driver uses `dev_identity` and the local dev data fixture (the
-   > same dev config `slack_runtime` uses for the smoke test), so it answers from
+   > same dev config `slack_runtime` uses for the acceptance check), so it answers from
    > local development data under a dev identity — not real curated datasets.
    > It must also be the **local** `slack_runtime`, not the live Render
    > deployment, because the driver and bot communicate only through local files:
