@@ -7,6 +7,13 @@ Accepted
 Amends ADR-0024 for relative date phrases (the window convention itself is
 unchanged).
 
+Amended by ADR-0026: the separate, mutually-exclusive `relative_window` field
+below is replaced by a `source` discriminator on the `range_filter` operation.
+The model ignored the separate field (0/7 paid eval, temperature 0); ADR-0026
+keeps the model-classifies/interpreter-computes division of labor but carries
+the relative-vs-explicit distinction on the operation the model already emits.
+The design below is otherwise intact.
+
 ## Context
 
 ADR-0024 locked the meaning of a relative date window — *most recent complete
