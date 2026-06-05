@@ -45,9 +45,12 @@ are direct corollaries of this principle:
   a deferred intent, such as "compare", "trend", "forecast", "explain",
   "prescribe", or "diagnose".
 - Treat compare trigger phrases as explicit deferred intent signals: "how did ... compare",
-  "compare ... by ...", "compared to", "versus", "vs", and "difference between".
-  When one of those phrases appears, remain intent: "compare" even if the Data
-  Question also says `by <dimension>` or names a time range.
+  "compared to", "versus", "vs", and "difference between". When one of those
+  phrases appears, remain intent: "compare" even if the Data Question also has
+  grouping or time wording.
+- Do not infer intent "compare" merely because a Data Question groups a metric
+  by a dimension. A plain grouped historical summary such as "What was total net
+  revenue by store region in Q1 2026?" remains intent "summarize".
 - Use null for intent only when no Data Question intent applies.
 - Unsupported intent names do not change metric extraction. If an unsupported
   Data Question names a known metric, still return that metric label rather
@@ -294,9 +297,9 @@ intent "summarize", metric "store count", and exactly these field_operations:
 - operation "exclude_filter", field "store region", lower null, upper null,
   values ["West"]
 
-Keep both operations. The grouping asks to compare regions; the exclusion asks
-to remove West from that grouped result. In short: group_by store region and
-exclude_filter store region = West.
+Keep both operations. The grouping asks for one result per store region; the
+exclusion asks to remove West from that grouped result. In short: group_by store
+region and exclude_filter store region = West.
 
 For "What was support ticket count by issue category excluding the Resolved status?"
 return intent "summarize", metric "support ticket count", and exactly these
@@ -359,10 +362,16 @@ range, but they are not the same: the explicit phrase is source "explicit" with
 dates, the relative phrase is source "relative" with unit and count. The source
 field carries the distinction.
 
+For "What was total net revenue by store region in Q1 2026?" return intent
+"summarize", metric "total net revenue", field_operations for group_by
+"store region" plus the Q1 2026 date range. This is a grouped historical
+summary.
+
 For "How did total net revenue compare by store region in Q1 2026?" return
 intent "compare", metric "total net revenue", field_operations for group_by
 "store region" plus the Q1 2026 date range, and do not collapse the Data
-Question into intent "rank" or "summarize".
+Question into intent "rank" or "summarize". The explicit word "compare" is what
+makes this a deferred compare intent.
 
 For "How many stores by channel?" when the stores metric's compatible set exposes
 "store channel" with group_by, return intent "summarize" and one field_operation:
