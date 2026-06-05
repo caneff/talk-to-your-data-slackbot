@@ -1,47 +1,4 @@
 {
   "version": 1,
-  "questions": {
-    "customers-count-by-acquisition-channel-created-2026": [
-      {
-        "issue_number": 277,
-        "flag_category": "investigate"
-      }
-    ],
-    "customers-created-january-2026": [
-      {
-        "issue_number": 277,
-        "flag_category": "investigate"
-      }
-    ],
-    "orders-net-revenue-web-orders-q1-2026": [
-      {
-        "issue_number": 275,
-        "flag_category": "formatting"
-      }
-    ],
-    "products-line-revenue-apparel-march-2026": [
-      {
-        "issue_number": 275,
-        "flag_category": "formatting"
-      }
-    ],
-    "products-line-revenue-excluding-electronics-march-2026": [
-      {
-        "issue_number": 275,
-        "flag_category": "formatting"
-      }
-    ],
-    "stores-count-by-region-excluding-west": [
-      {
-        "issue_number": 276,
-        "flag_category": "formatting"
-      }
-    ],
-    "stores-opened-before-january-2024": [
-      {
-        "issue_number": 275,
-        "flag_category": "formatting"
-      }
-    ]
-  }
+  "questions": {}
 }
