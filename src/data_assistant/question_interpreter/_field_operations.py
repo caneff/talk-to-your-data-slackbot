@@ -6,6 +6,7 @@ import datetime
 import decimal
 
 import data_assistant.non_answer_catalog as non_answer_catalog
+import data_assistant.question_interpreter._relative_window as relative_window
 import data_assistant.question_interpreter.proposals as proposals
 import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.schema as schema
@@ -63,6 +64,62 @@ def validate_field_filters(
         validated_filters.append(result)
 
     return group_by_field, tuple(validated_filters)
+
+
+def resolve_relative_window(
+    relative_window_proposal: proposals.ProviderRelativeWindow,
+    as_of_date: datetime.date | None,
+    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
+) -> contracts.NonAnswer | contracts.RangeFilter[str]:
+    """Type an untrusted relative_window into a RangeFilter on its date field.
+
+    The model classified the phrase into {field, unit, count}; the interpreter
+    owns the arithmetic (ADR-0025) and computes the window from as_of_date,
+    enforcing the ADR-0024 convention. Without the as_of_date anchor the rule is
+    inert (same dormancy posture as ADR-0021/0024), so a missing anchor is a
+    validation failure.
+    """
+    if as_of_date is None:
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
+    field_candidates_by_label = _field_candidates_by_label(semantic_layer)
+    field_candidates = field_candidates_by_label.get(relative_window_proposal.field)
+    if field_candidates is None:
+        return non_answer_catalog.unknown_semantic_label_non_answer(
+            "field",
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
+    if len(field_candidates) > 1:
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
+    field = field_candidates[0]
+    if field.data_type != schema.DataType.DATE:
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
+    lower, upper = relative_window.compute_relative_window(
+        as_of_date=as_of_date,
+        unit=relative_window_proposal.unit,
+        count=relative_window_proposal.count,
+    )
+    return contracts.RangeFilter(field=field.label, lower=lower, upper=upper)
+
+
+def date_field_labels(
+    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
+) -> frozenset[str]:
+    """Labels of every date Semantic Field in the layer."""
+    return frozenset(
+        field.label
+        for table in semantic_layer.tables
+        for field in table.fields
+        if field.data_type == schema.DataType.DATE
+    )
 
 
 def _field_candidates_by_label(

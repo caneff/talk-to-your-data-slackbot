@@ -53,16 +53,6 @@ MAY_2026 = _DateRange("2026-05-01", "2026-05-31")
 JUNE_2026 = _DateRange("2026-06-01", "2026-06-30")
 YEAR_2026 = _DateRange("2026-01-01", "2026-12-31")
 
-# Relative-date windows resolved against as_of_date 2026-06-30 (#197). Each
-# covers the most recent COMPLETE unit(s), excluding the in-progress unit that
-# contains as_of_date (June / Q2 are excluded; 2026-06-30 itself never lands in
-# a window). See ADR-0024.
-YESTERDAY = _DateRange("2026-06-29", "2026-06-29")
-LAST_7_DAYS = _DateRange("2026-06-23", "2026-06-29")
-LAST_30_DAYS = _DateRange("2026-05-31", "2026-06-29")
-LAST_TWO_MONTHS = _DateRange("2026-04-01", "2026-05-31")
-LAST_THREE_QUARTERS = _DateRange("2025-07-01", "2026-03-31")
-
 
 def _proposal(
     *,
@@ -74,6 +64,7 @@ def _proposal(
     unknown_metric: str | None = None,
     limit: int | None = None,
     sort_direction: Literal["asc", "desc"] | None = None,
+    relative_window: question_interpreter.ProviderRelativeWindow | None = None,
 ) -> question_interpreter.ProviderProposal:
     return question_interpreter.ProviderProposal(
         intent=intent,
@@ -84,6 +75,7 @@ def _proposal(
         sort_direction=sort_direction,
         field_operations=field_operations,
         all_time=all_time,
+        relative_window=relative_window,
     )
 
 
@@ -91,12 +83,14 @@ def _summarize(
     metric: str,
     *field_operations: question_interpreter.ProviderFieldOperation,
     all_time: bool = False,
+    relative_window: question_interpreter.ProviderRelativeWindow | None = None,
 ) -> question_interpreter.ProviderProposal:
     return _proposal(
         intent="summarize",
         metric=metric,
         field_operations=field_operations,
         all_time=all_time,
+        relative_window=relative_window,
     )
 
 
@@ -153,6 +147,18 @@ def _during(
     period: _DateRange,
 ) -> question_interpreter.ProviderFieldOperation:
     return _range_filter(field, lower=period.lower, upper=period.upper)
+
+
+def _relative_window(
+    field: str,
+    unit: Literal["day", "month", "quarter"],
+    count: int,
+) -> question_interpreter.ProviderRelativeWindow:
+    return question_interpreter.ProviderRelativeWindow(
+        field=field,
+        unit=unit,
+        count=count,
+    )
 
 
 def _include_filter(
@@ -772,25 +778,26 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
             _group_by("store channel"),
         ),
     ),
-    # --- Relative date resolution (#197) ---
-    # With as_of_date 2026-06-30, a relative window covers the most recent
-    # COMPLETE unit(s), excluding the in-progress unit containing as_of_date.
-    # June and Q2 are in progress, so "last month" is May and "last quarter" is
-    # Q1; 2026-06-29 is the most recent complete day. See ADR-0024.
+    # --- Relative date resolution (#197, #239 / ADR-0025) ---
+    # An as_of-anchored relative phrase is CLASSIFIED by the model into a
+    # relative_window {field, unit, count} and emits NO range_filter and NO
+    # dates; the interpreter computes the calendar window from as_of_date,
+    # enforcing the ADR-0024 convention in code. So the untrusted expected
+    # proposal here carries unit+count, not computed bounds. (With as_of_date
+    # 2026-06-30 the interpreter resolves these to: yesterday=2026-06-29,
+    # last 7 days=2026-06-23..29, last month=May, last quarter=Q1, etc.)
     #
     # deferred=True on the two quarter cases + last_30_days (#239): the day/month
-    # families resolve on the paid live eval, but the model returns the IN-PROGRESS
-    # quarter (Q2) for "last quarter"/"last three quarters" (0/3, two prompt
-    # attempts), and last_30_days flakes (one sample includes as_of). The
-    # convention (ADR-0024) is correct and unchanged; this is a detection gap.
-    # Deferred so the eval treats them as known-not-yet and tripwires once a fix
-    # makes them pass.
+    # families resolve on the paid live eval, but the model historically returns
+    # the IN-PROGRESS quarter (Q2) for "last quarter"/"last three quarters", and
+    # last_30_days flaked. ADR-0025 removes the model's quarter arithmetic, but
+    # un-deferring waits on a green paid eval (Option A) and is a later commit.
     SharedProviderProposalCase(
         name="relative_yesterday",
         question="What was total net revenue yesterday?",
         expected=_summarize(
             "total net revenue",
-            _during("order date", YESTERDAY),
+            relative_window=_relative_window("order date", "day", 1),
         ),
     ),
     SharedProviderProposalCase(
@@ -798,7 +805,7 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
         question="What was total net revenue in the last 7 days?",
         expected=_summarize(
             "total net revenue",
-            _during("order date", LAST_7_DAYS),
+            relative_window=_relative_window("order date", "day", 7),
         ),
     ),
     SharedProviderProposalCase(
@@ -806,7 +813,7 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
         question="What was total net revenue in the last 30 days?",
         expected=_summarize(
             "total net revenue",
-            _during("order date", LAST_30_DAYS),
+            relative_window=_relative_window("order date", "day", 30),
         ),
         deferred=True,
     ),
@@ -815,7 +822,7 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
         question="What was total net revenue last month?",
         expected=_summarize(
             "total net revenue",
-            _during("order date", MAY_2026),
+            relative_window=_relative_window("order date", "month", 1),
         ),
     ),
     SharedProviderProposalCase(
@@ -823,7 +830,7 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
         question="What was total net revenue in the last two months?",
         expected=_summarize(
             "total net revenue",
-            _during("order date", LAST_TWO_MONTHS),
+            relative_window=_relative_window("order date", "month", 2),
         ),
     ),
     SharedProviderProposalCase(
@@ -831,7 +838,7 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
         question="What was total net revenue last quarter?",
         expected=_summarize(
             "total net revenue",
-            _during("order date", Q1_2026),
+            relative_window=_relative_window("order date", "quarter", 1),
         ),
         deferred=True,
     ),
@@ -840,7 +847,7 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
         question="What was total net revenue in the last three quarters?",
         expected=_summarize(
             "total net revenue",
-            _during("order date", LAST_THREE_QUARTERS),
+            relative_window=_relative_window("order date", "quarter", 3),
         ),
         deferred=True,
     ),
