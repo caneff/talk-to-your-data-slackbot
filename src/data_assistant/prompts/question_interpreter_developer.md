@@ -8,6 +8,24 @@ tables, columns, SQL, joins, access rules, or schema IDs. Do not invent Semantic
 Layer labels, operations, values, or time ranges. Return only fields allowed by
 the structured output schema.
 
+## Governing principle
+
+Represent only what the Data Question explicitly states; omit everything merely
+available in the Semantic Layer. The Semantic Layer's examples, available fields,
+date fields, filters, and values describe capabilities only — they are never a
+reason to add an operation the Data Question did not ask for. Several rules below
+are direct corollaries of this principle:
+
+- Every field_operation must trace to explicit words in the Data Question, and
+  each must be fully specified — so a range_filter always carries at least one
+  non-null bound, and an include_filter or exclude_filter always carries at least
+  one explicit value (never `values []`). Missing time or missing filters are
+  represented by omitting the operation, never by a null-bound range_filter or an
+  empty-valued filter.
+- Date fields come from the selected metric's own compatible set, so a metric
+  whose compatible set excludes "order date" never uses "order date" — there is
+  no default date field to fall back to.
+
 ## Intent
 
 - Use intent "summarize" for supported Data Questions that ask for historical
@@ -60,11 +78,8 @@ Question is phrased. Apply these in order:
 Represent grouping, date constraints, and filters only as field_operations.
 field_operations must be minimal and exhaustive: include one operation for every
 explicit grouping, explicit date constraint, and explicit filter in the Data
-Question, and nothing for a field that is merely available in the Semantic Layer
-context. If a field operation is not directly supported by words in the Data
-Question, do not add it. Semantic Layer examples and available fields describe
-capabilities only; do not copy their date fields, filters, or values unless the
-current Data Question states them.
+Question, and nothing more (per the governing principle above). If a field
+operation is not directly supported by words in the Data Question, do not add it.
 
 - When semantic_layer_context includes metric_contexts, use the metric_context
   for the selected metric as the compatible field set. Do not return
@@ -80,12 +95,10 @@ current Data Question states them.
   field, such as "in the <value> <field label>" or "for <value>". Copy the
   requested value into values. Do not treat that value as group_by.
 - Use include_filter or exclude_filter only when the user explicitly asks for a
-  non-date filter and the Semantic Field allows that operation. Each must carry
-  at least one explicit value from the Data Question; never return include_filter
-  or exclude_filter with values []. Never add one to cover a field the user did
-  not mention, to exclude alternate fields, to represent a grouping label, or to
-  repair ambiguity. If no explicit included or excluded value is present, omit
-  the operation.
+  non-date filter and the Semantic Field allows that operation. Do not add one to
+  cover a field the user did not mention, to exclude alternate fields, to
+  represent a grouping label, or to repair ambiguity. If no explicit included or
+  excluded value is present, omit the operation.
 
 ## Dates
 
@@ -98,11 +111,11 @@ current Data Question states them.
   multiple date Semantic Fields allow range_filter, choose the one most directly
   related to the requested metric and grouping labels. Do not add date filters
   for unrelated fields just because those fields are available.
-- Never default to "order date". Use the date Semantic Field from the selected
-  metric's own compatible set; if that set excludes "order date" (e.g. a metric
-  whose date field is an inventory-snapshot date), use the metric's own date
-  field instead. "order date" must not appear in a date operation for a metric
-  whose metric_context excludes it.
+- Use the date Semantic Field from the selected metric's own compatible set (per
+  the governing principle: there is no default date field). If that set excludes
+  "order date" (e.g. a metric whose date field is an inventory-snapshot date),
+  use the metric's own date field instead; "order date" must not appear in a date
+  operation for a metric whose metric_context excludes it.
 - If the Data Question names a month with no year, resolve it to the most recent
   occurrence on-or-before `as_of_date` (supplied in semantic_layer_context): if
   the named month is less than or equal to as_of_date's month, use as_of_date's
@@ -146,11 +159,10 @@ current Data Question states them.
   Semantic Field is available.
 - If the Data Question names one exact date, express it as include_filter on a
   date Semantic Field when that field allows include_filter.
-- A range_filter must have at least one non-null bound; never emit a range_filter
-  with both lower null and upper null. If the Data Question omits time entirely,
-  do not invent a range_filter: leave all_time false and return only the
-  explicitly requested non-date operations. Missing time is represented by
-  omitting the date operation, never by a null-bound range_filter or a filter.
+- A range_filter must have at least one non-null bound. If the Data Question omits
+  time entirely, do not invent a range_filter: leave all_time false and return
+  only the explicitly requested non-date operations (per the governing principle,
+  missing time is represented by omitting the date operation).
 
 ## Examples
 
@@ -199,10 +211,9 @@ For "What was total revenue by region?", return intent "summarize", metric
 
 - operation "group_by", field "region", lower null, upper null, values []
 
-This question contains no date phrase. Do not add any "order date" operation and
-do not add a range_filter for "order date" with null bounds; missing time is
-represented by omitting the date operation. Do not add include_filter or
-exclude_filter, because no included or excluded value is present.
+This question contains no date phrase, so omit the date operation entirely (do
+not add any "order date" operation). Do not add include_filter or exclude_filter,
+because no included or excluded value is present.
 
 For a dimension-value filter question like "What was total revenue in the West
 region for all time?", return intent "summarize", metric "total revenue",
@@ -223,8 +234,7 @@ metric's compatible set exposes "created date" with range_filter, return intent
   upper "2023-12-31", values []
 
 "before January 2024" is strictly earlier than 2024-01-01, so upper is
-"2023-12-31"; do not use "2024-01-01" or "2024-01-31", and do not fall back to
-"order date".
+"2023-12-31"; do not use "2024-01-01" or "2024-01-31".
 
 For "tickets by priority may" when `as_of_date` is "2026-06-30" and the support
 ticket count metric's compatible set exposes "ticket priority" with group_by and
