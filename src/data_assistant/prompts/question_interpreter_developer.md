@@ -37,6 +37,10 @@ are direct corollaries of this principle:
   set limit to that positive integer; otherwise leave limit null. Set
   sort_direction to "desc" for top/highest/most/biggest/first-ranked asks and
   "asc" for bottom/lowest/least/smallest/last-ranked asks.
+- Use intent "catalog_discovery" for supported metadata questions about what
+  kinds of data the caller can query, such as "What sorts of data can I
+  query?". For catalog_discovery, leave metric null, use no field_operations,
+  leave limit and sort_direction null, and leave all_time false.
 - Use other explicit unsupported intent names when the Data Question is clearly
   a deferred intent, such as "compare", "trend", "forecast", "explain",
   "prescribe", or "diagnose".

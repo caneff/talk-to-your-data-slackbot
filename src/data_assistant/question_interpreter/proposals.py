@@ -102,10 +102,13 @@ class ProviderProposal(pydantic.BaseModel):
             "metric totals, summaries, or grouped results, including phrases "
             "like 'what was', 'show', and 'summarize'. Use rank for supported "
             "top/bottom questions that ask for highest, lowest, most, least, "
-            "biggest, smallest, top, or bottom results. Other deferred intent "
-            "names such as compare, trend, forecast, explain, prescribe, or "
-            "diagnose are allowed for clearly classified unsupported Data "
-            "Questions. Use null only when no Data Question intent applies."
+            "biggest, smallest, top, or bottom results. Use "
+            "catalog_discovery for supported metadata requests about what kinds "
+            "of data the caller can query, such as 'What sorts of data can I "
+            "query?'. Other deferred intent names such as compare, trend, "
+            "forecast, explain, prescribe, or diagnose are allowed for clearly "
+            "classified unsupported Data Questions. Use null only when no Data "
+            "Question intent applies."
         ),
     )
     metric: str | None = pydantic.Field(

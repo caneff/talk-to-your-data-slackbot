@@ -12,7 +12,7 @@ import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.workflow.contracts as contracts
 from data_assistant.question_interpreter import semantic_context
 
-_SUPPORTED_PROVIDER_INTENTS = frozenset({"rank", "summarize"})
+_SUPPORTED_PROVIDER_INTENTS = frozenset({"catalog_discovery", "rank", "summarize"})
 
 
 def interpret_question(
@@ -78,6 +78,8 @@ def _validate_provider_result(
             contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT,
             stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
         )
+    if intent_value == "catalog_discovery":
+        return _validate_catalog_discovery(proposal)
     # The interpreter self-reports metric-qualifier ambiguity (ADR-0017).
     # Provider Proposal Validation is trust boundary that acts on it: a
     # reported ambiguity
@@ -233,4 +235,33 @@ def _validate_rank(
     return contracts.RankSpec(
         result_limit=proposal.limit or contracts.DEFAULT_RESULT_LIMIT,
         sort_direction=contracts.SortDirection(proposal.sort_direction),
+    )
+
+
+def _validate_catalog_discovery(
+    proposal: proposals.ProviderProposal,
+) -> contracts.StageResult[contracts.QuestionFrame]:
+    if (
+        proposal.metric is not None
+        or proposal.metric_ambiguity is not None
+        or proposal.unknown_metric is not None
+        or proposal.field_operations
+        or proposal.limit is not None
+        or proposal.sort_direction is not None
+        or proposal.all_time
+    ):
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
+
+    return contracts.Success(
+        contracts.QuestionFrame(
+            intent="catalog_discovery",
+            metric=None,
+            time_scope=None,
+            group_by_field=None,
+            field_filters=(),
+            unresolved_ambiguities=(),
+        )
     )

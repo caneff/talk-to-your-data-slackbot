@@ -113,6 +113,95 @@ def compose_non_answer_response(
     )
 
 
+def compose_catalog_discovery_response(
+    *,
+    datasets: tuple[contracts.CatalogDatasetSummary, ...],
+) -> contracts.FinalResponse:
+    """Compose metadata-only catalog discovery response with compact blocks."""
+    if not datasets:
+        trust_summary = contracts.TrustSummary(
+            limitations=(
+                "Semantic Layer metadata used.",
+                "Curated Dataset names shown: none.",
+                "Prepared Data was not read.",
+            ),
+        )
+        trust_text = (
+            "Trust Summary: Semantic Layer metadata used. Curated Dataset names "
+            "shown: none. Prepared Data was not read."
+        )
+        return contracts.FinalResponse(
+            text=(
+                "No approved datasets are currently available for you to query."
+                "\n\n"
+                f"{trust_text}"
+            ),
+            trust_summary=trust_summary,
+            response_kind=contracts.ResponseKind.ANSWER,
+            blocks=(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "plain_text",
+                        "text": (
+                            "No approved datasets are currently available for "
+                            "you to query."
+                        ),
+                    },
+                },
+                {
+                    "type": "context",
+                    "elements": [
+                        {
+                            "type": "plain_text",
+                            "text": trust_text,
+                        },
+                    ],
+                },
+            ),
+        )
+
+    dataset_names = tuple(dataset.dataset_name for dataset in datasets)
+    trust_text = (
+        "Trust Summary: Semantic Layer metadata used. Curated Dataset names "
+        f"shown: {', '.join(dataset_names)}. Prepared Data was not read. "
+        "Examples were curated or generated from approved Semantic Layer labels."
+    )
+    trust_summary = contracts.TrustSummary(
+        datasets=dataset_names,
+        limitations=(
+            "Semantic Layer metadata used.",
+            "Prepared Data was not read.",
+            "Examples were curated or generated from approved Semantic Layer labels.",
+        ),
+    )
+    sections = tuple(_render_catalog_dataset_block(dataset) for dataset in datasets)
+    text = "\n\n".join(
+        (
+            "You can query these approved datasets:",
+            *(_render_catalog_dataset_text(dataset) for dataset in datasets),
+            trust_text,
+        )
+    )
+    return contracts.FinalResponse(
+        text=text,
+        trust_summary=trust_summary,
+        response_kind=contracts.ResponseKind.ANSWER,
+        blocks=(
+            *sections,
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "plain_text",
+                        "text": trust_text,
+                    },
+                ],
+            },
+        ),
+    )
+
+
 def render_trust_summary(trust_summary: contracts.TrustSummary) -> str:
     """Render structured trust summary data for Slack-facing plain text."""
     segments: list[str] = []
@@ -226,3 +315,28 @@ def _metric_line(
 
 def _title_case_label(label: str) -> str:
     return " ".join(word[:1].upper() + word[1:] for word in label.split(" "))
+
+
+def _render_catalog_dataset_block(
+    dataset: contracts.CatalogDatasetSummary,
+) -> contracts.SlackBlock:
+    return {
+        "type": "section",
+        "text": {
+            "type": "mrkdwn",
+            "text": _render_catalog_dataset_text(dataset),
+        },
+    }
+
+
+def _render_catalog_dataset_text(
+    dataset: contracts.CatalogDatasetSummary,
+) -> str:
+    example_lines = "\n".join(f"- {question}" for question in dataset.example_questions)
+    return (
+        f"*{dataset.dataset_name}*\n"
+        f"Information types: {', '.join(dataset.information_types)}\n"
+        f"Metrics: {', '.join(dataset.metric_labels)}\n"
+        f"Fields: {', '.join(dataset.field_labels)}\n"
+        f"Example questions:\n{example_lines}"
+    )

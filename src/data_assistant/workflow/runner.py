@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import itertools
+import typing
+
 import duckdb
 
 import data_assistant.access_controller as access_controller
@@ -12,6 +15,7 @@ import data_assistant.question_interpreter as question_interpreter
 import data_assistant.reasoning_layer as reasoning_layer
 import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.loader as semantic_layer_loader
+import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_router as semantic_router
 import data_assistant.workflow.contracts as contracts
 import data_assistant.workflow.response_composer as response_composer
@@ -82,6 +86,13 @@ def run_data_assistant(
             wording_provider=non_answer_catalog.StaticCatalogWording(),
         )
     question_frame = question_frame_result.value
+    if question_frame.intent == "catalog_discovery":
+        return response_composer.compose_catalog_discovery_response(
+            datasets=_catalog_dataset_summaries(
+                semantic_layer=active_semantic_layer,
+                internal_identity=internal_identity,
+            )
+        )
 
     # 2. Resolve Available Data.
     progress_sink(FINDING_DATA_STATUS)
@@ -136,9 +147,131 @@ def run_data_assistant(
 
     return contracts.DataAssistantRun(
         question_frame=question_frame,
+        final_response=final_response,
         available_data_resolution=available_data_resolution,
         data_request=data_request,
         prepared_data=prepared_data,
         answer_draft=answer_draft,
-        final_response=final_response,
     )
+
+
+def _catalog_dataset_summaries(
+    *,
+    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
+    internal_identity: contracts.InternalIdentity,
+) -> tuple[contracts.CatalogDatasetSummary, ...]:
+    summaries: list[contracts.CatalogDatasetSummary] = []
+    for dataset in semantic_layer.datasets:
+        if (
+            internal_identity.identity_id
+            not in dataset.dataset_access.allowed_identity_ids
+        ):
+            continue
+        tables = semantic_layer.tables_for_dataset_id(dataset.dataset_id)
+        metric_labels = tuple(
+            itertools.islice(
+                sorted({metric.label for table in tables for metric in table.metrics}),
+                3,
+            )
+        )
+        field_labels = tuple(
+            itertools.islice(
+                sorted({field.label for table in tables for field in table.fields}),
+                3,
+            )
+        )
+        example_questions, example_sources = _example_questions(dataset, tables)
+        summaries.append(
+            contracts.CatalogDatasetSummary(
+                dataset_name=dataset.name,
+                information_types=dataset.information_types,
+                metric_labels=metric_labels,
+                field_labels=field_labels,
+                example_questions=example_questions,
+                example_sources=example_sources,
+            )
+        )
+    return tuple(summaries)
+
+
+def _example_questions(
+    dataset: schema.CuratedDataset,
+    tables: tuple[schema.DatasetTable, ...],
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    questions = list(dataset.example_questions[:3])
+    sources = ["curated"] * len(questions)
+    generated = _generated_example_questions(tables)
+    for question in generated:
+        if len(questions) >= 3:
+            break
+        if question in questions:
+            continue
+        questions.append(question)
+        sources.append("generated")
+    return tuple(questions), tuple(sources)
+
+
+def _generated_example_questions(
+    tables: tuple[schema.DatasetTable, ...],
+) -> tuple[str, ...]:
+    table_example = min(
+        (
+            example
+            for table in tables
+            if (example := _table_example_parts(table)) is not None
+        ),
+        default=None,
+        key=lambda example: example.sort_key,
+    )
+    if table_example is None:
+        return ()
+    time_phrase = (
+        "in January 2026"
+        if table_example.date_field_label is not None
+        else "for all time"
+    )
+    examples: list[str] = [f"What was {table_example.metric_label} {time_phrase}?"]
+    if table_example.group_field_label is not None:
+        examples.append(
+            f"What was {table_example.metric_label} by "
+            f"{table_example.group_field_label} {time_phrase}?"
+        )
+        examples.append(
+            f"Show {table_example.metric_label} by "
+            f"{table_example.group_field_label} {time_phrase}."
+        )
+    return tuple(examples)
+
+
+def _table_example_parts(
+    table: schema.DatasetTable,
+) -> _TableExampleParts | None:
+    metric_labels = sorted(metric.label for metric in table.metrics)
+    if not metric_labels:
+        return None
+    group_field_labels = sorted(
+        field.label
+        for field in table.fields
+        if schema.FieldOperation.GROUP_BY in field.operations
+    )
+    date_field_labels = sorted(
+        field.label for field in table.fields if field.data_type == schema.DataType.DATE
+    )
+    return _TableExampleParts(
+        sort_key=(
+            metric_labels[0],
+            group_field_labels[0] if group_field_labels else "",
+            date_field_labels[0] if date_field_labels else "",
+            table.table_id,
+        ),
+        metric_label=metric_labels[0],
+        group_field_label=(None if not group_field_labels else group_field_labels[0]),
+        date_field_label=None if not date_field_labels else date_field_labels[0],
+    )
+
+
+class _TableExampleParts(typing.NamedTuple):
+    sort_key: tuple[str, str, str, str]
+    metric_label: str
+    group_field_label: str | None
+    date_field_label: str | None

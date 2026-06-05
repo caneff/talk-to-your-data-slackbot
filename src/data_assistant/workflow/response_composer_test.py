@@ -236,6 +236,69 @@ def test_response_composer_numbers_ranked_plain_text_and_slack_table() -> None:
     ]
 
 
+def test_response_composer_builds_catalog_discovery_blocks_and_trust_summary() -> None:
+    response = response_composer.compose_catalog_discovery_response(
+        datasets=(
+            contracts.CatalogDatasetSummary(
+                dataset_name="Retail Operations",
+                information_types=("revenue", "regional performance"),
+                metric_labels=("customer count", "total revenue"),
+                field_labels=("created date", "region"),
+                example_questions=(
+                    "What was total revenue by region in January 2026?",
+                    "What was customer count by region in January 2026?",
+                    "What was total revenue in the West region in January 2026?",
+                ),
+                example_sources=("curated", "generated", "generated"),
+            ),
+        ),
+    )
+
+    assert response.response_kind == contracts.ResponseKind.ANSWER
+    assert "Retail Operations" in response.text
+    assert "Prepared Data was not read." in response.text
+    assert "orders" not in response.text
+    assert response.blocks[0]["type"] == "section"
+    assert response.blocks[1]["type"] == "context"
+    assert "table" not in {block["type"] for block in response.blocks}
+    assert response.trust_summary.datasets == ("Retail Operations",)
+    assert response.non_answer is None
+
+
+def test_response_composer_handles_zero_accessible_catalog_datasets_without_leaks() -> (
+    None
+):
+    response = response_composer.compose_catalog_discovery_response(datasets=())
+
+    assert response.response_kind == contracts.ResponseKind.ANSWER
+    assert "no approved datasets are currently available" in response.text.lower()
+    assert "restricted" not in response.text.lower()
+    assert "0 dataset" not in response.text.lower()
+    assert response.blocks == (
+        {
+            "type": "section",
+            "text": {
+                "type": "plain_text",
+                "text": (
+                    "No approved datasets are currently available for you to query."
+                ),
+            },
+        },
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "plain_text",
+                    "text": (
+                        "Trust Summary: Semantic Layer metadata used. Curated "
+                        "Dataset names shown: none. Prepared Data was not read."
+                    ),
+                },
+            ],
+        },
+    )
+
+
 def test_response_composer_renders_through_injected_wording_provider() -> None:
     """Composer renders Non-Answer copy through the injected provider.
 
