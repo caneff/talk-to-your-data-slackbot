@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import calendar
 import dataclasses
 import datetime
 import typing
@@ -170,6 +171,19 @@ def _time_range_label(data_request: contracts.DataRequest) -> str:
         if field_filter.field.data_type != "date":
             continue
         if isinstance(field_filter, contracts.RangeFilter):
+            lower_date = (
+                field_filter.lower
+                if isinstance(field_filter.lower, datetime.date)
+                else None
+            )
+            upper_date = (
+                field_filter.upper
+                if isinstance(field_filter.upper, datetime.date)
+                else None
+            )
+            period_label = _friendly_period_label(lower_date, upper_date)
+            if period_label is not None:
+                return period_label
             lower = _format_date_bound(field_filter.lower)
             upper = _format_date_bound(field_filter.upper)
             if lower is not None and upper is not None:
@@ -190,5 +204,64 @@ def _format_date_bound(value: contracts.FieldValue | None) -> str | None:
     if value is None:
         return None
     if isinstance(value, datetime.date):
-        return value.isoformat()
+        return _format_short_date(value)
     return str(value)
+
+
+def _friendly_period_label(
+    lower: datetime.date | None,
+    upper: datetime.date | None,
+) -> str | None:
+    if lower is None and upper is None:
+        return None
+    if lower is not None and upper is not None:
+        if lower == datetime.date(lower.year, 1, 1) and upper == datetime.date(
+            lower.year, 12, 31
+        ):
+            return str(lower.year)
+        if lower.year == upper.year:
+            quarter = _calendar_quarter(lower, upper)
+            if quarter is not None:
+                return f"Q{quarter} {lower.year}"
+            if _is_full_month(lower, upper):
+                return lower.strftime("%B %Y")
+            return _format_closed_date_range(lower, upper)
+        return _format_closed_date_range(lower, upper)
+    return None
+
+
+def _calendar_quarter(lower: datetime.date, upper: datetime.date) -> int | None:
+    quarter = ((lower.month - 1) // 3) + 1
+    start_month = (quarter - 1) * 3 + 1
+    if lower != datetime.date(lower.year, start_month, 1):
+        return None
+    end_month = start_month + 2
+    end_day = calendar.monthrange(upper.year, end_month)[1]
+    if upper != datetime.date(upper.year, end_month, end_day):
+        return None
+    return quarter
+
+
+def _is_full_month(lower: datetime.date, upper: datetime.date) -> bool:
+    return (
+        lower.year == upper.year
+        and lower.month == upper.month
+        and lower.day == 1
+        and upper.day == calendar.monthrange(upper.year, upper.month)[1]
+    )
+
+
+def _format_closed_date_range(lower: datetime.date, upper: datetime.date) -> str:
+    if lower.year == upper.year:
+        return (
+            f"{lower.strftime('%b')} {lower.day} - "
+            f"{upper.strftime('%b')} {upper.day}, {upper.year}"
+        )
+    return (
+        f"{lower.strftime('%b')} {lower.day}, {lower.year} - "
+        f"{upper.strftime('%b')} {upper.day}, {upper.year}"
+    )
+
+
+def _format_short_date(value: datetime.date) -> str:
+    return value.strftime("%b") + f" {value.day}, {value.year}"

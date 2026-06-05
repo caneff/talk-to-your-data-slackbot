@@ -1,10 +1,14 @@
 """Behavior tests for grounded narration in the Reasoning Layer (ADR-0012)."""
 
+import dataclasses
+import datetime
+
 import pydantic
 
 import data_assistant.reasoning_layer as reasoning_layer
 import data_assistant.reasoning_layer.narrative_cases as narrative_cases
 import data_assistant.reasoning_layer.testing_support as reasoning_support
+import data_assistant.workflow.contracts as contracts
 
 
 def test_compute_slot_values_ranks_grouped_prepared_data() -> None:
@@ -14,7 +18,7 @@ def test_compute_slot_values_ranks_grouped_prepared_data() -> None:
 
     assert slot_values == {
         "metric": "Total revenue",
-        "time_range": "2026-01-01 through 2026-01-31",
+        "time_range": "January 2026",
         "metric_total": "$5,150.00",
         "dimension": "regions",
         "dimension_count": 5,
@@ -30,7 +34,7 @@ def test_compute_slot_values_for_scalar_prepared_data_has_empty_ranking() -> Non
 
     assert slot_values == {
         "metric": "Customer count",
-        "time_range": "2026-01-01 through 2026-01-31",
+        "time_range": "January 2026",
         "metric_total": "1,234",
         "dimension": "",
         "dimension_count": 1,
@@ -46,13 +50,93 @@ def test_compute_slot_values_for_empty_grouped_data_has_empty_ranking() -> None:
 
     assert slot_values == {
         "metric": "Total revenue",
-        "time_range": "2025-10-01 through 2025-12-31",
+        "time_range": "Q4 2025",
         "metric_total": "$0.00",
         "dimension": "regions",
         "dimension_count": 0,
         "top_dimension": "",
         "top_value": "",
     }
+
+
+def test_compute_slot_values_formats_exact_calendar_quarter() -> None:
+    prepared_data = narrative_cases.prepared_revenue_by_region()
+    quarter_request = dataclasses.replace(
+        prepared_data.request,
+        field_filters=(
+            contracts.RangeFilter(
+                field=prepared_data.request.field_filters[0].field,
+                lower=datetime.date(2026, 1, 1),
+                upper=datetime.date(2026, 3, 31),
+            ),
+        ),
+    )
+
+    slot_values = reasoning_layer.compute_slot_values(
+        dataclasses.replace(prepared_data, request=quarter_request)
+    )
+
+    assert slot_values["time_range"] == "Q1 2026"
+
+
+def test_compute_slot_values_formats_exact_calendar_year() -> None:
+    prepared_data = narrative_cases.prepared_revenue_by_region()
+    year_request = dataclasses.replace(
+        prepared_data.request,
+        field_filters=(
+            contracts.RangeFilter(
+                field=prepared_data.request.field_filters[0].field,
+                lower=datetime.date(2026, 1, 1),
+                upper=datetime.date(2026, 12, 31),
+            ),
+        ),
+    )
+
+    slot_values = reasoning_layer.compute_slot_values(
+        dataclasses.replace(prepared_data, request=year_request)
+    )
+
+    assert slot_values["time_range"] == "2026"
+
+
+def test_compute_slot_values_formats_non_period_closed_ranges_readably() -> None:
+    prepared_data = narrative_cases.prepared_revenue_by_region()
+    closed_range_request = dataclasses.replace(
+        prepared_data.request,
+        field_filters=(
+            contracts.RangeFilter(
+                field=prepared_data.request.field_filters[0].field,
+                lower=datetime.date(2026, 1, 1),
+                upper=datetime.date(2026, 3, 15),
+            ),
+        ),
+    )
+
+    slot_values = reasoning_layer.compute_slot_values(
+        dataclasses.replace(prepared_data, request=closed_range_request)
+    )
+
+    assert slot_values["time_range"] == "Jan 1 - Mar 15, 2026"
+
+
+def test_compute_slot_values_formats_half_open_ranges_readably() -> None:
+    prepared_data = narrative_cases.prepared_revenue_by_region()
+    half_open_request = dataclasses.replace(
+        prepared_data.request,
+        field_filters=(
+            contracts.RangeFilter(
+                field=prepared_data.request.field_filters[0].field,
+                lower=datetime.date(2026, 1, 1),
+                upper=None,
+            ),
+        ),
+    )
+
+    slot_values = reasoning_layer.compute_slot_values(
+        dataclasses.replace(prepared_data, request=half_open_request)
+    )
+
+    assert slot_values["time_range"] == "from Jan 1, 2026"
 
 
 def test_figure_free_result_shape_grouped_lists_all_seven_slot_names() -> None:
@@ -135,8 +219,8 @@ def test_draft_narrative_fills_slots_and_matches_floor_numbers() -> None:
     deterministic = reasoning_layer.draft_answer(prepared_data)
 
     assert answer_draft.summary == (
-        "Total revenue across 5 regions totaled $5,150.00 in "
-        "2026-01-01 through 2026-01-31, with West on top at $1,600.00."
+        "Total revenue across 5 regions totaled $5,150.00 in January 2026, "
+        "with West on top at $1,600.00."
     )
     # Numbers, caveats, datasets all match the deterministic floor.
     assert answer_draft.caveats == deterministic.caveats
@@ -224,12 +308,12 @@ def test_fill_narrative_fills_a_slot_only_summary() -> None:
         proposal,
         {
             "metric": "Total revenue",
-            "time_range": "2026-01-01 through 2026-01-31",
+            "time_range": "January 2026",
             "top_dimension": "West",
         },
     )
 
-    assert filled == "Total revenue in 2026-01-01 through 2026-01-31 led by West."
+    assert filled == "Total revenue in January 2026 led by West."
 
 
 def test_fill_narrative_returns_none_for_unknown_slot() -> None:

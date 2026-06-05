@@ -179,7 +179,7 @@ def test_openai_provider_returns_narrative_proposal_from_parsed_response() -> No
     )
     result_shape: dict[str, object] = {
         "metric": "Total revenue",
-        "time_range": "2026-01-01 through 2026-01-31",
+        "time_range": "January 2026",
         "dimension": "regions",
         "dimension_count": 5,
         "top_dimension": "West",

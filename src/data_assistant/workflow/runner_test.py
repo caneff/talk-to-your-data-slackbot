@@ -178,7 +178,7 @@ def test_data_assistant_answers_empty_retail_q4_result_without_crashing(
     assert "No data was returned for this query." in run.final_response.text
     assert "$0.00" not in run.final_response.text
     assert "0 regions" not in run.final_response.text
-    assert "Time range: 2025-10-01 through 2025-12-31." in run.final_response.text
+    assert "Time range: Q4 2025." in run.final_response.text
     assert "Caveats: No rows matched the request filters." in run.final_response.text
     assert "- North:" not in run.final_response.text
 
@@ -240,16 +240,14 @@ def test_data_assistant_runs_customer_count_by_customer_region_end_to_end(
     assert run.prepared_data.quality_notes == (
         "1 row grouped under Unknown because customer region was missing.",
     )
-    assert "Customer count in 2026-01-01 through 2026-01-31 was 5" in (
-        run.final_response.text
-    )
+    assert "Customer count in January 2026 was 5" in (run.final_response.text)
     assert "- North: 2" in run.final_response.text
     assert "- East: 1" in run.final_response.text
     assert "- South: 1" in run.final_response.text
     assert "- Unknown: 1" in run.final_response.text
     assert "$" not in run.final_response.text
     assert "Dataset Table: customers." in run.final_response.text
-    assert "Time range: 2026-01-01 through 2026-01-31." in run.final_response.text
+    assert "Time range: January 2026." in run.final_response.text
     assert "1 row grouped under Unknown because customer region was missing." in (
         run.final_response.text
     )
@@ -509,12 +507,11 @@ def test_data_assistant_uses_supplied_reasoning_provider_for_final_narrative(
 
     assert isinstance(run, contracts.DataAssistantRun)
     assert (
-        run.answer_draft.summary
-        == "Total revenue in 2026-01-01 through 2026-01-31 stretched across 3 "
+        run.answer_draft.summary == "Total revenue in January 2026 stretched across 3 "
         "regions, with West out front at $1,600.00."
     )
     assert (
-        "Total revenue in 2026-01-01 through 2026-01-31 stretched across 3 "
+        "Total revenue in January 2026 stretched across 3 "
         "regions, with West out front at $1,600.00." in run.final_response.text
     )
     assert reasoning_layer.WITHHELD_WORDING_CAVEAT not in run.answer_draft.caveats
@@ -565,8 +562,7 @@ def test_data_assistant_degrades_to_floor_when_reasoning_proposal_contains_digit
 
     assert isinstance(run, contracts.DataAssistantRun)
     assert (
-        run.answer_draft.summary
-        == "Total revenue in 2026-01-01 through 2026-01-31 was $3,950.00, "
+        run.answer_draft.summary == "Total revenue in January 2026 was $3,950.00, "
         "grouped across 3 regions."
     )
     assert run.answer_draft.caveats == (reasoning_layer.WITHHELD_WORDING_CAVEAT,)
