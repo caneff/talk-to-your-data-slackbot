@@ -57,8 +57,9 @@ Slack Socket Mode topology stays (outbound WebSocket, no inbound port, no queue,
 no public request URL), and the free Web Service tier remains rejected for the
 reasons above.
 
-This ADR is **not** superseded. The boxed-demo path is documented in the README
-("Host on Render (time-boxed demo)") and pinned as code in `render.yaml` at the
+This ADR is **not** superseded. The boxed-demo path is documented in
+[docs/operations.md](../operations.md) ("Host on Render (time-boxed demo)") and
+pinned as code in `render.yaml` at the
 repo root, which fixes `type: worker` so nobody falls back into the free-tier Web
 Service trap. When the demo window ends, the Worker is suspended or deleted so
 the paid charge does not persist — restoring the original $0 default.
