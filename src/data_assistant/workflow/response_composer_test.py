@@ -192,6 +192,50 @@ def test_response_composer_title_cases_each_word_in_table_headers() -> None:
     ]
 
 
+def test_response_composer_numbers_ranked_plain_text_and_slack_table() -> None:
+    response = response_composer.compose_final_response(
+        contracts.AnswerDraft(
+            summary=(
+                "Total revenue in January 2026 was $2,050.00 across ranked regions."
+            ),
+            key_data=pd.DataFrame(
+                {
+                    "dimension_value": ("North", "South"),
+                    "metric_value": (1200.0, 850.0),
+                }
+            ),
+            datasets_used=("Retail Operations",),
+            dataset_tables_used=("orders",),
+            metric_kind=schema.MetricKind.MONEY,
+            metric_label="total revenue",
+            time_range="January 2026",
+            filters=(),
+            caveats=(),
+            group_by_label="region",
+            rank=contracts.RankSpec(
+                result_limit=2,
+                sort_direction=contracts.SortDirection.DESC,
+            ),
+        )
+    )
+
+    assert "1. North: $1,200.00" in response.text
+    assert "2. South: $850.00" in response.text
+    table_block = response.blocks[2]
+    assert table_block["type"] == "table"
+    rows = typing.cast(list[list[dict[str, str]]], table_block["rows"])
+    assert rows[0] == [
+        {"type": "raw_text", "text": "#"},
+        {"type": "raw_text", "text": "Region"},
+        {"type": "raw_text", "text": "Total Revenue"},
+    ]
+    assert rows[1] == [
+        {"type": "raw_text", "text": "1"},
+        {"type": "raw_text", "text": "North"},
+        {"type": "raw_text", "text": "$1,200.00"},
+    ]
+
+
 def test_response_composer_renders_through_injected_wording_provider() -> None:
     """Composer renders Non-Answer copy through the injected provider.
 

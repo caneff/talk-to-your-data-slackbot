@@ -18,7 +18,7 @@ _Avoid_: Query, prompt, report request
 
 **Supported Intent**:
 A type of **Data Question** the **Data Assistant** is expected to handle in v1,
-including summarize.
+including summarize and rank.
 _Avoid_: Capability, command, query type
 
 **Deferred Intent**:
@@ -30,15 +30,16 @@ _Avoid_: Unsupported feature, backlog item, advanced query
 
 **Unsupported Intent**:
 A **Deferred Intent** identified by the **Question Interpreter** and rejected by
-the current workflow because v1 supports only summarize.
+the current workflow because v1 still defers compare, trend, forecast, explain,
+prescribe, diagnose, and related out-of-scope analytical asks.
 _Avoid_: Invalid question, parser failure, unsupported shape
 
 **Rank Intent**:
-An **Unsupported Intent** for Data Questions that ask for top, bottom, highest,
-lowest, most, least, biggest, or smallest results. v1 rejects this intent rather
-than collapsing it into a grouped summarize answer. The rejection comes from
-provider output validation (the provider classifies the non-summarize intent),
-not a deterministic pre-provider check (ADR-0023).
+A **Supported Intent** for Data Questions that ask for top, bottom, highest,
+lowest, most, least, biggest, or smallest grouped results. The trusted
+**Question Frame** carries explicit rank direction plus a bounded result limit,
+and deterministic retrieval applies ORDER BY plus LIMIT rather than collapsing
+the ask into summarize.
 _Avoid_: Grouped summary, comparison, sort request
 
 **Slack Acknowledgement**:

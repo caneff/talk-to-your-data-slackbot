@@ -92,6 +92,7 @@ def _answer_draft(
         group_by_label=(
             request.group_by_field.label if request.group_by_field else None
         ),
+        rank=request.rank,
     )
 
 

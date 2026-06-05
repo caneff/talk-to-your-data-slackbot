@@ -54,9 +54,9 @@ known-deferred-intent cases, and branch the run loop on it:
 The honesty guard (`test_deferred_cases_have_unsupported_unclassified_intent`)
 asserts one direction only: every `deferred=True` case has an
 `expected.intent` that is unsupported and not-yet-classified — not `None`, not
-the supported `"summarize"`, and not the classified-but-unsupported `"rank"`.
-The converse is intentionally not asserted: `rank` is unsupported but is
-already correctly classified, so rank cases are legitimately *not* deferred.
+the supported `"summarize"`, and not the now-supported `"rank"`.
+The converse is intentionally not asserted: `rank` is now supported and therefore
+also legitimately *not* deferred.
 
 The coverage guard is untouched: `expected.intent` is unchanged on every case,
 so all deferred intents stay present and classified.

@@ -37,10 +37,20 @@ def compose_final_response(
         )
     )
     metric_lines = "\n".join(
-        "- "
-        + answer_draft.key_data["dimension_value"].astype(str)
-        + ": "
-        + formatted_metric_values,
+        _metric_line(
+            index=index,
+            dimension_value=dimension_value,
+            metric_value=metric_value,
+            rank=answer_draft.rank,
+        )
+        for index, (dimension_value, metric_value) in enumerate(
+            zip(
+                answer_draft.key_data["dimension_value"].astype(str),
+                formatted_metric_values,
+                strict=True,
+            ),
+            start=1,
+        )
     )
     trust_summary = contracts.TrustSummary(
         datasets=answer_draft.datasets_used,
@@ -68,6 +78,7 @@ def compose_final_response(
                 formatted_metric_values,
                 dimension_header=answer_draft.group_by_label or "Group",
                 metric_header=answer_draft.metric_label,
+                rank=answer_draft.rank,
             ),
         ),
     )
@@ -153,36 +164,64 @@ def _render_key_data_table_block(
     *,
     dimension_header: str,
     metric_header: str,
+    rank: contracts.RankSpec | None,
 ) -> tuple[contracts.SlackBlock, ...]:
-    rows = [
-        [
+    header_row: list[dict[str, str]] = []
+    column_settings: list[dict[str, object]] = []
+    if rank is not None:
+        header_row.append({"type": "raw_text", "text": "#"})
+        column_settings.append({"align": "right"})
+    header_row.extend(
+        (
             {"type": "raw_text", "text": _title_case_label(dimension_header)},
             {"type": "raw_text", "text": _title_case_label(metric_header)},
-        ],
-    ]
-    rows.extend(
-        [
-            {"type": "raw_text", "text": str(dimension_value)},
-            {"type": "raw_text", "text": str(metric_value)},
-        ]
-        for dimension_value, metric_value in zip(
+        )
+    )
+    column_settings.extend(
+        (
+            {"is_wrapped": True},
+            {"align": "right"},
+        )
+    )
+    rows = [header_row]
+    for index, (dimension_value, metric_value) in enumerate(
+        zip(
             key_data["dimension_value"],
             formatted_metric_values,
             strict=True,
+        ),
+        start=1,
+    ):
+        row: list[dict[str, str]] = []
+        if rank is not None:
+            row.append({"type": "raw_text", "text": str(index)})
+        row.extend(
+            (
+                {"type": "raw_text", "text": str(dimension_value)},
+                {"type": "raw_text", "text": str(metric_value)},
+            )
         )
-    )
+        rows.append(row)
     if len(rows) == 1 or len(rows) > 100:
         return ()
     return (
         {
             "type": "table",
-            "column_settings": [
-                {"is_wrapped": True},
-                {"align": "right"},
-            ],
+            "column_settings": column_settings,
             "rows": rows,
         },
     )
+
+
+def _metric_line(
+    *,
+    index: int,
+    dimension_value: str,
+    metric_value: str,
+    rank: contracts.RankSpec | None,
+) -> str:
+    prefix = "- " if rank is None else f"{index}. "
+    return f"{prefix}{dimension_value}: {metric_value}"
 
 
 def _title_case_label(label: str) -> str:

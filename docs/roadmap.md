@@ -90,9 +90,8 @@ Question to a Final Response grounded in one approved Curated Dataset.
 - Questions whose shape exceeds a single metric grouped by a single dimension:
   multiple group-by dimensions and multiple metrics per question are not yet
   supported (`data_preparation` uses `group_by_fields[0]`).
-- Intents beyond `summarize` — trends, comparisons, top-N, and period-over-period
-  are deliberately out of scope (`_SUPPORTED_PROVIDER_INTENTS` is `summarize`
-  only).
+- Intents beyond `summarize` and `rank` — trends, comparisons, and
+  period-over-period are deliberately out of scope.
 - Multi-dataset joins.
 - Result Access beyond simple dataset-level denial.
 - Trust Detail follow-ups.

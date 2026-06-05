@@ -8,7 +8,7 @@ import typing
 import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.schema as schema
 
-_SUPPORTED_PROVIDER_INTENTS = frozenset({"summarize"})
+_SUPPORTED_PROVIDER_INTENTS = frozenset({"rank", "summarize"})
 
 
 def build_semantic_layer_context(

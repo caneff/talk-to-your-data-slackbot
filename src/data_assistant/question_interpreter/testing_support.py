@@ -94,6 +94,8 @@ def question_frame_proposal(
     metric: str | None = "total revenue",
     metric_ambiguity: str | None = None,
     unknown_metric: str | None = None,
+    limit: int | None = None,
+    sort_direction: typing.Literal["asc", "desc"] | None = None,
     all_time: bool = False,
     field_operations: (
         tuple[question_interpreter.ProviderFieldOperation, ...] | object
@@ -124,6 +126,8 @@ def question_frame_proposal(
         metric=metric,
         metric_ambiguity=metric_ambiguity,
         unknown_metric=unknown_metric,
+        limit=limit,
+        sort_direction=sort_direction,
         all_time=all_time,
         field_operations=active_field_operations,
     )

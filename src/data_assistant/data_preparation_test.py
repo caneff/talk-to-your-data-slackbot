@@ -36,6 +36,37 @@ def test_prepared_data_contains_bounded_grouped_revenue_results(
     pd_testing.assert_frame_equal(prepared_data.data, expected_data)
 
 
+def test_prepared_data_orders_rank_results_ascending_and_limits_rows(
+    data_request: contracts.DataRequest,
+    connect_orders: local_duckdb_fixture.OrdersConnector,
+) -> None:
+    data_request = dataclasses.replace(
+        data_request,
+        result_limit=2,
+        rank=contracts.RankSpec(
+            result_limit=2,
+            sort_direction=contracts.SortDirection.ASC,
+        ),
+    )
+    order_rows = (
+        ("2026-01-03", "North", "1200.00"),
+        ("2026-01-08", "South", "850.00"),
+        ("2026-01-15", "West", "1600.00"),
+        ("2026-01-22", "North", "300.00"),
+        ("2026-01-28", "East", "950.00"),
+    )
+    with connect_orders(order_rows) as connection:
+        prepared_data = data_preparation.prepare_data(data_request, connection)
+
+    expected_data = pd.DataFrame(
+        {
+            "dimension_value": ("South", "East"),
+            "metric_value": (850.0, 950.0),
+        },
+    )
+    pd_testing.assert_frame_equal(prepared_data.data, expected_data)
+
+
 def test_prepared_data_returns_empty_grouped_result_when_no_rows_match(
     data_request: contracts.DataRequest,
     connect_orders: local_duckdb_fixture.OrdersConnector,

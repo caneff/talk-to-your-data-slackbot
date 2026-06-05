@@ -68,7 +68,7 @@ class ProviderProposal(pydantic.BaseModel):
         description=(
             "Use summarize for supported Data Questions that ask for historical "
             "metric totals, summaries, or grouped results, including phrases "
-            "like 'what was', 'show', and 'summarize'. Use rank for deferred "
+            "like 'what was', 'show', and 'summarize'. Use rank for supported "
             "top/bottom questions that ask for highest, lowest, most, least, "
             "biggest, smallest, top, or bottom results. Other deferred intent "
             "names such as compare, trend, forecast, explain, prescribe, or "
@@ -123,6 +123,22 @@ class ProviderProposal(pydantic.BaseModel):
             "Data Question, represented with Semantic Field labels. Do not add "
             "operations for fields that are merely available in context or "
             "examples. If the question omits time, omit date operations."
+        ),
+    )
+    limit: int | None = pydantic.Field(
+        default=None,
+        description=(
+            "Explicit top-N or bottom-N count for intent rank. Use null when "
+            "the question does not name a count; downstream defaults the rank "
+            "limit to the standard bounded result limit."
+        ),
+    )
+    sort_direction: typing.Literal["asc", "desc"] | None = pydantic.Field(
+        default=None,
+        description=(
+            "For intent rank, use desc for top, highest, most, biggest, or "
+            "first-ranked asks; use asc for bottom, lowest, least, smallest, "
+            "or last-ranked asks. Null for non-rank intents."
         ),
     )
     all_time: bool = pydantic.Field(

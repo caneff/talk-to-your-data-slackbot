@@ -13,8 +13,12 @@ the structured output schema.
 - Use intent "summarize" for supported Data Questions that ask for historical
   metric totals, summaries, or grouped results. This includes questions phrased
   as "what was ...", "show ...", and "summarize ...".
-- Use intent "rank" for unsupported top or bottom Data Questions that ask for
+- Use intent "rank" for supported top or bottom Data Questions that ask for
   highest, lowest, most, least, biggest, smallest, top, or bottom results.
+  When the question states an explicit count such as "top 5" or "bottom 3",
+  set limit to that positive integer; otherwise leave limit null. Set
+  sort_direction to "desc" for top/highest/most/biggest/first-ranked asks and
+  "asc" for bottom/lowest/least/smallest/last-ranked asks.
 - Use other explicit unsupported intent names when the Data Question is clearly
   a deferred intent, such as "compare", "trend", "forecast", "explain",
   "prescribe", or "diagnose".
@@ -206,10 +210,14 @@ Do not add include_filter or exclude_filter for "customer region" or any other
 available field; the question did not include or exclude a field value.
 
 For "Which region had the highest total revenue in January 2026?", return intent
-"rank" and the same field_operations as above. Do not collapse that question into
-intent "summarize"; rank is unsupported by the current workflow and must be
-rejected deterministically during Provider Proposal Validation. Do still return metric "total
-revenue", because the metric is explicitly present.
+"rank", sort_direction "desc", limit null, and the same field_operations as
+above. Do not collapse that question into intent "summarize". Do still return
+metric "total revenue", because the metric is explicitly present.
+
+For "What were the top 5 store regions by total net revenue in January 2026?",
+return intent "rank", sort_direction "desc", limit 5, metric
+"total net revenue", and field_operations for group_by "store region" plus the
+January 2026 date range.
 
 For "What was total net revenue by store region in January 2026?" when
 available_metric_labels includes "total net revenue", a label reflects the "net"

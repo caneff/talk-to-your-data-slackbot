@@ -28,9 +28,15 @@ def prepare_data(
         group_and_order = "having count(*) > 0"
     else:
         dimension_select = _grouped_dimension_sql(group_by_field)
+        metric_order_direction = (
+            "desc"
+            if data_request.rank is None
+            else data_request.rank.sort_direction.value
+        )
         group_and_order = (
             "group by dimension_value\n"
-            "        order by metric_value desc, dimension_value asc"
+            f"        order by metric_value {metric_order_direction}, "
+            "dimension_value asc"
         )
     metric_query = f"""
         with {filtered_rows_cte},
