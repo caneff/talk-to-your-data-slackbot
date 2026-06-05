@@ -257,16 +257,18 @@ def test_availability_shape_non_answers_via_missing_time_scope() -> None:
     assert result.reason_code == contracts.NonAnswerReasonCode.MISSING_TIME_SCOPE
 
 
-def test_rank_shape_non_answers_via_unsupported_intent() -> None:
-    """A rank proposal still rejects, now through provider-output validation.
-
-    The deterministic rank guard is gone; a non-summarize intent reaches the
-    surviving intent gate, which rejects it as UNSUPPORTED_INTENT.
-    """
+def test_rank_shape_validates_to_question_frame() -> None:
+    """A rank proposal promotes into a trusted Question Frame."""
     proposal = question_interpreter.ProviderProposal(
         intent="rank",
         metric="total revenue",
+        limit=2,
+        sort_direction="desc",
         field_operations=(
+            question_interpreter.ProviderFieldOperation(
+                operation="group_by",
+                field="region",
+            ),
             question_interpreter.ProviderFieldOperation(
                 operation="range_filter",
                 field="order date",
@@ -282,8 +284,25 @@ def test_rank_shape_non_answers_via_unsupported_intent() -> None:
         provider=_StaticProvider(proposal),
     )
 
-    assert isinstance(result, contracts.NonAnswer)
-    assert result.reason_code == contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT
+    assert isinstance(result, contracts.Success)
+    assert result.value == contracts.QuestionFrame(
+        intent="rank",
+        metric="total revenue",
+        time_scope=contracts.TimeScope.BOUNDED,
+        group_by_field="region",
+        field_filters=(
+            contracts.RangeFilter(
+                field="order date",
+                lower=datetime.date(2026, 1, 1),
+                upper=datetime.date(2026, 1, 31),
+            ),
+        ),
+        unresolved_ambiguities=(),
+        rank=contracts.RankSpec(
+            result_limit=2,
+            sort_direction=contracts.SortDirection.DESC,
+        ),
+    )
 
 
 def test_unsupported_data_shape_non_answers_via_unknown_semantic_label() -> None:

@@ -1,4 +1,5 @@
 import datetime
+import typing
 
 import pytest
 
@@ -631,17 +632,11 @@ def test_data_assistant_stops_progress_after_question_interpreter_non_answer(
     )
 
 
-def test_data_assistant_rejects_rank_intent_through_provider_output(
-    monkeypatch: pytest.MonkeyPatch,
+def test_data_assistant_answers_rank_intent_through_provider_output(
     connect_orders: local_duckdb_fixture.OrdersConnector,
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:
-    """Rank intent rejects via provider-output validation (ADR-0023).
-
-    The pre-provider rank guard is gone, so the provider IS called; a
-    non-summarize intent then fails the surviving intent gate.
-    """
-    sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
+    """Rank intent routes end to end through deterministic retrieval."""
     provider_calls: list[str] = []
 
     class RankIntentProvider:
@@ -656,7 +651,13 @@ def test_data_assistant_rejects_rank_intent_through_provider_output(
             return question_interpreter.ProviderProposal(
                 intent="rank",
                 metric="total revenue",
+                limit=2,
+                sort_direction="desc",
                 field_operations=(
+                    question_interpreter.ProviderFieldOperation(
+                        operation="group_by",
+                        field="region",
+                    ),
                     question_interpreter.ProviderFieldOperation(
                         operation="range_filter",
                         field="order date",
@@ -666,7 +667,13 @@ def test_data_assistant_rejects_rank_intent_through_provider_output(
                 ),
             )
 
-    with connect_orders((("2026-01-03", "North", "1200.00"),)) as connection:
+    order_rows = (
+        ("2026-01-03", "North", "1200.00"),
+        ("2026-01-08", "South", "850.00"),
+        ("2026-01-15", "West", "1600.00"),
+        ("2026-01-28", "East", "950.00"),
+    )
+    with connect_orders(order_rows) as connection:
         result = workflow_runner.run_data_assistant(
             connection,
             "Which region had the highest total revenue in January 2026?",
@@ -674,12 +681,21 @@ def test_data_assistant_rejects_rank_intent_through_provider_output(
             internal_identity=allowed_internal_identity,
         )
 
-    assert result is sentinel_response
+    assert isinstance(result, contracts.DataAssistantRun)
     assert len(provider_calls) == 1
-    assert len(captured_non_answers) == 1
-    non_answer = captured_non_answers[0]
-    assert non_answer.stage == contracts.NonAnswerStage.QUESTION_INTERPRETER
-    assert non_answer.reason_code == contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT
+    assert result.question_frame.rank == contracts.RankSpec(
+        result_limit=2,
+        sort_direction=contracts.SortDirection.DESC,
+    )
+    assert result.data_request.result_limit == 2
+    assert tuple(result.prepared_data.data["dimension_value"]) == ("West", "North")
+    table_block = result.final_response.blocks[2]
+    rows = typing.cast(list[list[dict[str, str]]], table_block["rows"])
+    assert rows[0] == [
+        {"type": "raw_text", "text": "#"},
+        {"type": "raw_text", "text": "Region"},
+        {"type": "raw_text", "text": "Total Revenue"},
+    ]
 
 
 def test_data_assistant_rejects_availability_question_through_time_scope_gate(

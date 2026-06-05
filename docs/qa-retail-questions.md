@@ -21,6 +21,7 @@ oracle; there is no expected-answer comparison.
 - [orders-net-revenue-web-orders-q1-2026] What was total net revenue for Web orders in Q1 2026?
 - [orders-order-count-by-shipping-region-april-2026] What was order count by shipping region in April 2026?
 - [orders-net-revenue-by-order-date-march-2026] What was total net revenue by order date in March 2026?
+- [orders-top-5-store-regions-by-net-revenue-q1-2026] What were the top 5 store regions by total net revenue in Q1 2026?
 
 ## Product Sales And Margin
 
@@ -32,6 +33,7 @@ oracle; there is no expected-answer comparison.
 - [products-line-revenue-excluding-electronics-march-2026] What was total line revenue excluding Electronics products in March 2026?
 - [products-line-revenue-apparel-march-2026] What was total line revenue for Apparel products in March 2026?
 - [products-units-sold-by-category-excluding-electronics] What were units sold by product category excluding Electronics?
+- [products-bottom-3-categories-by-gross-margin-march-2026] What were the bottom 3 product categories by gross margin in March 2026?
 
 ## Customers
 
@@ -99,20 +101,12 @@ These should return Non-Answers rather than guessed results.
   - Expected reason: `return rate` is not a defined metric.
 - [non-answer-net-revenue-by-store-region-and-customer-segment-q1-2026] What was total net revenue by store region and customer segment in Q1 2026?
   - Expected reason: multi-grouping shape (two dimensions) is unsupported.
-- [non-answer-top-store-region-net-revenue-q1-2026] Which store region had the highest total net revenue in Q1 2026?
-  - Expected reason: rank / top-N is an unsupported intent.
-- [non-answer-top-product-category-stockout-days-may-2026] Which product category had the most stockout days in May 2026?
-  - Expected reason: rank / top-N is an unsupported intent.
 - [non-answer-top-issue-category-support-ticket-count] Which issue category had the highest support ticket count?
-  - Expected reason: rank / top-N is an unsupported intent.
-- [non-answer-top-order-channel-gross-revenue-march-2026] Which order channel had the highest total gross revenue in March 2026?
-  - Expected reason: rank / top-N is an unsupported intent.
-- [non-answer-top-product-category-units-returned-may-2026] Which product category had the highest units returned in May 2026?
-  - Expected reason: rank / top-N is an unsupported intent.
+  - Expected reason: missing time scope.
 - [non-answer-top-loyalty-tier-customer-count] Which loyalty tier had the highest customer count?
-  - Expected reason: rank / top-N is an unsupported intent.
+  - Expected reason: missing time scope.
 - [non-answer-top-inventory-product-on-hand-units] Which inventory product had the highest on hand units?
-  - Expected reason: rank / top-N is an unsupported intent.
+  - Expected reason: missing time scope.
 - [non-answer-compare-net-revenue-by-store-region-q1-2026] How did total net revenue compare by store region in Q1 2026?
   - Expected reason: compare is an unsupported intent.
 - [non-answer-forecast-stockout-days-june-2026] Forecast stockout days for June 2026.

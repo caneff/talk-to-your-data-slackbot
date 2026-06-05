@@ -123,6 +123,18 @@ def compare_provider_proposal_meaning(
     )
     _append_scalar_mismatch(
         mismatches=mismatches,
+        field="limit",
+        expected=expected.limit,
+        actual=actual.limit,
+    )
+    _append_scalar_mismatch(
+        mismatches=mismatches,
+        field="sort_direction",
+        expected=expected.sort_direction,
+        actual=actual.sort_direction,
+    )
+    _append_scalar_mismatch(
+        mismatches=mismatches,
         field="all_time",
         expected=expected.all_time,
         actual=actual.all_time,

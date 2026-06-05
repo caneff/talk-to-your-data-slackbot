@@ -251,10 +251,9 @@ CONTRACT_SNAPSHOT_CASES = (
             contracts.NonAnswerReasonCode.MISSING_TIME_SCOPE, stage=_STAGE
         ),
     ),
-    # No deterministic pre-provider rejects (ADR-0023): these support-boundary
-    # shapes reach the provider and reject through the surviving gates. An
-    # unsupported-data ask resolves to an unknown Semantic Layer label, and a
-    # rank ask resolves to a non-summarize intent.
+    # No deterministic pre-provider rejects (ADR-0023): support-boundary shapes
+    # still reach the provider, then either validate into a trusted frame or
+    # reject through surviving gates.
     snapshot_case(
         name="unsupported_data_unknown_label",
         question=(
@@ -270,9 +269,29 @@ CONTRACT_SNAPSHOT_CASES = (
     snapshot_case(
         name="rank_intent",
         question="Which region had the highest total revenue in January 2026?",
-        proposal=interpreter_support.question_frame_proposal(intent="rank"),
-        expected=non_answer_catalog.non_answer(
-            contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT, stage=_STAGE
+        proposal=interpreter_support.question_frame_proposal(
+            intent="rank",
+            sort_direction="desc",
+        ),
+        expected=contracts.Success(
+            contracts.QuestionFrame(
+                intent="rank",
+                metric="total revenue",
+                time_scope=contracts.TimeScope.BOUNDED,
+                group_by_field="region",
+                field_filters=(
+                    contracts.RangeFilter(
+                        field="order date",
+                        lower=datetime.date(2026, 1, 1),
+                        upper=datetime.date(2026, 1, 31),
+                    ),
+                ),
+                unresolved_ambiguities=(),
+                rank=contracts.RankSpec(
+                    result_limit=contracts.DEFAULT_RESULT_LIMIT,
+                    sort_direction=contracts.SortDirection.DESC,
+                ),
+            )
         ),
     ),
     snapshot_case(
@@ -283,12 +302,33 @@ CONTRACT_SNAPSHOT_CASES = (
         ),
     ),
     snapshot_case(
-        name="unsupported_rank_intent",
-        proposal=interpreter_support.question_frame_proposal(intent="rank"),
-        expected=non_answer_catalog.non_answer(
-            contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT, stage=_STAGE
+        name="rank_top_n_intent",
+        proposal=interpreter_support.question_frame_proposal(
+            intent="rank",
+            limit=5,
+            sort_direction="desc",
         ),
-        question="Which region had total revenue ranked first in January 2026?",
+        expected=contracts.Success(
+            contracts.QuestionFrame(
+                intent="rank",
+                metric="total revenue",
+                time_scope=contracts.TimeScope.BOUNDED,
+                group_by_field="region",
+                field_filters=(
+                    contracts.RangeFilter(
+                        field="order date",
+                        lower=datetime.date(2026, 1, 1),
+                        upper=datetime.date(2026, 1, 31),
+                    ),
+                ),
+                unresolved_ambiguities=(),
+                rank=contracts.RankSpec(
+                    result_limit=5,
+                    sort_direction=contracts.SortDirection.DESC,
+                ),
+            )
+        ),
+        question="What were the top 5 regions by total revenue in January 2026?",
     ),
     snapshot_case(
         name="hallucinated_metric",

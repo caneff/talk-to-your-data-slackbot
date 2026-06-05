@@ -7,8 +7,8 @@ plus the surviving deterministic gates (time scope, metric label, and
 provider-output validation). The three removed regex guards
 (unsupported-data, rank-intent, and data-availability phrasing) are gone, along
 with the `UNSUPPORTED_DATA` and `UNSUPPORTED_AVAILABILITY` reason codes that only
-they emitted. `UNSUPPORTED_INTENT` stays, emitted by output validation for any
-non-summarize intent.
+they emitted. `UNSUPPORTED_INTENT` stays, emitted by output validation for
+still-deferred intents such as compare, trend, or forecast.
 
 ## Considered Options
 
@@ -21,11 +21,12 @@ non-summarize intent.
   confidence phrasings. Rejected: it keeps the dual-source-of-truth problem and
   the maintenance cost while covering less, for marginal benefit.
 - **Remove all three guards (chosen).** Let these shapes reach the provider and
-  reject through the surviving gates: a rank ask classifies as a non-summarize
-  intent (`UNSUPPORTED_INTENT`); an unsupported-data ask resolves to a label
-  outside the Semantic Layer (`UNKNOWN_SEMANTIC_LABEL`); a data-availability ask
-  that names no explicit time scope is rejected by the time-scope gate
-  (`MISSING_TIME_SCOPE`, ADR-0011).
+  route through the surviving gates or supported path: a rank ask now
+  classifies as supported `rank` and continues through deterministic retrieval;
+  an unsupported-data ask resolves to a label outside the Semantic Layer
+  (`UNKNOWN_SEMANTIC_LABEL`); a data-availability ask that names no explicit
+  time scope is rejected by the time-scope gate (`MISSING_TIME_SCOPE`,
+  ADR-0011).
 
 ## Consequences
 
@@ -35,10 +36,13 @@ non-summarize intent.
   `UNSUPPORTED_DATA` / `UNSUPPORTED_AVAILABILITY` reject copy; these shapes now
   surface the more generic `UNKNOWN_SEMANTIC_LABEL` / `MISSING_TIME_SCOPE`
   wording.
-- No correctness change. Retrieval stays deterministic (ADR-0014), so a
-  false-success cannot fabricate numbers, and the surviving gates still reject
-  every one of these shapes — coverage moves from guard-fired tests to
-  surviving-path Non-Answer tests rather than dropping.
+- Rank is now a supported path, so the former rank-intent shape no longer
+  rejects: provider classification promotes it into trusted rank metadata and
+  deterministic retrieval answers it through ORDER BY / LIMIT (ADR-0014).
+  Unsupported-data and data-availability shapes still reject through the
+  surviving label and time-scope gates, so coverage moves from guard-fired
+  tests to a mix of supported-path rank tests and surviving-path Non-Answer
+  tests rather than dropping.
 - Supersedes the CONTEXT.md "Unsupported Intent Guard" framing; **Rank Intent**
-  is still an **Unsupported Intent**, now rejected by provider output validation
-  rather than a pre-provider check.
+  is no longer deferred and no longer depends on any deterministic pre-provider
+  guard.

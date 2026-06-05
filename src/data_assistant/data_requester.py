@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import data_assistant.workflow.contracts as contracts
 
-DEFAULT_RESULT_LIMIT = 10
-
 
 def create_data_request(
     question_frame: contracts.QuestionFrame,
@@ -13,7 +11,7 @@ def create_data_request(
 ) -> contracts.DataRequest:
     """Create the Data Request from resolved Available Data."""
     resolved_match = available_data_resolution.resolved_match
-    del question_frame
+    rank = question_frame.rank
     return contracts.DataRequest(
         dataset=resolved_match.dataset,
         table=resolved_match.table,
@@ -21,7 +19,10 @@ def create_data_request(
         group_by_field=resolved_match.group_by_field,
         field_filters=resolved_match.field_filters,
         output_shape=_output_shape(resolved_match),
-        result_limit=DEFAULT_RESULT_LIMIT,
+        result_limit=(
+            contracts.DEFAULT_RESULT_LIMIT if rank is None else rank.result_limit
+        ),
+        rank=rank,
     )
 
 

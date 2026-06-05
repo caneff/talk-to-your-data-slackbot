@@ -10,7 +10,7 @@ import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.workflow.contracts as contracts
 from data_assistant.question_interpreter import semantic_context
 
-_SUPPORTED_PROVIDER_INTENTS = frozenset({"summarize"})
+_SUPPORTED_PROVIDER_INTENTS = frozenset({"rank", "summarize"})
 
 
 def interpret_question(
@@ -124,6 +124,13 @@ def _validate_provider_result(
     )
     if isinstance(validated_time_scope, contracts.NonAnswer):
         return validated_time_scope
+    rank = _validate_rank(
+        proposal=proposal,
+        intent_value=intent_value,
+        group_by_field=group_by_field,
+    )
+    if isinstance(rank, contracts.NonAnswer):
+        return rank
 
     return contracts.Success(
         contracts.QuestionFrame(
@@ -133,6 +140,7 @@ def _validate_provider_result(
             field_filters=validated_filters,
             unresolved_ambiguities=(),
             time_scope=validated_time_scope,
+            rank=rank,
         )
     )
 
@@ -143,3 +151,32 @@ def _provider_failure_context(
     if provider_failure.diagnostic_class is None:
         return ("provider failure",)
     return (provider_failure.diagnostic_class.value,)
+
+
+def _validate_rank(
+    *,
+    proposal: proposals.ProviderProposal,
+    intent_value: str,
+    group_by_field: str | None,
+) -> contracts.RankSpec | None | contracts.NonAnswer:
+    if intent_value != "rank":
+        return None
+    if group_by_field is None:
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.UNSUPPORTED_SHAPE,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
+    if proposal.limit is not None and proposal.limit <= 0:
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
+    if proposal.sort_direction is None:
+        return non_answer_catalog.missing_required_field_non_answer(
+            "sort_direction",
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
+    return contracts.RankSpec(
+        result_limit=proposal.limit or contracts.DEFAULT_RESULT_LIMIT,
+        sort_direction=contracts.SortDirection(proposal.sort_direction),
+    )

@@ -36,6 +36,24 @@ class TimeScope(enum.StrEnum):
     ALL_TIME = "all_time"
 
 
+class SortDirection(enum.StrEnum):
+    """Trusted rank ordering direction."""
+
+    ASC = "asc"
+    DESC = "desc"
+
+
+DEFAULT_RESULT_LIMIT = 10
+
+
+@dataclasses.dataclass(frozen=True)
+class RankSpec:
+    """Trusted ranking parameters for supported rank questions."""
+
+    result_limit: int
+    sort_direction: SortDirection
+
+
 @dataclasses.dataclass(frozen=True)
 class QuestionFrame:
     """Structured interpretation of a Data Question."""
@@ -46,6 +64,7 @@ class QuestionFrame:
     group_by_field: str | None
     field_filters: tuple[FieldFilter[str], ...]
     unresolved_ambiguities: tuple[str, ...]
+    rank: RankSpec | None = None
 
     @property
     def filter_labels(self) -> tuple[str, ...]:
@@ -173,6 +192,7 @@ class DataRequest:
     field_filters: tuple[FieldFilter[schema.SemanticField], ...]
     output_shape: str
     result_limit: int
+    rank: RankSpec | None = None
 
     @property
     def filter_labels(self) -> tuple[str, ...]:
@@ -206,6 +226,7 @@ class AnswerDraft:
     caveats: tuple[str, ...]
     limitations: tuple[str, ...] = ()
     group_by_label: str | None = None
+    rank: RankSpec | None = None
 
 
 @dataclasses.dataclass(frozen=True)

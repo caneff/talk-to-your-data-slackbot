@@ -20,6 +20,7 @@ for the `metric`/`field` labels of every other case.
 from __future__ import annotations
 
 import dataclasses
+from typing import Literal
 
 import data_assistant.question_interpreter as question_interpreter
 
@@ -71,12 +72,16 @@ def _proposal(
     all_time: bool = False,
     metric_ambiguity: str | None = None,
     unknown_metric: str | None = None,
+    limit: int | None = None,
+    sort_direction: Literal["asc", "desc"] | None = None,
 ) -> question_interpreter.ProviderProposal:
     return question_interpreter.ProviderProposal(
         intent=intent,
         metric=metric,
         metric_ambiguity=metric_ambiguity,
         unknown_metric=unknown_metric,
+        limit=limit,
+        sort_direction=sort_direction,
         field_operations=field_operations,
         all_time=all_time,
     )
@@ -92,6 +97,21 @@ def _summarize(
         metric=metric,
         field_operations=field_operations,
         all_time=all_time,
+    )
+
+
+def _rank(
+    metric: str,
+    *field_operations: question_interpreter.ProviderFieldOperation,
+    limit: int | None = None,
+    sort_direction: Literal["asc", "desc"] = "desc",
+) -> question_interpreter.ProviderProposal:
+    return _proposal(
+        intent="rank",
+        metric=metric,
+        limit=limit,
+        sort_direction=sort_direction,
+        field_operations=field_operations,
     )
 
 
@@ -191,8 +211,7 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
         question=(
             "Which store region had the highest total net revenue in January 2026?"
         ),
-        expected=_deferred(
-            "rank",
+        expected=_rank(
             "total net revenue",
             _group_by("store region"),
             _during("order date", JANUARY_2026),
@@ -372,19 +391,17 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
             _during("order date", JANUARY_2026),
         ),
     ),
-    # Explicit top-N: the model still classifies "top 5 ..." as rank (a deferred
-    # intent), unseduced by the explicit count. There is no limit/N field in the
-    # schema, so the "5" is intentionally not represented.
+    # Explicit top-N stays rank and carries the requested count.
     SharedProviderProposalCase(
         name="top_n_store_regions_by_net_revenue",
         question=(
             "What were the top 5 store regions by total net revenue in January 2026?"
         ),
-        expected=_deferred(
-            "rank",
+        expected=_rank(
             "total net revenue",
             _group_by("store region"),
             _during("order date", JANUARY_2026),
+            limit=5,
         ),
     ),
     # --- New breadth cases: demo_order_lines metrics/fields ---
