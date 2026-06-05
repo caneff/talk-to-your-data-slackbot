@@ -59,6 +59,38 @@ class ProviderFieldOperation(pydantic.BaseModel):
     )
 
 
+class ProviderRelativeWindow(pydantic.BaseModel):
+    """Untrusted model classification of an as_of-anchored relative phrase.
+
+    The model classifies ONLY; the interpreter computes the calendar window
+    from as_of_date (ADR-0025). No dates appear here.
+    """
+
+    model_config = pydantic.ConfigDict(extra="forbid")
+
+    field: str = pydantic.Field(
+        description=(
+            "Business-facing date Semantic Field label from "
+            "semantic_layer_context — the selected metric's own compatible date "
+            "field, exactly as for an explicit range_filter."
+        ),
+    )
+    unit: typing.Literal["day", "month", "quarter"] = pydantic.Field(
+        description=(
+            "The relative phrase's unit: day for yesterday/last N days, month "
+            "for last month/last M months, quarter for last quarter/last M "
+            "quarters."
+        ),
+    )
+    count: int = pydantic.Field(
+        ge=1,
+        description=(
+            "How many units back the phrase names: 1 for yesterday/last "
+            "month/last quarter, N for last N days, M for last M months/quarters."
+        ),
+    )
+
+
 class ProviderProposal(pydantic.BaseModel):
     """Untrusted provider proposal shape for a Question Frame."""
 
@@ -146,6 +178,19 @@ class ProviderProposal(pydantic.BaseModel):
         description=(
             "True only when the Data Question explicitly asks across all time "
             "and no date filter operation is emitted."
+        ),
+    )
+    relative_window: ProviderRelativeWindow | None = pydantic.Field(
+        default=None,
+        description=(
+            "Classify ONLY an as_of-anchored relative phrase (yesterday, last N "
+            "days, last month, last M months, last quarter, last M quarters) "
+            "into the selected date field plus unit and count; emit NO "
+            "range_filter and NO dates for it, because the interpreter computes "
+            "the window from as_of_date. Mutually exclusive with a date "
+            "range_filter: a proposal carries one or the other, never both. "
+            "Null for explicit dates, explicit months/quarters, bare months, "
+            "and 'before <month>' phrases, which stay model-emitted range_filter."
         ),
     )
 

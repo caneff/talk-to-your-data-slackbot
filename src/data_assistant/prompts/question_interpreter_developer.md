@@ -161,33 +161,16 @@ operation is not directly supported by words in the Data Question, do not add it
   range_filter on the selected metric's compatible date field, exactly as for an
   explicit month and year. With `as_of_date` "2026-06-30", a bare "may" resolves
   to "2026-05-01"..."2026-05-31".
-- If the Data Question names a relative window (yesterday, last N days, last
-  month, last M months, last quarter, last M quarters), resolve it against
-  `as_of_date` by one principle: a relative window covers the most recent
-  COMPLETE unit(s) and excludes the in-progress unit that contains `as_of_date`,
-  because `as_of_date` is the notional today and counts as an incomplete day.
-  A relative phrase ALWAYS produces a SINGLE `range_filter` on the selected
-  metric's own compatible date field — one date operation, never one per
-  month/quarter and never more than one date operation for a single relative
-  phrase. Its lower bound is the first day of the EARLIEST unit in the window
-  and its upper bound is the last day of the most recent COMPLETE unit; the span
-  in between is one continuous range. Formula, where unit = day, month, or
-  quarter: the window ends at the last complete unit before the in-progress one
-  and spans N (or M) units back. Days: "yesterday" is `as_of − 1`; "last N days"
-  is `(as_of − N)..(as_of − 1)` (exactly N days, never including `as_of`).
-  Months: "last month" is the whole calendar month before `as_of`'s month; "last
-  M months" lower is the first day of `(currentMonth − M)`, upper is the last day
-  of `(currentMonth − 1)`. Quarters: "last quarter" is the whole calendar quarter
-  before `as_of`'s quarter; "last M quarters" lower is the first day of
-  `(currentQuarter − M)`, upper is the last day of `(currentQuarter − 1)`. The
-  in-progress-unit exclusion applies to EVERY family — singular and multi, month
-  AND quarter — even when `as_of_date` is that unit's last day. With `as_of_date`
-  "2026-06-30", June is the in-progress month and Q2 is the in-progress quarter,
-  so they are excluded from every relative window: "last month" is May
-  (2026-05-01..2026-05-31), "last two months" is April–May
-  (2026-04-01..2026-05-31, June excluded, ONE range), "last quarter" is Q1
-  (2026-01-01..2026-03-31), and "last three quarters" is Q3 2025–Q1 2026
-  (2025-07-01..2026-03-31, Q2 excluded, ONE range) — never June or Q2.
+- If the Data Question names an `as_of`-anchored relative window (yesterday, last
+  N days, last month, last M months, last quarter, last M quarters), CLASSIFY it
+  into `relative_window` and do NO date arithmetic: set `field` to the selected
+  metric's own compatible date field, `unit` to day, month, or quarter, and
+  `count` to how many units back the phrase names. Map by family: yesterday →
+  day/1, last N days → day/N, last month → month/1, last M months → month/M, last
+  quarter → quarter/1, last M quarters → quarter/M. Emit NO `range_filter` and NO
+  dates for a relative phrase — the interpreter computes the calendar window from
+  `as_of_date`. `relative_window` and a date `range_filter` are mutually
+  exclusive: a proposal carries one or the other, never both.
 - "before <month> <year>" means strictly earlier than the first day of that
   month: emit a range_filter with lower null and upper set to the last day of the
   preceding month. "before January 2024" → upper "2023-12-31" (not "2024-01-01",
