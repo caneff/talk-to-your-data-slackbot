@@ -117,21 +117,12 @@ def _validate_provider_result(
     field_filters_result = field_operations.validate_field_filters(
         proposal.field_operations,
         semantic_layer,
+        _as_of_date(semantic_layer),
     )
     if isinstance(field_filters_result, contracts.NonAnswer):
         return field_filters_result
     group_by_field, validated_filters = field_filters_result
 
-    relative_filters_result = _resolve_relative_window(
-        proposal, validated_filters, semantic_layer
-    )
-    if isinstance(relative_filters_result, contracts.NonAnswer):
-        return relative_filters_result
-    if relative_filters_result is not None:
-        # The interpreter-computed window joins the validated filters as one more
-        # typed date range_filter (ADR-0025); downstream time-scope derivation
-        # then sees it as any other date filter.
-        validated_filters = validated_filters + (relative_filters_result,)
     validated_time_scope = time_scope.derive_time_scope(
         proposal=proposal,
         field_filters=validated_filters,
@@ -157,38 +148,6 @@ def _validate_provider_result(
             time_scope=validated_time_scope,
             rank=rank,
         )
-    )
-
-
-def _resolve_relative_window(
-    proposal: proposals.ProviderProposal,
-    validated_filters: tuple[contracts.FieldFilter[str], ...],
-    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
-) -> contracts.RangeFilter[str] | None | contracts.NonAnswer:
-    """Type a relative_window into a date RangeFilter, or reject (ADR-0025).
-
-    relative_window is mutually exclusive with a model-emitted date range_filter:
-    a proposal carries one or the other, never both. The model classifies; the
-    interpreter computes the window from as_of_date.
-    """
-    relative_window_proposal = proposal.relative_window
-    if relative_window_proposal is None:
-        return None
-    date_field_labels = field_operations.date_field_labels(semantic_layer)
-    has_date_range_filter = any(
-        isinstance(field_filter, contracts.RangeFilter)
-        and field_filter.field in date_field_labels
-        for field_filter in validated_filters
-    )
-    if has_date_range_filter:
-        return non_answer_catalog.non_answer(
-            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-        )
-    return field_operations.resolve_relative_window(
-        relative_window_proposal,
-        _as_of_date(semantic_layer),
-        semantic_layer,
     )
 
 

@@ -618,6 +618,9 @@ def _update_case_progress(progress_bar: _CaseProgress | None) -> None:
 _FIELD_OPERATION_ATTRIBUTES: tuple[str, ...] = (
     "operation",
     "field",
+    "source",
+    "unit",
+    "count",
     "lower",
     "upper",
     "values",

@@ -12,7 +12,6 @@ from data_assistant.question_interpreter.proposals import (
     ProviderFailureDiagnosticClass,
     ProviderFieldOperation,
     ProviderProposal,
-    ProviderRelativeWindow,
     QuestionInterpreterProvider,
 )
 from data_assistant.question_interpreter.provider_proposal_validation import (
@@ -30,7 +29,6 @@ __all__ = [
     "ProviderFailureDiagnosticClass",
     "ProviderFieldOperation",
     "ProviderProposal",
-    "ProviderRelativeWindow",
     "QuestionInterpreterProvider",
     "build_openai_question_interpreter_provider",
     "build_semantic_layer_context",

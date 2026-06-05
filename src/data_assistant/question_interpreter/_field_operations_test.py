@@ -44,6 +44,7 @@ def test_validate_field_filters_rejects_duplicate_semantic_field_labels() -> Non
             ),
         ),
         semantic_layer,
+        None,
     )
 
     assert isinstance(result, contracts.NonAnswer)
@@ -85,6 +86,7 @@ def test_duplicate_field_labels_are_rejected_even_when_contracts_match() -> None
             ),
         ),
         semantic_layer,
+        None,
     )
 
     assert isinstance(result, contracts.NonAnswer)
@@ -135,6 +137,7 @@ def test_unrelated_duplicate_field_labels_do_not_block_unique_field_validation()
             ),
         ),
         semantic_layer,
+        None,
     )
 
     assert result == (
@@ -171,6 +174,7 @@ def test_validate_field_filters_coerces_decimal_values_filters() -> None:
             ),
         ),
         semantic_layer,
+        None,
     )
 
     assert result == (
@@ -208,6 +212,7 @@ def test_validate_field_filters_coerces_decimal_range_bounds() -> None:
             ),
         ),
         semantic_layer,
+        None,
     )
 
     assert result == (
