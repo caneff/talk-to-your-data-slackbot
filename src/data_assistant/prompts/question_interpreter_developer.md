@@ -44,6 +44,13 @@ are direct corollaries of this principle:
 - Use other explicit unsupported intent names when the Data Question is clearly
   a deferred intent, such as "compare", "trend", "forecast", "explain",
   "prescribe", or "diagnose".
+- Treat compare trigger phrases as explicit deferred intent signals: "how did ... compare",
+  "compared to", "versus", "vs", and "difference between". When one of those
+  phrases appears, remain intent: "compare" even if the Data Question also has
+  grouping or time wording.
+- Do not infer intent "compare" merely because a Data Question groups a metric
+  by a dimension. A plain grouped historical summary such as "What was total net
+  revenue by store region in Q1 2026?" remains intent "summarize".
 - Use null for intent only when no Data Question intent applies.
 - Unsupported intent names do not change metric extraction. If an unsupported
   Data Question names a known metric, still return that metric label rather
@@ -141,6 +148,9 @@ operation is not directly supported by words in the Data Question, do not add it
   cover a field the user did not mention, to exclude alternate fields, to
   represent a grouping label, or to repair ambiguity. If no explicit included or
   excluded value is present, omit the operation.
+- A Data Question can require both group_by and exclude_filter. Keep grouping
+  and exclusion separate even when they refer to the same field, and keep them
+  separate when the grouping field and excluded-value field differ.
 
 ## Dates
 
@@ -280,6 +290,29 @@ Do not add group_by for that question, because "West" is the requested included
 region value, not a request to compare all regions. Apply the same pattern to
 any single requested dimension value.
 
+For "What was store count by store region excluding the West region?" return
+intent "summarize", metric "store count", and exactly these field_operations:
+
+- operation "group_by", field "store region", lower null, upper null, values []
+- operation "exclude_filter", field "store region", lower null, upper null,
+  values ["West"]
+
+Keep both operations. The grouping asks for one result per store region; the
+exclusion asks to remove West from that grouped result. In short: group_by store
+region and exclude_filter store region = West.
+
+For "What was support ticket count by issue category excluding the Resolved status?"
+return intent "summarize", metric "support ticket count", and exactly these
+field_operations:
+
+- operation "group_by", field "issue category", lower null, upper null, values []
+- operation "exclude_filter", field "ticket status", lower null, upper null,
+  values ["Resolved"]
+
+Do not swap those fields. Group by stays on "issue category"; the excluded
+value belongs to "ticket status". In short: group_by issue category and
+exclude_filter ticket status = Resolved.
+
 For "How many accounts were opened before January 2024?" when the selected
 metric's compatible set exposes "created date" with range_filter, return intent
 "summarize" and one date field_operation:
@@ -328,6 +361,17 @@ An explicit "Q2 2026" and a relative "last quarter" can name the same calendar
 range, but they are not the same: the explicit phrase is source "explicit" with
 dates, the relative phrase is source "relative" with unit and count. The source
 field carries the distinction.
+
+For "What was total net revenue by store region in Q1 2026?" return intent
+"summarize", metric "total net revenue", field_operations for group_by
+"store region" plus the Q1 2026 date range. This is a grouped historical
+summary.
+
+For "How did total net revenue compare by store region in Q1 2026?" return
+intent "compare", metric "total net revenue", field_operations for group_by
+"store region" plus the Q1 2026 date range, and do not collapse the Data
+Question into intent "rank" or "summarize". The explicit word "compare" is what
+makes this a deferred compare intent.
 
 For "How many stores by channel?" when the stores metric's compatible set exposes
 "store channel" with group_by, return intent "summarize" and one field_operation:
