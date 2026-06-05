@@ -785,11 +785,11 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
     # 2026-06-30 the interpreter resolves these to: yesterday=2026-06-29,
     # last 7 days=2026-06-23..29, last month=May, last quarter=Q1, etc.)
     #
-    # deferred=True on the two quarter cases + last_30_days (#239): the day/month
-    # families resolve on the paid live eval, but the model historically returns
-    # the IN-PROGRESS quarter (Q2) for "last quarter"/"last three quarters", and
-    # last_30_days flaked. ADR-0026 removes the model's quarter arithmetic, but
-    # un-deferring waits on a green paid eval (Option A) and is a later commit.
+    # All seven cases pass the scoped paid live eval (3/3 each) under ADR-0026:
+    # the model classifies unit+count, the interpreter computes the window, so the
+    # quarter prior that made "last quarter"/"last three quarters" return Q2 never
+    # fires. The previously-deferred quarter and last_30_days cases are now
+    # un-deferred (#258, #239).
     SharedProviderProposalCase(
         name="relative_yesterday",
         question="What was total net revenue yesterday?",
@@ -813,7 +813,6 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
             "total net revenue",
             _relative_range_filter("order date", "day", 30),
         ),
-        deferred=True,
     ),
     SharedProviderProposalCase(
         name="relative_last_month",
@@ -838,7 +837,6 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
             "total net revenue",
             _relative_range_filter("order date", "quarter", 1),
         ),
-        deferred=True,
     ),
     SharedProviderProposalCase(
         name="relative_last_three_quarters",
@@ -847,6 +845,5 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
             "total net revenue",
             _relative_range_filter("order date", "quarter", 3),
         ),
-        deferred=True,
     ),
 )

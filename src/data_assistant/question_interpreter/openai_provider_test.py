@@ -330,6 +330,39 @@ def test_openai_provider_strips_vacuous_field_operations() -> None:
     )
 
 
+def test_openai_provider_keeps_relative_range_filter_with_null_bounds() -> None:
+    # A source="relative" range_filter carries unit+count and has null bounds by
+    # design (ADR-0026); canonicalization must NOT strip it as vacuous, or the
+    # interpreter never sees the relative window and the question loses its time
+    # filter. Regression for the empty-field_operations live-eval failure.
+    relative_operation = question_interpreter.ProviderFieldOperation(
+        operation="range_filter",
+        field="order date",
+        source="relative",
+        lower=None,
+        upper=None,
+        unit="quarter",
+        count=1,
+    )
+
+    class FakeParsedResponse:
+        output_parsed = question_interpreter.ProviderProposal(
+            intent="summarize",
+            metric="total net revenue",
+            field_operations=(relative_operation,),
+        )
+
+    provider = _openai_provider_returning(FakeParsedResponse())
+
+    result = provider.propose_question_frame(
+        question="What was total net revenue last quarter?",
+        semantic_layer_context={"datasets": []},
+    )
+
+    assert isinstance(result, question_interpreter.ProviderProposal)
+    assert result.field_operations == (relative_operation,)
+
+
 def test_openai_provider_schema_avoids_union_items_for_field_operations() -> None:
     response_schema = question_interpreter.ProviderProposal.model_json_schema()
     field_operations_schema = response_schema["properties"]["field_operations"]
