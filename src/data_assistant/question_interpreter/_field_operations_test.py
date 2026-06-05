@@ -50,7 +50,7 @@ def _two_table_layer_sharing_field(
     )
 
 
-def test_validate_field_filters_rejects_duplicate_semantic_field_labels() -> None:
+def test_distinct_duplicate_labels_return_ambiguous_field_config() -> None:
     semantic_layer = semantic_layer_testing.semantic_layer_with_table(
         columns={
             "order_date": "date",
@@ -89,10 +89,10 @@ def test_validate_field_filters_rejects_duplicate_semantic_field_labels() -> Non
     )
 
     assert isinstance(result, contracts.NonAnswer)
-    assert result.reason_code == contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT
+    assert result.reason_code == contracts.NonAnswerReasonCode.AMBIGUOUS_FIELD_CONFIG
 
 
-def test_duplicate_field_labels_are_rejected_even_when_contracts_match() -> None:
+def test_duplicate_labels_with_matching_contracts_return_config_ambiguity() -> None:
     semantic_layer = semantic_layer_testing.semantic_layer_with_table(
         columns={
             "order_date": "date",
@@ -131,7 +131,7 @@ def test_duplicate_field_labels_are_rejected_even_when_contracts_match() -> None
     )
 
     assert isinstance(result, contracts.NonAnswer)
-    assert result.reason_code == contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT
+    assert result.reason_code == contracts.NonAnswerReasonCode.AMBIGUOUS_FIELD_CONFIG
 
 
 def test_same_logical_denormalized_field_collapses_and_validates() -> None:

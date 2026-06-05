@@ -35,7 +35,7 @@ def validate_field_filters(
             # The truthful reason code for this case is owned by issue #268; until
             # then this remains INVALID_PROVIDER_OUTPUT.
             return non_answer_catalog.non_answer(
-                contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+                contracts.NonAnswerReasonCode.AMBIGUOUS_FIELD_CONFIG,
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
             )
         operation = schema.FieldOperation(operation_proposal.operation)

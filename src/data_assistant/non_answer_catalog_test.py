@@ -152,6 +152,18 @@ _GOLDEN_WORDING: tuple[
     ),
     (
         non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.AMBIGUOUS_FIELD_CONFIG, stage=_STAGE
+        ),
+        non_answer_catalog.NonAnswerWording(
+            reason=(
+                "The available data has more than one different field named the "
+                "same thing."
+            ),
+            next_step="Ask a data owner to fix that Semantic Layer field setup.",
+        ),
+    ),
+    (
+        non_answer_catalog.non_answer(
             contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT, stage=_STAGE
         ),
         non_answer_catalog.NonAnswerWording(

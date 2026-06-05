@@ -93,6 +93,8 @@ class NonAnswerReasonCode(enum.StrEnum):
 
     # Caller lacks access to the selected Curated Dataset.
     ACCESS_DENIED = "access_denied"
+    # Semantic Layer exposes distinct fields under the same label.
+    AMBIGUOUS_FIELD_CONFIG = "ambiguous_field_config"
     # More than one Curated Dataset matches or was selected.
     AMBIGUOUS_DATASET = "ambiguous_dataset"
     # Metric wording carries a qualifier ambiguous against available metrics.
