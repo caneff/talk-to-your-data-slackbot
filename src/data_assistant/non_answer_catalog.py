@@ -17,6 +17,7 @@ class _NonAnswerDefinition:
 
 
 _StaticReasonCode: typing.TypeAlias = typing.Literal[
+    contracts.NonAnswerReasonCode.AMBIGUOUS_FIELD_CONFIG,
     contracts.NonAnswerReasonCode.AMBIGUOUS_DATASET,
     contracts.NonAnswerReasonCode.AMBIGUOUS_METRIC,
     contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE,
@@ -38,6 +39,14 @@ _DEFINITIONS: dict[contracts.NonAnswerReasonCode, _NonAnswerDefinition] = {
         reason="You do not have access to {dataset}.",
         context=(),
         next_step="Ask a data owner for access, or ask about data you can use.",
+    ),
+    contracts.NonAnswerReasonCode.AMBIGUOUS_FIELD_CONFIG: _NonAnswerDefinition(
+        response_kind=contracts.ResponseKind.UNSUPPORTED,
+        reason=(
+            "The available data has more than one different field named the same thing."
+        ),
+        context=("semantic field configuration",),
+        next_step="Ask a data owner to fix that Semantic Layer field setup.",
     ),
     contracts.NonAnswerReasonCode.AMBIGUOUS_DATASET: _NonAnswerDefinition(
         response_kind=contracts.ResponseKind.CLARIFICATION_NEEDED,
