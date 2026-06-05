@@ -115,6 +115,11 @@ def _canonicalize_provider_proposal(proposal: ProviderProposal) -> ProviderPropo
 
 def _is_vacuous_field_operation(operation: ProviderFieldOperation) -> bool:
     if operation.operation == "range_filter":
+        if operation.source == "relative":
+            # A source="relative" range_filter carries unit+count and has null
+            # bounds by design (the interpreter computes the window from
+            # as_of_date, ADR-0026). It is not vacuous despite empty bounds.
+            return False
         return operation.lower is None and operation.upper is None
     if operation.operation in {"include_filter", "exclude_filter"}:
         return operation.values == ()
