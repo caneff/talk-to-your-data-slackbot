@@ -136,7 +136,50 @@ def test_compute_slot_values_formats_half_open_ranges_readably() -> None:
         dataclasses.replace(prepared_data, request=half_open_request)
     )
 
-    assert slot_values["time_range"] == "from Jan 1, 2026"
+    assert slot_values["time_range"] == "the period from Jan 1, 2026"
+
+
+def test_compute_slot_values_formats_upper_only_half_open_range_readably() -> None:
+    prepared_data = narrative_cases.prepared_revenue_by_region()
+    half_open_request = dataclasses.replace(
+        prepared_data.request,
+        field_filters=(
+            contracts.RangeFilter(
+                field=prepared_data.request.field_filters[0].field,
+                lower=None,
+                upper=datetime.date(2023, 12, 31),
+            ),
+        ),
+    )
+
+    slot_values = reasoning_layer.compute_slot_values(
+        dataclasses.replace(prepared_data, request=half_open_request)
+    )
+
+    assert slot_values["time_range"] == "the period through Dec 31, 2023"
+
+
+def test_template_summary_joins_open_ended_time_range_without_double_preposition() -> (
+    None
+):
+    prepared_data = narrative_cases.prepared_revenue_by_region()
+    open_ended_request = dataclasses.replace(
+        prepared_data.request,
+        field_filters=(
+            contracts.RangeFilter(
+                field=prepared_data.request.field_filters[0].field,
+                lower=None,
+                upper=datetime.date(2023, 12, 31),
+            ),
+        ),
+    )
+
+    summary = reasoning_layer.draft_answer(
+        dataclasses.replace(prepared_data, request=open_ended_request)
+    ).summary
+
+    assert "in the period through " in summary
+    assert "in through" not in summary
 
 
 def test_figure_free_result_shape_grouped_lists_all_seven_slot_names() -> None:
