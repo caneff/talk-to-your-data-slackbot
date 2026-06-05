@@ -102,6 +102,8 @@ def build_interaction_record(
     if isinstance(result, contracts.DataAssistantRun):
         record["outcome"] = "answer"
         record.update(_answer_fields(result))
+    elif final_response.response_kind == contracts.ResponseKind.ANSWER:
+        record["outcome"] = "answer"
     else:
         record["outcome"] = "non_answer"
         record.update(_non_answer_fields(final_response.non_answer))
@@ -205,7 +207,11 @@ def _question_frame_summary(
     return {
         "intent": question_frame.intent,
         "metric": question_frame.metric,
-        "time_scope": str(question_frame.time_scope),
+        "time_scope": (
+            None
+            if question_frame.time_scope is None
+            else str(question_frame.time_scope)
+        ),
         "group_by": []
         if question_frame.group_by_field is None
         else [question_frame.group_by_field],

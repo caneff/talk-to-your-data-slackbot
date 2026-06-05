@@ -59,8 +59,8 @@ class QuestionFrame:
     """Structured interpretation of a Data Question."""
 
     intent: str
-    metric: str
-    time_scope: TimeScope
+    metric: str | None
+    time_scope: TimeScope | None
     group_by_field: str | None
     field_filters: tuple[FieldFilter[str], ...]
     unresolved_ambiguities: tuple[str, ...]
@@ -239,6 +239,18 @@ class TrustSummary:
     filters: tuple[str, ...] = ()
     caveats: tuple[str, ...] = ()
     limitations: tuple[str, ...] = ()
+
+
+@dataclasses.dataclass(frozen=True)
+class CatalogDatasetSummary:
+    """Access-filtered business summary for one discoverable dataset."""
+
+    dataset_name: str
+    information_types: tuple[str, ...]
+    metric_labels: tuple[str, ...]
+    field_labels: tuple[str, ...]
+    example_questions: tuple[str, ...]
+    example_sources: tuple[str, ...]
 
 
 @dataclasses.dataclass(frozen=True)

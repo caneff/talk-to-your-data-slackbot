@@ -305,6 +305,30 @@ def test_rank_shape_validates_to_question_frame() -> None:
     )
 
 
+def test_catalog_discovery_validates_without_metric_or_time_scope() -> None:
+    proposal = question_interpreter.ProviderProposal(
+        intent="catalog_discovery",
+        metric=None,
+        field_operations=(),
+    )
+
+    result = question_interpreter.interpret_question(
+        question="What sorts of data can I query?",
+        semantic_layer=_retail_style_semantic_layer(),
+        provider=_StaticProvider(proposal),
+    )
+
+    assert isinstance(result, contracts.Success)
+    assert result.value == contracts.QuestionFrame(
+        intent="catalog_discovery",
+        metric=None,
+        time_scope=None,
+        group_by_field=None,
+        field_filters=(),
+        unresolved_ambiguities=(),
+    )
+
+
 def test_unsupported_data_shape_non_answers_via_unknown_semantic_label() -> None:
     """A summarize proposal over an unknown metric label still rejects.
 

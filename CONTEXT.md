@@ -18,7 +18,7 @@ _Avoid_: Query, prompt, report request
 
 **Supported Intent**:
 A type of **Data Question** the **Data Assistant** is expected to handle in v1,
-including summarize and rank.
+including summarize, rank, and catalog discovery.
 _Avoid_: Capability, command, query type
 
 **Deferred Intent**:
@@ -41,6 +41,13 @@ lowest, most, least, biggest, or smallest grouped results. The trusted
 and deterministic retrieval applies ORDER BY plus LIMIT rather than collapsing
 the ask into summarize.
 _Avoid_: Grouped summary, comparison, sort request
+
+**Catalog Discovery Request**:
+A **Supported Intent** for metadata-only Data Questions that ask what kinds of
+approved data the caller can query, such as "What sorts of data can I query?".
+It returns an access-filtered summary from **Semantic Layer** metadata and does
+not read **Prepared Data**.
+_Avoid_: Coverage lookup, data availability check, schema dump
 
 **Slack Acknowledgement**:
 The quick confirmation sent to Slack that a request was received, before the

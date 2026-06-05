@@ -1085,9 +1085,11 @@ def test_answer_and_render_returns_id_response_blocks_and_logs_one_record(
     records = _read_log_records(log_path)
     assert len(records) == 1
     assert records[0]["id"] == interaction_id
-    # A bare FinalResponse records as a non_answer (ADR-0016 result branching);
-    # the point here is the single record under the returned id, not its outcome.
-    assert records[0]["outcome"] == "non_answer"
+    # A bare answer FinalResponse now records as an answer so metadata-only
+    # answer branches (for example catalog discovery) do not look like
+    # non-answers in the Interaction Log. The point here is still the single
+    # record under the returned id.
+    assert records[0]["outcome"] == "answer"
     assert records[0]["model"] == "gpt-4o-mini"
     assert records[0]["user"] == "U123"
     assert "qa_case_id" not in records[0]

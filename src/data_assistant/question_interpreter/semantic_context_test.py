@@ -35,6 +35,18 @@ def test_semantic_layer_context_omits_as_of_date_when_dataset_has_none() -> None
     assert "as_of_date" not in context
 
 
+def test_semantic_layer_context_exposes_catalog_discovery_as_supported_intent() -> None:
+    context = question_interpreter.build_semantic_layer_context(
+        testing_support.semantic_layer_with_table()
+    )
+
+    assert context["supported_intents"] == [
+        "catalog_discovery",
+        "rank",
+        "summarize",
+    ]
+
+
 def test_semantic_layer_context_exposes_business_labels_not_storage_details() -> None:
     semantic_layer = semantic_layer_catalog.SemanticLayerCatalog(
         datasets=(

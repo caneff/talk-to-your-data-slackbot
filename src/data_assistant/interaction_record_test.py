@@ -208,6 +208,27 @@ def test_final_response_from_workflow_result_unwraps_run() -> None:
     )
 
 
+def test_build_interaction_record_treats_answer_final_response_as_answer() -> None:
+    record = interaction_record.build_interaction_record(
+        interaction_id="abc123",
+        timestamp="2026-01-01T00:00:00+00:00",
+        latency_ms=1,
+        user="U123",
+        question="What sorts of data can I query?",
+        qa_case_id=None,
+        qa_review_context=None,
+        model="m",
+        result=contracts.FinalResponse(
+            text="Catalog answer.",
+            trust_summary=contracts.TrustSummary(),
+            response_kind=contracts.ResponseKind.ANSWER,
+        ),
+    )
+
+    assert record["outcome"] == "answer"
+    assert "stage" not in record
+
+
 def test_build_interaction_record_answer_carries_shape_and_key_data() -> None:
     run = _data_assistant_run()
 

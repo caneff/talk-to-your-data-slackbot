@@ -342,6 +342,7 @@ def test_openai_provider_schema_guides_supported_summary_intent() -> None:
     intent_schema = response_schema["properties"]["intent"]
 
     assert "Use summarize" in intent_schema["description"]
+    assert "catalog_discovery" in intent_schema["description"]
     assert "what was" in intent_schema["description"]
     assert "show" in intent_schema["description"]
 
