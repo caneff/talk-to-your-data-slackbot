@@ -4,6 +4,11 @@
 
 Accepted
 
+Amended by ADR-0025 for relative phrases: the window convention below is
+unchanged, but the interpreter now computes the window from a structured model
+classification (`relative_window`) rather than asking the model to do the
+relative-date arithmetic.
+
 ## Context
 
 ADR-0021 gave the Question Interpreter a static `as_of_date` (`2026-06-30` for
