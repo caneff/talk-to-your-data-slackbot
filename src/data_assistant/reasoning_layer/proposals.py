@@ -189,9 +189,9 @@ def _time_range_label(data_request: contracts.DataRequest) -> str:
             if lower is not None and upper is not None:
                 return f"{lower} through {upper}"
             if lower is not None:
-                return f"from {lower}"
+                return f"the period from {lower}"
             if upper is not None:
-                return f"through {upper}"
+                return f"the period through {upper}"
         if (
             isinstance(field_filter, contracts.ValuesFilter)
             and field_filter.mode == contracts.FilterMode.INCLUDE
