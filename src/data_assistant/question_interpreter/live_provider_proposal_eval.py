@@ -57,6 +57,7 @@ def main(
             start_at=args.start_at,
             stop_at=args.stop_at,
             only_cases=args.only_cases,
+            concurrency=args.concurrency,
         )
     except ValueError as error:
         print(str(error), file=stderr)
@@ -83,6 +84,7 @@ class _CliArgs:
     start_at: int
     stop_at: int | None
     only_cases: tuple[str, ...] | None
+    concurrency: int
 
 
 def _parse_args(argv: collections.abc.Sequence[str]) -> _CliArgs:
@@ -141,12 +143,24 @@ def _parse_args(argv: collections.abc.Sequence[str]) -> _CliArgs:
             "--start-at/--stop-at"
         ),
     )
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=1,
+        help=(
+            "number of cases to evaluate concurrently (default 1); samples within "
+            "each case stay serial to limit request bursts"
+        ),
+    )
     args = parser.parse_args(list(argv))
     only_cases = _parse_only_cases(typing.cast("list[str] | None", args.only_cases))
     start_at = typing.cast(int, args.start_at)
     stop_at = typing.cast("int | None", args.stop_at)
+    concurrency = typing.cast(int, args.concurrency)
     if only_cases is not None and (start_at != 1 or stop_at is not None):
         parser.error("--only-cases cannot be combined with --start-at or --stop-at")
+    if concurrency < 1:
+        parser.error("--concurrency must be at least 1")
     return _CliArgs(
         verbose=typing.cast(bool, args.verbose),
         progress=not typing.cast(bool, args.no_progress),
@@ -155,6 +169,7 @@ def _parse_args(argv: collections.abc.Sequence[str]) -> _CliArgs:
         start_at=start_at,
         stop_at=stop_at,
         only_cases=only_cases,
+        concurrency=concurrency,
     )
 
 

@@ -61,9 +61,11 @@ def test_main_builds_provider_and_delegates_to_pure_eval(
         stdout=io.StringIO(),
         stderr=io.StringIO(),
         environ={},
+        argv=("--concurrency", "4"),
     )
 
     assert exit_code == 0
     assert len(calls) == 1
     assert isinstance(calls[0].provider, _StubProvider)
     assert calls[0].semantic_layer is semantic_layer
+    assert calls[0].concurrency == 4

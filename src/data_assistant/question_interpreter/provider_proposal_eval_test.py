@@ -1,6 +1,7 @@
 import io
 import json
 import re
+import threading
 
 import pytest
 
@@ -26,6 +27,31 @@ class _SequenceProvider:
         if not self._results:
             raise AssertionError("provider called more times than configured")
         return self._results.pop(0)
+
+
+class _ConcurrentStartProvider:
+    def __init__(self, *, expected_call_count: int) -> None:
+        self._expected_call_count = expected_call_count
+        self._condition = threading.Condition()
+        self.calls: list[str] = []
+
+    def propose_question_frame(
+        self,
+        *,
+        question: str,
+        semantic_layer_context: dict[str, object],
+    ) -> proposal_eval.ProviderResult:
+        del semantic_layer_context
+        with self._condition:
+            self.calls.append(question)
+            self._condition.notify_all()
+            self._condition.wait_for(
+                lambda: len(self.calls) == self._expected_call_count,
+                timeout=2,
+            )
+            if len(self.calls) != self._expected_call_count:
+                raise AssertionError("provider calls did not overlap")
+        return test_support.question_frame_proposal()
 
 
 def _eval_case(
@@ -72,6 +98,7 @@ def test_default_cases_preserve_catalog_invariants() -> None:
 
 
 def test_run_provider_proposal_eval_records_pass_and_respects_sample_count() -> None:
+    progress_file = io.StringIO()
     provider = _SequenceProvider(
         test_support.question_frame_proposal(),
         test_support.question_frame_proposal(),
@@ -83,6 +110,8 @@ def test_run_provider_proposal_eval_records_pass_and_respects_sample_count() -> 
         semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
         cases=(_eval_case(),),
         sample_count=3,
+        progress=True,
+        progress_file=progress_file,
     )
 
     assert report.total == 1
@@ -97,6 +126,9 @@ def test_run_provider_proposal_eval_records_pass_and_respects_sample_count() -> 
         "What was total revenue by region in January 2026?",
         "What was total revenue by region in January 2026?",
     ]
+    assert "Provider Proposal Eval current 1/1: canonical_question" in (
+        progress_file.getvalue()
+    )
 
 
 def test_run_provider_proposal_eval_records_mismatch_failure_and_streams_payloads() -> (
@@ -177,6 +209,27 @@ def test_run_provider_proposal_eval_separates_known_deferred_and_tripwires() -> 
     assert report.tripwires[0].case_name == "deferred_case"
 
 
+def test_run_provider_proposal_eval_can_evaluate_cases_concurrently() -> None:
+    progress_file = io.StringIO()
+    provider = _ConcurrentStartProvider(expected_call_count=2)
+
+    report = proposal_eval.run_provider_proposal_eval(
+        provider=provider,
+        semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
+        cases=(_eval_case(name="alpha"), _eval_case(name="beta")),
+        sample_count=1,
+        concurrency=2,
+        progress=True,
+        progress_file=progress_file,
+    )
+
+    assert [passed.case_name for passed in report.passes] == ["alpha", "beta"]
+    assert len(provider.calls) == 2
+    progress_output = progress_file.getvalue()
+    assert "Provider Proposal Eval completed 1/2:" in progress_output
+    assert "Provider Proposal Eval completed 2/2:" in progress_output
+
+
 def test_select_cases_supports_range_and_only_cases() -> None:
     cases = _selection_cases()
 
@@ -232,4 +285,16 @@ def test_select_cases_rejects_invalid_selection(
             start_at=start_at,
             stop_at=stop_at,
             only_cases=only_cases,
+        )
+
+
+def test_run_provider_proposal_eval_rejects_invalid_concurrency() -> None:
+    provider = _SequenceProvider(test_support.question_frame_proposal())
+
+    with pytest.raises(ValueError, match="concurrency must be at least 1"):
+        proposal_eval.run_provider_proposal_eval(
+            provider=provider,
+            semantic_layer=semantic_layer_testing.semantic_layer_with_table(),
+            cases=(_eval_case(),),
+            concurrency=0,
         )

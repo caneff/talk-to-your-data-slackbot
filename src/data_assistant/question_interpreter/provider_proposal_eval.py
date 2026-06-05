@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import collections.abc
+import concurrent.futures
 import dataclasses
 import datetime
 import json
@@ -74,6 +75,22 @@ class ProviderProposalEvalReport:
     @property
     def failed(self) -> int:
         return len(self.failures)
+
+
+@dataclasses.dataclass(frozen=True)
+class _CaseEvaluation:
+    case_number: int
+    case: ProviderProposalEvalCase
+    actual: ProviderResult
+    failure_actual: ProviderResult | None
+    pass_count: int
+    sample_failures: tuple[str, ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class _CaseProgress:
+    status: typing.Any
+    progress: typing.Any
 
 
 DEFAULT_CASES: tuple[ProviderProposalEvalCase, ...] = tuple(
@@ -206,10 +223,13 @@ def run_provider_proposal_eval(
     start_at: int = 1,
     stop_at: int | None = None,
     only_cases: tuple[str, ...] | None = None,
+    concurrency: int = 1,
 ) -> ProviderProposalEvalReport:
     """Run selected enabled provider proposal eval cases."""
     if sample_count < 1:
         raise ValueError("sample_count must be at least 1")
+    if concurrency < 1:
+        raise ValueError("concurrency must be at least 1")
     semantic_layer_context = question_interpreter.build_semantic_layer_context(
         semantic_layer
     )
@@ -224,83 +244,25 @@ def run_provider_proposal_eval(
     failures: list[ProviderProposalEvalFailure] = []
     known_deferred: list[ProviderProposalEvalFailure] = []
     tripwires: list[ProviderProposalEvalPass] = []
-    progress_bar = _new_case_progress_bar(
-        enabled=progress,
-        total=len(selected),
+    evaluations = _run_case_evaluations(
+        provider=provider,
+        semantic_layer_context=semantic_layer_context,
+        selected=selected,
+        sample_count=sample_count,
+        concurrency=concurrency,
+        progress=progress,
         progress_file=progress_file,
     )
-    try:
-        for selection_index, (case_number, case) in enumerate(selected, start=1):
-            _set_case_progress(
-                progress_bar=progress_bar,
-                case_index=selection_index,
-                total=len(selected),
-                case_name=case.name,
-            )
-            pass_count = 0
-            sample_failures: list[str] = []
-            last_actual: ProviderResult | None = None
-            last_failure_actual: ProviderResult | None = None
-            for sample_index in range(sample_count):
-                actual = provider.propose_question_frame(
-                    question=case.question,
-                    semantic_layer_context=semantic_layer_context,
-                )
-                last_actual = actual
-                reasons = _case_failure_reasons(expected=case.expected, actual=actual)
-                if reasons:
-                    last_failure_actual = actual
-                    sample_failures.extend(
-                        f"sample {sample_index + 1}: {reason}" for reason in reasons
-                    )
-                    continue
-                pass_count += 1
-
-            if last_actual is None:
-                raise AssertionError(
-                    "provider proposal eval must record at least one sample result"
-                )
-            if sample_failures:
-                failure = ProviderProposalEvalFailure(
-                    case_name=case.name,
-                    question=case.question,
-                    expected=case.expected,
-                    actual=typing.cast(ProviderResult, last_failure_actual),
-                    reasons=tuple(sample_failures),
-                    pass_count=pass_count,
-                    sample_count=sample_count,
-                )
-                if case.deferred:
-                    known_deferred.append(failure)
-                    _update_case_progress(progress_bar)
-                    continue
-                failures.append(failure)
-                _write_failure_line(
-                    failures_file=failures_file,
-                    case_number=case_number,
-                    failure=failure,
-                )
-                _update_case_progress(progress_bar)
-                continue
-            passed_case = ProviderProposalEvalPass(
-                case_name=case.name,
-                question=case.question,
-                expected=case.expected,
-                actual=typing.cast(
-                    question_interpreter.ProviderProposal,
-                    last_actual,
-                ),
-                pass_count=pass_count,
-                sample_count=sample_count,
-            )
-            if case.deferred:
-                tripwires.append(passed_case)
-            else:
-                passes.append(passed_case)
-            _update_case_progress(progress_bar)
-    finally:
-        if progress_bar is not None:
-            progress_bar.close()
+    for evaluation in evaluations:
+        _record_case_evaluation(
+            evaluation=evaluation,
+            sample_count=sample_count,
+            failures_file=failures_file,
+            passes=passes,
+            failures=failures,
+            known_deferred=known_deferred,
+            tripwires=tripwires,
+        )
     return ProviderProposalEvalReport(
         total=len(selected),
         passes=tuple(passes),
@@ -308,6 +270,192 @@ def run_provider_proposal_eval(
         known_deferred=tuple(known_deferred),
         tripwires=tuple(tripwires),
     )
+
+
+def _run_case_evaluations(
+    *,
+    provider: question_interpreter.QuestionInterpreterProvider,
+    semantic_layer_context: dict[str, object],
+    selected: tuple[tuple[int, ProviderProposalEvalCase], ...],
+    sample_count: int,
+    concurrency: int,
+    progress: bool,
+    progress_file: typing.TextIO | None,
+) -> tuple[_CaseEvaluation, ...]:
+    progress_bar = _new_case_progress(
+        enabled=progress,
+        total=len(selected),
+        progress_file=progress_file,
+    )
+    try:
+        if concurrency == 1:
+            evaluations: list[_CaseEvaluation] = []
+            for selection_index, (case_number, case) in enumerate(selected, start=1):
+                _write_case_progress_line(
+                    progress_bar=progress_bar,
+                    prefix="Provider Proposal Eval current",
+                    case_index=selection_index,
+                    total=len(selected),
+                    case_name=case.name,
+                )
+                evaluations.append(
+                    _evaluate_case(
+                        provider=provider,
+                        semantic_layer_context=semantic_layer_context,
+                        case_number=case_number,
+                        case=case,
+                        sample_count=sample_count,
+                    )
+                )
+                _update_case_progress(progress_bar)
+            return tuple(evaluations)
+        return _run_case_evaluations_concurrently(
+            provider=provider,
+            semantic_layer_context=semantic_layer_context,
+            selected=selected,
+            sample_count=sample_count,
+            concurrency=concurrency,
+            progress_bar=progress_bar,
+        )
+    finally:
+        if progress_bar is not None:
+            _close_case_progress(progress_bar)
+
+
+def _run_case_evaluations_concurrently(
+    *,
+    provider: question_interpreter.QuestionInterpreterProvider,
+    semantic_layer_context: dict[str, object],
+    selected: tuple[tuple[int, ProviderProposalEvalCase], ...],
+    sample_count: int,
+    concurrency: int,
+    progress_bar: _CaseProgress | None,
+) -> tuple[_CaseEvaluation, ...]:
+    max_workers = min(concurrency, len(selected))
+    if max_workers == 0:
+        return ()
+    by_selection_index: dict[int, _CaseEvaluation] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(
+                _evaluate_case,
+                provider=provider,
+                semantic_layer_context=semantic_layer_context,
+                case_number=case_number,
+                case=case,
+                sample_count=sample_count,
+            ): selection_index
+            for selection_index, (case_number, case) in enumerate(selected, start=1)
+        }
+        for completed_count, future in enumerate(
+            concurrent.futures.as_completed(futures),
+            start=1,
+        ):
+            evaluation = future.result()
+            by_selection_index[futures[future]] = evaluation
+            _write_case_progress_line(
+                progress_bar=progress_bar,
+                prefix="Provider Proposal Eval completed",
+                case_index=completed_count,
+                total=len(selected),
+                case_name=evaluation.case.name,
+            )
+            _update_case_progress(progress_bar)
+    return tuple(
+        by_selection_index[selection_index]
+        for selection_index in range(1, len(selected) + 1)
+    )
+
+
+def _evaluate_case(
+    *,
+    provider: question_interpreter.QuestionInterpreterProvider,
+    semantic_layer_context: dict[str, object],
+    case_number: int,
+    case: ProviderProposalEvalCase,
+    sample_count: int,
+) -> _CaseEvaluation:
+    pass_count = 0
+    sample_failures: list[str] = []
+    last_actual: ProviderResult | None = None
+    last_failure_actual: ProviderResult | None = None
+    for sample_index in range(sample_count):
+        actual = provider.propose_question_frame(
+            question=case.question,
+            semantic_layer_context=semantic_layer_context,
+        )
+        last_actual = actual
+        reasons = _case_failure_reasons(expected=case.expected, actual=actual)
+        if reasons:
+            last_failure_actual = actual
+            sample_failures.extend(
+                f"sample {sample_index + 1}: {reason}" for reason in reasons
+            )
+            continue
+        pass_count += 1
+
+    if last_actual is None:
+        raise AssertionError(
+            "provider proposal eval must record at least one sample result"
+        )
+    return _CaseEvaluation(
+        case_number=case_number,
+        case=case,
+        actual=last_actual,
+        failure_actual=last_failure_actual,
+        pass_count=pass_count,
+        sample_failures=tuple(sample_failures),
+    )
+
+
+def _record_case_evaluation(
+    *,
+    evaluation: _CaseEvaluation,
+    sample_count: int,
+    failures_file: typing.TextIO | None,
+    passes: list[ProviderProposalEvalPass],
+    failures: list[ProviderProposalEvalFailure],
+    known_deferred: list[ProviderProposalEvalFailure],
+    tripwires: list[ProviderProposalEvalPass],
+) -> None:
+    case = evaluation.case
+    if evaluation.sample_failures:
+        if evaluation.failure_actual is None:
+            raise AssertionError("failed eval case must record a failed sample result")
+        failure = ProviderProposalEvalFailure(
+            case_name=case.name,
+            question=case.question,
+            expected=case.expected,
+            actual=evaluation.failure_actual,
+            reasons=evaluation.sample_failures,
+            pass_count=evaluation.pass_count,
+            sample_count=sample_count,
+        )
+        if case.deferred:
+            known_deferred.append(failure)
+            return
+        failures.append(failure)
+        _write_failure_line(
+            failures_file=failures_file,
+            case_number=evaluation.case_number,
+            failure=failure,
+        )
+        return
+    passed_case = ProviderProposalEvalPass(
+        case_name=case.name,
+        question=case.question,
+        expected=case.expected,
+        actual=typing.cast(
+            question_interpreter.ProviderProposal,
+            evaluation.actual,
+        ),
+        pass_count=evaluation.pass_count,
+        sample_count=sample_count,
+    )
+    if case.deferred:
+        tripwires.append(passed_case)
+    else:
+        passes.append(passed_case)
 
 
 def _case_failure_reasons(
@@ -412,42 +560,59 @@ def resolve_default_failures_path() -> pathlib.Path:
     return DEFAULT_FAILURES_DIR / f"provider_proposal_eval_failures_{timestamp}.jsonl"
 
 
-def _new_case_progress_bar(
+def _new_case_progress(
     *,
     enabled: bool,
     total: int,
     progress_file: typing.TextIO | None,
-) -> typing.Any | None:
+) -> _CaseProgress | None:
     if not enabled:
         return None
-    return tqdm.tqdm(
-        total=total,
+    status = tqdm.tqdm(
+        total=0,
         file=progress_file,
         leave=False,
         dynamic_ncols=True,
-        bar_format="{desc} |{bar}| {percentage:3.0f}%",
+        bar_format="{desc}",
+        position=0,
     )
+    progress = tqdm.tqdm(
+        total=total,
+        desc="Provider Proposal Eval",
+        file=progress_file,
+        leave=False,
+        dynamic_ncols=True,
+        bar_format="{desc} |{bar}| {n_fmt}/{total_fmt} {percentage:3.0f}%",
+        position=1,
+    )
+    return _CaseProgress(status=status, progress=progress)
 
 
-def _set_case_progress(
+def _close_case_progress(progress_bar: _CaseProgress) -> None:
+    progress_bar.progress.close()
+    progress_bar.status.close()
+
+
+def _write_case_progress_line(
     *,
-    progress_bar: typing.Any | None,
+    progress_bar: _CaseProgress | None,
+    prefix: str,
     case_index: int,
     total: int,
     case_name: str,
 ) -> None:
     if progress_bar is None:
         return
-    progress_bar.set_description_str(
-        f"Provider Proposal Eval cases {case_index}/{total}: {case_name}",
+    progress_bar.status.set_description_str(
+        f"{prefix} {case_index}/{total}: {case_name}",
         refresh=True,
     )
 
 
-def _update_case_progress(progress_bar: typing.Any | None) -> None:
+def _update_case_progress(progress_bar: _CaseProgress | None) -> None:
     if progress_bar is None:
         return
-    progress_bar.update(1)
+    progress_bar.progress.update(1)
 
 
 _FIELD_OPERATION_ATTRIBUTES: tuple[str, ...] = (

@@ -290,6 +290,13 @@ Multi-case live evals show a `tqdm` case progress bar on stderr by default. Use
 uv run python -m data_assistant.question_interpreter.live_provider_proposal_eval --no-progress
 ```
 
+Use bounded case concurrency to speed up live runs when current OpenAI limits allow
+it. Samples within a case still run serially:
+
+```bash
+uv run python -m data_assistant.question_interpreter.live_provider_proposal_eval --concurrency 4
+```
+
 Optional model override in `.env`:
 
 ```dotenv
