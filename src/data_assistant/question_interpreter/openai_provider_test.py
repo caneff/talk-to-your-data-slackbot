@@ -466,6 +466,30 @@ def test_developer_prompt_retains_all_sections() -> None:
         assert header in developer_prompt
 
 
+def test_developer_prompt_covers_issue_244_regressions() -> None:
+    developer_prompt = _captured_input_messages()[0]["content"]
+
+    for required_snippet in (
+        '"how did ... compare"',
+        '"compare ... by ..."',
+        '"compared to"',
+        '"versus"',
+        '"vs"',
+        '"difference between"',
+        'remain intent: "compare"',
+        (
+            "What was support ticket count by issue category excluding the "
+            "Resolved status?"
+        ),
+        "group_by issue category",
+        "exclude_filter ticket status = Resolved",
+        "What was store count by store region excluding the West region?",
+        "group_by store region",
+        "exclude_filter store region = West",
+    ):
+        assert required_snippet in developer_prompt
+
+
 def test_openai_provider_maps_refusal_to_provider_failure() -> None:
     parse_calls: list[dict[str, object]] = []
 
