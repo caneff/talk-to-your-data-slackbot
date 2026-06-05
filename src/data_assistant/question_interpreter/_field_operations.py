@@ -16,6 +16,7 @@ import data_assistant.workflow.contracts as contracts
 def validate_field_filters(
     operation_proposals: tuple[proposals.ProviderFieldOperation, ...],
     semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
+    as_of_date: datetime.date | None,
 ) -> contracts.NonAnswer | tuple[str | None, tuple[contracts.FieldFilter[str], ...]]:
     field_candidates_by_label = _field_candidates_by_label(semantic_layer)
     validated_filters: list[contracts.FieldFilter[str]] = []
@@ -48,7 +49,9 @@ def validate_field_filters(
             group_by_field = field.label
             continue
         if operation == schema.FieldOperation.RANGE_FILTER:
-            result = _validate_range_filter(operation_proposal, field, operation)
+            result = _validate_range_filter(
+                operation_proposal, field, operation, as_of_date
+            )
         elif operation in {
             schema.FieldOperation.INCLUDE_FILTER,
             schema.FieldOperation.EXCLUDE_FILTER,
@@ -66,62 +69,6 @@ def validate_field_filters(
     return group_by_field, tuple(validated_filters)
 
 
-def resolve_relative_window(
-    relative_window_proposal: proposals.ProviderRelativeWindow,
-    as_of_date: datetime.date | None,
-    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
-) -> contracts.NonAnswer | contracts.RangeFilter[str]:
-    """Type an untrusted relative_window into a RangeFilter on its date field.
-
-    The model classified the phrase into {field, unit, count}; the interpreter
-    owns the arithmetic (ADR-0025) and computes the window from as_of_date,
-    enforcing the ADR-0024 convention. Without the as_of_date anchor the rule is
-    inert (same dormancy posture as ADR-0021/0024), so a missing anchor is a
-    validation failure.
-    """
-    if as_of_date is None:
-        return non_answer_catalog.non_answer(
-            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-        )
-    field_candidates_by_label = _field_candidates_by_label(semantic_layer)
-    field_candidates = field_candidates_by_label.get(relative_window_proposal.field)
-    if field_candidates is None:
-        return non_answer_catalog.unknown_semantic_label_non_answer(
-            "field",
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-        )
-    if len(field_candidates) > 1:
-        return non_answer_catalog.non_answer(
-            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-        )
-    field = field_candidates[0]
-    if field.data_type != schema.DataType.DATE:
-        return non_answer_catalog.non_answer(
-            contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION,
-            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
-        )
-    lower, upper = relative_window.compute_relative_window(
-        as_of_date=as_of_date,
-        unit=relative_window_proposal.unit,
-        count=relative_window_proposal.count,
-    )
-    return contracts.RangeFilter(field=field.label, lower=lower, upper=upper)
-
-
-def date_field_labels(
-    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
-) -> frozenset[str]:
-    """Labels of every date Semantic Field in the layer."""
-    return frozenset(
-        field.label
-        for table in semantic_layer.tables
-        for field in table.fields
-        if field.data_type == schema.DataType.DATE
-    )
-
-
 def _field_candidates_by_label(
     semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
 ) -> dict[str, list[schema.SemanticField]]:
@@ -136,7 +83,17 @@ def _validate_range_filter(
     operation_proposal: proposals.ProviderFieldOperation,
     field: schema.SemanticField,
     operation: schema.FieldOperation,
+    as_of_date: datetime.date | None,
 ) -> contracts.NonAnswer | contracts.RangeFilter[str]:
+    if operation_proposal.source == "relative":
+        return _validate_relative_range_filter(operation_proposal, field, as_of_date)
+    if operation_proposal.unit is not None or operation_proposal.count is not None:
+        # unit/count only annotate a relative window; an explicit range_filter
+        # that carries them is malformed.
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
     if operation_proposal.lower is None and operation_proposal.upper is None:
         return non_answer_catalog.non_answer(
             contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
@@ -167,6 +124,49 @@ def _validate_range_filter(
         lower=lower,
         upper=upper,
     )
+
+
+def _validate_relative_range_filter(
+    operation_proposal: proposals.ProviderFieldOperation,
+    field: schema.SemanticField,
+    as_of_date: datetime.date | None,
+) -> contracts.NonAnswer | contracts.RangeFilter[str]:
+    """Compute a relative range_filter's window from as_of_date (ADR-0026).
+
+    The model classified the phrase by carrying {unit, count} on a range_filter
+    with source relative; the interpreter owns the arithmetic (ADR-0024/0025) and
+    computes the window from as_of_date. The relative-vs-explicit distinction is
+    the source discriminator, never re-parsed from question text. Without the
+    as_of_date anchor the rule is inert (same dormancy posture as ADR-0021/0024),
+    so a missing anchor is a validation failure.
+    """
+    if operation_proposal.lower is not None or operation_proposal.upper is not None:
+        # A relative window carries no dates; the interpreter computes them.
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
+    if operation_proposal.unit is None or operation_proposal.count is None:
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
+    if field.data_type != schema.DataType.DATE:
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
+    if as_of_date is None:
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
+    lower, upper = relative_window.compute_relative_window(
+        as_of_date=as_of_date,
+        unit=operation_proposal.unit,
+        count=operation_proposal.count,
+    )
+    return contracts.RangeFilter(field=field.label, lower=lower, upper=upper)
 
 
 def _range_bounds_are_reversed(

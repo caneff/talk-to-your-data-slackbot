@@ -21,17 +21,32 @@ class ProviderFieldOperation(pydantic.BaseModel):
         "exclude_filter",
     ] = pydantic.Field(
         description=(
-            "Use group_by for requested grouping, range_filter for complete "
-            "calendar months or date ranges, include_filter for exact dates or "
-            "explicitly included dimension values, and exclude_filter only for "
-            "explicitly excluded values with non-empty values. Do not emit "
-            "operations for fields that are merely available in "
+            "Use group_by for requested grouping, range_filter for explicit "
+            "calendar months, explicit date ranges, or an as_of-anchored "
+            "relative window (set source accordingly), include_filter for exact "
+            "dates or explicitly included dimension values, and exclude_filter "
+            "only for explicitly excluded values with non-empty values. Do not "
+            "emit operations for fields that are merely available in "
             "semantic_layer_context, and never use include_filter or "
             "exclude_filter with empty values."
         ),
     )
     field: str = pydantic.Field(
         description="Business-facing Semantic Field label from semantic_layer_context.",
+    )
+    source: typing.Literal["explicit", "relative"] = pydantic.Field(
+        default="explicit",
+        description=(
+            "Only meaningful for range_filter on a date field. Use explicit (the "
+            "default, and the only valid value for group_by, include_filter, and "
+            "exclude_filter) when the Data Question gives concrete dates, an "
+            "explicit calendar month/year, an explicit quarter, a bare month, or "
+            "a 'before <month>' bound — set lower/upper and leave unit and count "
+            "null. Use relative ONLY for an as_of-anchored relative window "
+            "(yesterday, last N days, last month, last M months, last quarter, "
+            "last M quarters): set unit and count, leave lower and upper null, "
+            "and the interpreter computes the calendar window from as_of_date."
+        ),
     )
     lower: str | None = pydantic.Field(
         default=None,
@@ -57,36 +72,23 @@ class ProviderFieldOperation(pydantic.BaseModel):
             "emit include_filter or exclude_filter with empty values."
         ),
     )
-
-
-class ProviderRelativeWindow(pydantic.BaseModel):
-    """Untrusted model classification of an as_of-anchored relative phrase.
-
-    The model classifies ONLY; the interpreter computes the calendar window
-    from as_of_date (ADR-0025). No dates appear here.
-    """
-
-    model_config = pydantic.ConfigDict(extra="forbid")
-
-    field: str = pydantic.Field(
+    unit: typing.Literal["day", "month", "quarter"] | None = pydantic.Field(
+        default=None,
         description=(
-            "Business-facing date Semantic Field label from "
-            "semantic_layer_context — the selected metric's own compatible date "
-            "field, exactly as for an explicit range_filter."
+            "Set ONLY for a range_filter with source relative: the relative "
+            "phrase's unit — day for yesterday/last N days, month for last "
+            "month/last M months, quarter for last quarter/last M quarters. Null "
+            "for every other operation and for an explicit range_filter."
         ),
     )
-    unit: typing.Literal["day", "month", "quarter"] = pydantic.Field(
-        description=(
-            "The relative phrase's unit: day for yesterday/last N days, month "
-            "for last month/last M months, quarter for last quarter/last M "
-            "quarters."
-        ),
-    )
-    count: int = pydantic.Field(
+    count: int | None = pydantic.Field(
+        default=None,
         ge=1,
         description=(
-            "How many units back the phrase names: 1 for yesterday/last "
-            "month/last quarter, N for last N days, M for last M months/quarters."
+            "Set ONLY for a range_filter with source relative: how many units "
+            "back the phrase names — 1 for yesterday/last month/last quarter, N "
+            "for last N days, M for last M months/quarters. Null for every other "
+            "operation and for an explicit range_filter."
         ),
     )
 
@@ -178,19 +180,6 @@ class ProviderProposal(pydantic.BaseModel):
         description=(
             "True only when the Data Question explicitly asks across all time "
             "and no date filter operation is emitted."
-        ),
-    )
-    relative_window: ProviderRelativeWindow | None = pydantic.Field(
-        default=None,
-        description=(
-            "Classify ONLY an as_of-anchored relative phrase (yesterday, last N "
-            "days, last month, last M months, last quarter, last M quarters) "
-            "into the selected date field plus unit and count; emit NO "
-            "range_filter and NO dates for it, because the interpreter computes "
-            "the window from as_of_date. Mutually exclusive with a date "
-            "range_filter: a proposal carries one or the other, never both. "
-            "Null for explicit dates, explicit months/quarters, bare months, "
-            "and 'before <month>' phrases, which stay model-emitted range_filter."
         ),
     )
 

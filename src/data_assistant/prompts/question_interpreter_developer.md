@@ -161,16 +161,19 @@ operation is not directly supported by words in the Data Question, do not add it
   range_filter on the selected metric's compatible date field, exactly as for an
   explicit month and year. With `as_of_date` "2026-06-30", a bare "may" resolves
   to "2026-05-01"..."2026-05-31".
+- A date `range_filter` is either explicit or relative, carried by its `source`
+  field. Explicit dates, an explicit calendar month/year, an explicit quarter, a
+  bare month, and "before <month>" phrases are `source` "explicit" with `lower`
+  and `upper` set (the default) — do NO relative classification for them.
 - If the Data Question names an `as_of`-anchored relative window (yesterday, last
-  N days, last month, last M months, last quarter, last M quarters), CLASSIFY it
-  into `relative_window` and do NO date arithmetic: set `field` to the selected
-  metric's own compatible date field, `unit` to day, month, or quarter, and
-  `count` to how many units back the phrase names. Map by family: yesterday →
-  day/1, last N days → day/N, last month → month/1, last M months → month/M, last
-  quarter → quarter/1, last M quarters → quarter/M. Emit NO `range_filter` and NO
-  dates for a relative phrase — the interpreter computes the calendar window from
-  `as_of_date`. `relative_window` and a date `range_filter` are mutually
-  exclusive: a proposal carries one or the other, never both.
+  N days, last month, last M months, last quarter, last M quarters), emit a
+  `range_filter` with `source` "relative" and do NO date arithmetic: set `field`
+  to the selected metric's own compatible date field, `unit` to day, month, or
+  quarter, `count` to how many units back the phrase names, and leave `lower` and
+  `upper` null. Map by family: yesterday → day/1, last N days → day/N, last month
+  → month/1, last M months → month/M, last quarter → quarter/1, last M quarters →
+  quarter/M. The interpreter computes the calendar window from `as_of_date`;
+  never resolve a relative phrase to explicit dates yourself.
 - "before <month> <year>" means strictly earlier than the first day of that
   month: emit a range_filter with lower null and upper set to the last day of the
   preceding month. "before January 2024" → upper "2023-12-31" (not "2024-01-01",
@@ -309,40 +312,30 @@ ticket count metric's compatible set exposes "ticket priority" with group_by and
 (June, month 6), it resolves to as_of_date's year 2026, then becomes the full
 month 2026-05-01..2026-05-31 on the metric's own date field.
 
-For "What was total net revenue in the last 7 days?" when `as_of_date` is
-"2026-06-30" and the metric's compatible set exposes "order date" with
-range_filter, return intent "summarize", metric "total net revenue", and one
-date field_operation:
+For "What was total net revenue in the last 7 days?" when the metric's
+compatible set exposes "order date" with range_filter, return intent
+"summarize", metric "total net revenue", and one relative date field_operation —
+do NO date arithmetic yourself:
 
-- operation "range_filter", field "order date", lower "2026-06-23",
-  upper "2026-06-29", values []
+- operation "range_filter", field "order date", source "relative", unit "day",
+  count 7, lower null, upper null, values []
 
-The window is the 7 most recent complete days. as_of_date 2026-06-30 is the
-notional today and counts as incomplete, so the last day in the window is
-2026-06-29 and the window never includes 2026-06-30.
+The interpreter computes the window from `as_of_date`. "last quarter" is the same
+shape with unit "quarter", count 1; "last two months" is unit "month", count 2.
+Always leave lower and upper null and let the interpreter resolve the calendar
+window, even on the last day of a quarter — never emit explicit dates for a
+relative phrase, so the model's quarter intuition never reaches the answer.
 
-For "What was total net revenue in the last two months?" with the same
-as_of_date, June is the in-progress month, so the two most recent complete
-months are April and May. Return one date field_operation — a SINGLE
-range_filter spanning both months, not one per month:
+Contrast an EXPLICIT date phrase, which you DO resolve to dates with source
+"explicit" (the default). For "What was total net revenue in Q2 2026?" emit:
 
-- operation "range_filter", field "order date", lower "2026-04-01",
-  upper "2026-05-31", values []
+- operation "range_filter", field "order date", source "explicit",
+  lower "2026-04-01", upper "2026-06-30", values []
 
-Lower is the first day of the earliest month in the window (April 1) and upper
-is the last day of the most recent complete month (May 31). Do not emit a second
-range_filter, and do not include June: a multi-period window is always one
-continuous range with the in-progress month excluded.
-
-For "What was total net revenue last quarter?" with the same as_of_date, the
-in-progress quarter is Q2 2026 (April–June) because 2026-06-30 falls in it, so
-the most recent complete quarter is Q1 2026:
-
-- operation "range_filter", field "order date", lower "2026-01-01",
-  upper "2026-03-31", values []
-
-Use Q1 (not Q2) even though 2026-06-30 is the last day of Q2; the unit
-containing as_of_date is always in progress and excluded.
+An explicit "Q2 2026" and a relative "last quarter" can name the same calendar
+range, but they are not the same: the explicit phrase is source "explicit" with
+dates, the relative phrase is source "relative" with unit and count. The source
+field carries the distinction.
 
 For "How many stores by channel?" when the stores metric's compatible set exposes
 "store channel" with group_by, return intent "summarize" and one field_operation:
