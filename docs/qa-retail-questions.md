@@ -41,8 +41,8 @@ oracle; there is no expected-answer comparison.
 - [customers-count-by-loyalty-tier-all-time] What was customer count by loyalty tier for all time?
 - [customers-count-by-acquisition-channel-all-time] What was customer count by acquisition channel for all time?
 - [customers-count-by-region-all-time] What was customer count by customer region for all time?
-- [customers-created-january-2026] How many customers were created in January 2026?
-- [customers-count-by-acquisition-channel-created-2026] What was customer count by acquisition channel for customers created in 2026?
+- [customers-created-january-2024] How many customers were created in January 2024?
+- [customers-count-by-acquisition-channel-created-2024] What was customer count by acquisition channel for customers created in 2024?
 
 ## Stores And Products
 
