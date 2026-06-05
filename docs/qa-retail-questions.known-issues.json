@@ -1,29 +1,4 @@
 {
   "version": 1,
-  "questions": {
-    "orders-discount-amount-by-promotion-code-april-2026": [
-      {
-        "issue_number": 267,
-        "flag_category": "correctness"
-      }
-    ],
-    "orders-gross-revenue-by-order-channel-march-2026": [
-      {
-        "issue_number": 267,
-        "flag_category": "correctness"
-      }
-    ],
-    "orders-net-revenue-by-customer-segment-all-time": [
-      {
-        "issue_number": 267,
-        "flag_category": "correctness"
-      }
-    ],
-    "orders-order-count-by-fulfillment-status-may-2026": [
-      {
-        "issue_number": 267,
-        "flag_category": "correctness"
-      }
-    ]
-  }
+  "questions": {}
 }
