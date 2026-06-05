@@ -25,6 +25,12 @@ QA-case join key for Known QA Issue sidecars only when the record also has
 `source == "qa_review"`. Keep `question` as observed evidence only; never use
 question text as the sidecar key.
 
+QA Review Mode records (`source == "qa_review"`) may also carry an optional
+`qa_review_note`: the QA reviewer's free-text complaint, written via
+`interaction_log.save_qa_review_note`. When present it is the **strongest human
+signal** about what is wrong — it states what the reviewer actually observed, in
+their own words. Treat it as primary evidence, not flavor text.
+
 By `outcome`:
 - **answer:** `intent`, `question_frame` (`intent`, `metric`, `time_scope`, `filters`, `unresolved_ambiguities`), routed `dataset` / `metric` / `metric_expression` / `group_by` / `filters` / `result_limit`, `prepared_data_shape` (`rows`×`columns`), `quality_notes`, and `key_data` (the tiny headline numbers).
 - **non_answer:** `stage`, `reason_code` (the fine 15-way `NonAnswerReasonCode`), `context`.
@@ -45,12 +51,24 @@ For Render/hosted triage, query application logs for `data_assistant.flagged_int
 For every flagged record show, compactly:
 - `id`, `timestamp`, category(ies), `outcome`, `qa_case_id` when present, the
   `question`, and the `response_text`.
+- The operator note (`qa_review_note`), verbatim, when present — call it out
+  prominently so it is never silently dropped. It is the human's stated
+  complaint and drives the root-cause below.
 - The debug signal for its outcome:
   - answer → `intent`, routed `dataset`/`metric`(`metric_expression`)/`group_by`/`filters`, `time_scope`, `prepared_data_shape`, `quality_notes`, `key_data`, plus any `unresolved_ambiguities`.
   - non_answer → `stage` + `reason_code` + `context`.
   - error → `error_type` + `error_message`.
 
 ### 3. Root-cause to a layer
+
+**When `qa_review_note` is present, it is the PRIMARY root-cause signal.** It is
+the human's stated complaint, not a hint — diagnose the problem the note
+describes. Signals you auto-infer from `response_text` (e.g. a stray lowercase
+letter) must **not** replace or override the operator's stated complaint. If the
+note conflicts with your inference, the note wins: reproduce locally (step 4) to
+reconcile the two rather than discarding the note. Only when there is no
+`qa_review_note` do you lead with the auto-inferred signals in the table below.
+
 Map each case to the most likely failing stage, using the category as a strong hint:
 
 | Signal | Likely layer | Code anchor |
@@ -135,6 +153,7 @@ Once you file the issue(s), map an `id` to an already-tracked issue, complete th
 ## Guardrails
 - Triage analysis is read-only, and **issue/external mutations** (create issues, comment on issues, rewrite logs, mutate external systems) still require the user's explicit confirmation in the current turn. **Clearing handled flags is the exception**: it is the default closeout (step 6) and needs no separate approval — unless the user preemptively opted out.
 - The log is read-only during analysis. The **only** permitted log write is `clear_flags` on ids you handled this session (step 6) — done by default, skipped only on a preemptive user opt-out. Never delete a record, never rewrite anything but the `flags` of handled ids, never clear a flag you did not handle.
+- Read the operator's `qa_review_note` first when present; it is the human's stated complaint, not a hint. Never override it with a root cause inferred from `response_text`.
 - Never fabricate questions, numbers, or rows not present in the record. Cite `id`s.
 - Respect the sanitization boundary — reproduce locally instead of inferring hidden cell values.
 - Flagged ≠ confirmed bug. A flag is a maintainer's signal; verify the root cause before proposing a fix.
