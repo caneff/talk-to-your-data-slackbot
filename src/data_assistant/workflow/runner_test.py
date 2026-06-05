@@ -954,10 +954,16 @@ def test_data_assistant_denies_dataset_access_before_request_or_preparation(
     assert non_answer.datasets == ("retail_ops",)
 
 
-def test_data_assistant_rejects_duplicate_field_labels_before_access_denial(
+def test_data_assistant_collapses_same_logical_denormalized_field_before_router(
     monkeypatch: pytest.MonkeyPatch,
     connect_orders: local_duckdb_fixture.OrdersConnector,
 ) -> None:
+    # ADR-0027: the "region" field is the same logical Semantic Field copied onto
+    # both tables (identical identity tuple), so Provider Proposal Validation
+    # collapses it instead of rejecting it as INVALID_PROVIDER_OUTPUT. Because both
+    # tables here carry the metric and the field, Semantic Router then applies its
+    # existing table-cardinality behavior (AMBIGUOUS_TABLE) rather than the
+    # interpreter rejecting the proposal. The reject no longer pre-empts the router.
     sentinel_response, captured_non_answers = capture_non_answer_response(monkeypatch)
     semantic_layer = _ambiguous_table_semantic_layer(
         allowed_identity_ids=("finance-team",),
@@ -988,10 +994,8 @@ def test_data_assistant_rejects_duplicate_field_labels_before_access_denial(
     assert result is sentinel_response
     assert len(captured_non_answers) == 1
     non_answer = captured_non_answers[0]
-    assert non_answer.stage == contracts.NonAnswerStage.QUESTION_INTERPRETER
-    assert (
-        non_answer.reason_code == contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT
-    )
+    assert non_answer.stage == contracts.NonAnswerStage.SEMANTIC_ROUTER
+    assert non_answer.reason_code == contracts.NonAnswerReasonCode.AMBIGUOUS_TABLE
 
 
 def test_data_assistant_short_circuits_unsupported_question_before_preparing_data(

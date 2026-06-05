@@ -248,6 +248,19 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
         ),
     ),
     SharedProviderProposalCase(
+        # Flagship shared-label demo (#267 / ADR-0027): store region is
+        # denormalized onto demo_orders and demo_stores. The collapse policy lets
+        # this answer through the real interpreter path instead of returning
+        # INVALID_PROVIDER_OUTPUT.
+        name="net_revenue_by_store_region_q1",
+        question="What was total net revenue by store region in Q1 2026?",
+        expected=_summarize(
+            "total net revenue",
+            _group_by("store region"),
+            _during("order date", Q1_2026),
+        ),
+    ),
+    SharedProviderProposalCase(
         name="safe_non_answer_question",
         question="What was total net revenue by store region?",
         expected=_summarize(
