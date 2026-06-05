@@ -795,6 +795,81 @@ def test_catalog_discovery_hides_inaccessible_datasets() -> None:
     assert "no approved datasets are currently available" in result.text.lower()
 
 
+def test_generated_catalog_examples_stay_within_one_table() -> None:
+    examples = workflow_runner._generated_example_questions(  # pyright: ignore[reportPrivateUsage]
+        (
+            schema.DatasetTable(
+                table_id="alpha_table",
+                dataset_id="retail_ops",
+                description="Alpha table.",
+                columns=(
+                    schema.TableColumn(column_id="alpha_metric", data_type="decimal"),
+                    schema.TableColumn(column_id="zulu_region", data_type="string"),
+                ),
+                metrics=(
+                    schema.Metric(
+                        metric_id="alpha_revenue",
+                        label="alpha revenue",
+                        expression="sum(alpha_metric)",
+                        source_column="alpha_metric",
+                        kind=schema.MetricKind.MONEY,
+                    ),
+                ),
+                fields=(
+                    schema.SemanticField(
+                        field_id="zulu_region",
+                        label="zulu region",
+                        source_column="zulu_region",
+                        data_type=schema.DataType.STRING,
+                        operations=(schema.FieldOperation.GROUP_BY,),
+                    ),
+                ),
+            ),
+            schema.DatasetTable(
+                table_id="beta_table",
+                dataset_id="retail_ops",
+                description="Beta table.",
+                columns=(
+                    schema.TableColumn(column_id="beta_metric", data_type="decimal"),
+                    schema.TableColumn(column_id="aardvark_date", data_type="date"),
+                    schema.TableColumn(column_id="aardvark_group", data_type="string"),
+                ),
+                metrics=(
+                    schema.Metric(
+                        metric_id="beta_count",
+                        label="beta count",
+                        expression="sum(beta_metric)",
+                        source_column="beta_metric",
+                        kind=schema.MetricKind.COUNT,
+                    ),
+                ),
+                fields=(
+                    schema.SemanticField(
+                        field_id="aardvark_date",
+                        label="aardvark date",
+                        source_column="aardvark_date",
+                        data_type=schema.DataType.DATE,
+                        operations=(schema.FieldOperation.RANGE_FILTER,),
+                    ),
+                    schema.SemanticField(
+                        field_id="aardvark_group",
+                        label="aardvark group",
+                        source_column="aardvark_group",
+                        data_type=schema.DataType.STRING,
+                        operations=(schema.FieldOperation.GROUP_BY,),
+                    ),
+                ),
+            ),
+        )
+    )
+
+    assert examples == (
+        "What was alpha revenue for all time?",
+        "What was alpha revenue by zulu region for all time?",
+        "Show alpha revenue by zulu region for all time.",
+    )
+
+
 def test_data_assistant_rejects_availability_question_through_time_scope_gate(
     monkeypatch: pytest.MonkeyPatch,
     connect_orders: local_duckdb_fixture.OrdersConnector,

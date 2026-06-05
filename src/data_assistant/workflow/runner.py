@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import itertools
+import typing
 
 import duckdb
 
@@ -213,30 +214,64 @@ def _example_questions(
 def _generated_example_questions(
     tables: tuple[schema.DatasetTable, ...],
 ) -> tuple[str, ...]:
-    metrics = sorted({metric.label for table in tables for metric in table.metrics})
-    group_fields = sorted(
-        {
-            field.label
+    table_example = min(
+        (
+            example
             for table in tables
-            for field in table.fields
-            if schema.FieldOperation.GROUP_BY in field.operations
-        }
+            if (example := _table_example_parts(table)) is not None
+        ),
+        default=None,
+        key=lambda example: example.sort_key,
     )
-    date_fields = sorted(
-        {
-            field.label
-            for table in tables
-            for field in table.fields
-            if field.data_type == schema.DataType.DATE
-        }
-    )
-    if not metrics:
+    if table_example is None:
         return ()
-    time_phrase = "in January 2026" if date_fields else "for all time"
-    metric = metrics[0]
-    examples: list[str] = [f"What was {metric} {time_phrase}?"]
-    if group_fields:
-        group_field = group_fields[0]
-        examples.append(f"What was {metric} by {group_field} {time_phrase}?")
-        examples.append(f"Show {metric} by {group_field} {time_phrase}.")
+    time_phrase = (
+        "in January 2026"
+        if table_example.date_field_label is not None
+        else "for all time"
+    )
+    examples: list[str] = [f"What was {table_example.metric_label} {time_phrase}?"]
+    if table_example.group_field_label is not None:
+        examples.append(
+            f"What was {table_example.metric_label} by "
+            f"{table_example.group_field_label} {time_phrase}?"
+        )
+        examples.append(
+            f"Show {table_example.metric_label} by "
+            f"{table_example.group_field_label} {time_phrase}."
+        )
     return tuple(examples)
+
+
+def _table_example_parts(
+    table: schema.DatasetTable,
+) -> _TableExampleParts | None:
+    metric_labels = sorted(metric.label for metric in table.metrics)
+    if not metric_labels:
+        return None
+    group_field_labels = sorted(
+        field.label
+        for field in table.fields
+        if schema.FieldOperation.GROUP_BY in field.operations
+    )
+    date_field_labels = sorted(
+        field.label for field in table.fields if field.data_type == schema.DataType.DATE
+    )
+    return _TableExampleParts(
+        sort_key=(
+            metric_labels[0],
+            group_field_labels[0] if group_field_labels else "",
+            date_field_labels[0] if date_field_labels else "",
+            table.table_id,
+        ),
+        metric_label=metric_labels[0],
+        group_field_label=(None if not group_field_labels else group_field_labels[0]),
+        date_field_label=None if not date_field_labels else date_field_labels[0],
+    )
+
+
+class _TableExampleParts(typing.NamedTuple):
+    sort_key: tuple[str, str, str, str]
+    metric_label: str
+    group_field_label: str | None
+    date_field_label: str | None
