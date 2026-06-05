@@ -36,10 +36,13 @@ still-deferred intents such as compare, trend, or forecast.
   `UNSUPPORTED_DATA` / `UNSUPPORTED_AVAILABILITY` reject copy; these shapes now
   surface the more generic `UNKNOWN_SEMANTIC_LABEL` / `MISSING_TIME_SCOPE`
   wording.
-- No correctness change. Retrieval stays deterministic (ADR-0014), so a
-  false-success cannot fabricate numbers, and the surviving gates still reject
-  every one of these shapes — coverage moves from guard-fired tests to
-  surviving-path Non-Answer tests rather than dropping.
+- Rank is now a supported path, so the former rank-intent shape no longer
+  rejects: provider classification promotes it into trusted rank metadata and
+  deterministic retrieval answers it through ORDER BY / LIMIT (ADR-0014).
+  Unsupported-data and data-availability shapes still reject through the
+  surviving label and time-scope gates, so coverage moves from guard-fired
+  tests to a mix of supported-path rank tests and surviving-path Non-Answer
+  tests rather than dropping.
 - Supersedes the CONTEXT.md "Unsupported Intent Guard" framing; **Rank Intent**
   is no longer deferred and no longer depends on any deterministic pre-provider
   guard.
