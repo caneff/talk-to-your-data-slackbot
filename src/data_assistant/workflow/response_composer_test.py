@@ -155,6 +155,7 @@ def test_response_composer_formats_count_rows_from_metric_kind() -> None:
             time_range="January 2026",
             filters=(),
             caveats=(),
+            group_by_label="region",
         )
     )
 
@@ -166,20 +167,21 @@ def test_response_composer_formats_count_rows_from_metric_kind() -> None:
 def test_response_composer_title_cases_each_word_in_table_headers() -> None:
     response = response_composer.compose_final_response(
         contracts.AnswerDraft(
-            summary="Customer count in all available data was 2,050.",
+            summary="Customer count in January 2026 was 2,050 across 2 regions.",
             key_data=pd.DataFrame(
                 {
-                    "dimension_value": ("All",),
-                    "metric_value": (2050,),
+                    "dimension_value": ("North", "South"),
+                    "metric_value": (1200, 850),
                 }
             ),
             datasets_used=("Retail Customers",),
             dataset_tables_used=("customers",),
             metric_kind=schema.MetricKind.COUNT,
             metric_label="customer count",
-            time_range="all available data",
+            time_range="January 2026",
             filters=(),
             caveats=(),
+            group_by_label="region",
         )
     )
 
@@ -187,9 +189,101 @@ def test_response_composer_title_cases_each_word_in_table_headers() -> None:
     assert table_block["type"] == "table"
     rows = typing.cast(list[list[dict[str, str]]], table_block["rows"])
     assert rows[0] == [
-        {"type": "raw_text", "text": "Group"},
+        {"type": "raw_text", "text": "Region"},
         {"type": "raw_text", "text": "Customer Count"},
     ]
+
+
+def test_response_composer_suppresses_redundant_all_bullet_and_table_when_ungrouped() -> (  # noqa: E501
+    None
+):
+    """Ungrouped single-total answers omit the redundant ``- All:`` bullet+table.
+
+    For an ungrouped answer (``group_by_label is None``) the single ``All`` row
+    just repeats the headline number the summary already states, so the metric
+    bullet and the one-row key-data table block are suppressed (issue #275). The
+    secondary narrative bug is split out to #281 and not addressed here.
+    """
+    response = response_composer.compose_final_response(
+        contracts.AnswerDraft(
+            summary="In Q1 2026, Total net revenue totaled $122,441.75.",
+            key_data=pd.DataFrame(
+                {
+                    "dimension_value": ("All",),
+                    "metric_value": (122441.75,),
+                }
+            ),
+            datasets_used=("Retail Operations",),
+            dataset_tables_used=("orders",),
+            metric_kind=schema.MetricKind.MONEY,
+            metric_label="total net revenue",
+            time_range="Q1 2026",
+            filters=(),
+            caveats=(),
+        )
+    )
+
+    assert response.response_kind == contracts.ResponseKind.ANSWER
+    assert "In Q1 2026, Total net revenue totaled $122,441.75." in response.text
+    assert "- All:" not in response.text
+    assert "$122,441.75" in response.text  # only in the summary headline
+    assert response.text.count("$122,441.75") == 1
+    assert "Trust Summary:" in response.text
+    assert "table" not in {block["type"] for block in response.blocks}
+    assert response.blocks == (
+        {
+            "type": "section",
+            "text": {
+                "type": "plain_text",
+                "text": "In Q1 2026, Total net revenue totaled $122,441.75.",
+            },
+        },
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "plain_text",
+                    "text": (
+                        "Trust Summary: Curated Dataset: Retail Operations. "
+                        "Dataset Table: orders. Time range: Q1 2026."
+                    ),
+                },
+            ],
+        },
+    )
+
+
+def test_response_composer_keeps_bullets_and_table_for_grouped_answer() -> None:
+    """Grouped multi-row answers still render bullets and the key-data table.
+
+    Guards against over-suppression of the #275 fix: only ungrouped answers
+    drop the metric bullet and table.
+    """
+    response = response_composer.compose_final_response(
+        contracts.AnswerDraft(
+            summary=(
+                "Total revenue in January 2026 was $2,050.00, grouped across 2 regions."
+            ),
+            key_data=pd.DataFrame(
+                {
+                    "dimension_value": ("North", "South"),
+                    "metric_value": (1200.0, 850.0),
+                }
+            ),
+            datasets_used=("Retail Operations",),
+            dataset_tables_used=("orders",),
+            metric_kind=schema.MetricKind.MONEY,
+            metric_label="total revenue",
+            time_range="January 2026",
+            filters=(),
+            caveats=(),
+            group_by_label="region",
+        )
+    )
+
+    assert "- North: $1,200.00" in response.text
+    assert "- South: $850.00" in response.text
+    assert "table" in {block["type"] for block in response.blocks}
 
 
 def test_response_composer_numbers_ranked_plain_text_and_slack_table() -> None:

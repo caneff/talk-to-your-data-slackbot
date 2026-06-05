@@ -36,20 +36,28 @@ def compose_final_response(
             ),
         )
     )
-    metric_lines = "\n".join(
-        _metric_line(
-            index=index,
-            dimension_value=dimension_value,
-            metric_value=metric_value,
-            rank=answer_draft.rank,
-        )
-        for index, (dimension_value, metric_value) in enumerate(
-            zip(
-                answer_draft.key_data["dimension_value"].astype(str),
-                formatted_metric_values,
-                strict=True,
-            ),
-            start=1,
+    # Ungrouped single-total answers carry one "All" row whose metric just
+    # repeats the headline number the summary already states. Suppress the
+    # redundant bullet and key-data table for that case (issue #275).
+    is_ungrouped = answer_draft.group_by_label is None
+    metric_lines = (
+        ""
+        if is_ungrouped
+        else "\n".join(
+            _metric_line(
+                index=index,
+                dimension_value=dimension_value,
+                metric_value=metric_value,
+                rank=answer_draft.rank,
+            )
+            for index, (dimension_value, metric_value) in enumerate(
+                zip(
+                    answer_draft.key_data["dimension_value"].astype(str),
+                    formatted_metric_values,
+                    strict=True,
+                ),
+                start=1,
+            )
         )
     )
     trust_summary = contracts.TrustSummary(
@@ -73,12 +81,16 @@ def compose_final_response(
         blocks=_render_answer_blocks(
             summary=answer_draft.summary,
             trust_summary=rendered_trust_summary,
-            table_blocks=_render_key_data_table_block(
-                answer_draft.key_data,
-                formatted_metric_values,
-                dimension_header=answer_draft.group_by_label or "Group",
-                metric_header=answer_draft.metric_label,
-                rank=answer_draft.rank,
+            table_blocks=(
+                ()
+                if is_ungrouped
+                else _render_key_data_table_block(
+                    answer_draft.key_data,
+                    formatted_metric_values,
+                    dimension_header=answer_draft.group_by_label or "Group",
+                    metric_header=answer_draft.metric_label,
+                    rank=answer_draft.rank,
+                )
             ),
         ),
     )
