@@ -53,42 +53,36 @@ all_metric_labels. Metric aliases appear only inside metric_contexts as aliases
 for one canonical metric_label. Return only the canonical metric_label in
 metric; never return an alias text in metric. This decision does not depend on
 whether time, filters, or grouping are present, or on how the Data Question is
-phrased. Apply these in order:
+phrased. Resolve into exactly one of three cases:
 
-- Exact label match (highest priority): if the Data Question's metric wording is
-  exactly an available metric label (case-insensitive), set metric to that label
-  and leave metric_ambiguity null — even when the wording contains a qualifier
-  such as net, gross, recurring, or organic. Never flag an exact available label
-  as ambiguous.
-- Exact alias match: if the Data Question's metric wording is exactly a listed
-  metric alias (case-insensitive), set metric to that alias's canonical
-  metric_label and leave metric_ambiguity null. Never copy the alias text into
-  metric.
-- Qualifier reflected by a label: if the wording carries a qualifier and some
-  available label or alias reflects that qualifier or business phrasing
-  (for example the wording "total net revenue" and the label
-  "total net revenue", or the wording "transactions" and an alias for canonical
-  label "order count"), match the canonical label and leave metric_ambiguity
-  null.
-- Qualifier reflected by no label: set metric_ambiguity only when the wording
-  carries a qualifier that NO available label or alias reflects, so matching
-  the nearest label would drop or alter a word that changes which measure is
-  computed. Then set metric_ambiguity to that verbatim wording and leave metric
-  null. Do not pick the nearest label that drops the qualifier, and do not
-  guess. Reserve this for material modifiers on otherwise available metric
-  labels, such as net/gross/recurring/organic revenue against a base revenue
-  label. Do not use metric_ambiguity for an exact business alias like
-  "transactions" when that alias is explicitly listed for a canonical metric.
-- Immaterial phrasing: if a wording difference is immaterial and you are
-  confident it is synonymous with an available label, match that label normally
-  and leave metric_ambiguity null.
+- Match: if any available canonical label or alias reflects the Data Question's
+  metric wording, set metric to that canonical metric_label and leave
+  metric_ambiguity null. A label reflects the wording when it is an exact label
+  match (case-insensitive), an exact alias match (case-insensitive), a label or
+  alias that carries the same qualifier or business phrasing (for example the
+  wording "total net revenue" and the label "total net revenue", or the wording
+  "transactions" and an alias for canonical label "order count"), or a label you
+  are confident is synonymous with an immaterial wording difference. An exact
+  available label always Matches — even when the wording contains a qualifier
+  such as net, gross, recurring, or organic — so never flag an exact available
+  label as ambiguous. Always return the canonical metric_label; never copy alias
+  text into metric.
+- Flag: set metric_ambiguity only when the wording carries a meaning-changing
+  qualifier that NO available label or alias reflects, so matching the nearest
+  label would drop or alter a word that changes which measure is computed. Then
+  set metric_ambiguity to that verbatim wording and leave metric null. Do not
+  pick the nearest label that drops the qualifier, and do not guess. Reserve
+  this for material modifiers on otherwise available metric labels, such as
+  net/gross/recurring/organic revenue against a base revenue label. Do not Flag
+  an exact business alias like "transactions" when that alias is explicitly
+  listed for a canonical metric — that is a Match.
 - Named but unavailable metric: if the Data Question clearly names a metric and
   no available canonical label or alias actually names or computes that
   measure, set unknown_metric to the verbatim metric wording and leave metric
   and metric_ambiguity null. This still applies when nearby base measures,
   counts, or revenue labels exist but would compute a different measure. This
-  is distinct from the qualifier-ambiguity case above: there a label exists but
-  drops a qualifier; here the named measure is simply not carried at all.
+  is distinct from the Flag case above: there a label exists but drops a
+  qualifier; here the named measure is simply not carried at all.
 - Derived metrics stay unknown when unavailable: when the Data Question names a
   derived metric the Semantic Layer does not carry, do not substitute a related
   count, revenue, or base measure just because it sounds nearby. If "return
