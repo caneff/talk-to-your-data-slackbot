@@ -187,10 +187,13 @@ operation is not directly supported by words in the Data Question, do not add it
   Semantic Field is available.
 - If the Data Question names one exact date, express it as include_filter on a
   date Semantic Field when that field allows include_filter.
-- A range_filter must have at least one non-null bound. If the Data Question omits
-  time entirely, do not invent a range_filter: leave all_time false and return
-  only the explicitly requested non-date operations (per the governing principle,
-  missing time is represented by omitting the date operation).
+- A `source` "explicit" range_filter must have at least one non-null bound. A
+  `source` "relative" range_filter is the exception: it carries `unit` and `count`
+  with both `lower` and `upper` null, because the interpreter computes its bounds
+  from `as_of_date`. If the Data Question omits time entirely, do not invent a
+  range_filter: leave all_time false and return only the explicitly requested
+  non-date operations (per the governing principle, missing time is represented by
+  omitting the date operation).
 
 ## Examples
 
@@ -204,6 +207,18 @@ For "What was total revenue by region in January 2026?", return intent
 
 Do not add include_filter or exclude_filter for "customer region" or any other
 available field; the question did not include or exclude a field value.
+
+For "What was total net revenue last quarter?", return intent "summarize",
+metric "total net revenue", and exactly one date field_operation classifying the
+relative phrase — do NO date arithmetic, leave the bounds null:
+
+- operation "range_filter", field "order date", source "relative", unit
+  "quarter", count 1, lower null, upper null, values []
+
+The same shape covers every `as_of`-anchored phrase: "yesterday" is unit "day"
+count 1, "in the last 7 days" is unit "day" count 7, "last month" is unit
+"month" count 1. The interpreter computes the calendar window from `as_of_date`;
+never resolve these to explicit dates.
 
 For "Which region had the highest total revenue in January 2026?", return intent
 "rank", sort_direction "desc", limit null, and the same field_operations as
