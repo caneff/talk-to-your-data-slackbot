@@ -28,12 +28,16 @@ def validate_field_filters(
                 "field",
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
             )
-        if len(field_candidates) > 1:
+        field = _collapse_field_candidates(field_candidates)
+        if field is None:
+            # Genuinely ambiguous: candidates with the same label carry distinct
+            # identity tuples, so they are different logical fields (ADR-0027).
+            # The truthful reason code for this case is owned by issue #268; until
+            # then this remains INVALID_PROVIDER_OUTPUT.
             return non_answer_catalog.non_answer(
                 contracts.NonAnswerReasonCode.INVALID_PROVIDER_OUTPUT,
                 stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
             )
-        field = field_candidates[0]
         operation = schema.FieldOperation(operation_proposal.operation)
         if operation not in field.operations:
             return non_answer_catalog.non_answer(
@@ -67,6 +71,33 @@ def validate_field_filters(
         validated_filters.append(result)
 
     return group_by_field, tuple(validated_filters)
+
+
+def _collapse_field_candidates(
+    field_candidates: list[schema.SemanticField],
+) -> schema.SemanticField | None:
+    """Collapse same-logical denormalized field copies to one logical field.
+
+    Duplicate-label candidates are the same logical Semantic Field copied onto
+    multiple Dataset Tables only when they share the full identity tuple:
+    ``field_id``, ``source_column``, ``data_type``, and the exact set of allowed
+    ``operations`` (ADR-0027). When they match, return the single collapsed
+    field; the physical table copy is selected later by Semantic Router. When the
+    candidates carry distinct identity tuples they are genuinely ambiguous, so
+    return ``None``.
+    """
+    identity_tuples = {
+        (
+            field.field_id,
+            field.source_column,
+            field.data_type,
+            frozenset(field.operations),
+        )
+        for field in field_candidates
+    }
+    if len(identity_tuples) > 1:
+        return None
+    return field_candidates[0]
 
 
 def _field_candidates_by_label(
