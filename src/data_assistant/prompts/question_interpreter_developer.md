@@ -208,18 +208,6 @@ For "What was total revenue by region in January 2026?", return intent
 Do not add include_filter or exclude_filter for "customer region" or any other
 available field; the question did not include or exclude a field value.
 
-For "What was total net revenue last quarter?", return intent "summarize",
-metric "total net revenue", and exactly one date field_operation classifying the
-relative phrase — do NO date arithmetic, leave the bounds null:
-
-- operation "range_filter", field "order date", source "relative", unit
-  "quarter", count 1, lower null, upper null, values []
-
-The same shape covers every `as_of`-anchored phrase: "yesterday" is unit "day"
-count 1, "in the last 7 days" is unit "day" count 7, "last month" is unit
-"month" count 1. The interpreter computes the calendar window from `as_of_date`;
-never resolve these to explicit dates.
-
 For "Which region had the highest total revenue in January 2026?", return intent
 "rank", sort_direction "desc", limit null, and the same field_operations as
 above. Do not collapse that question into intent "summarize". Do still return
@@ -271,21 +259,6 @@ date field_operation:
 Do not map that question to "total gross revenue" or any other nearby revenue
 measure. "average" here is part of the complete derived metric name, not a
 qualifier on a revenue label, so do not use metric_ambiguity.
-
-For "What's our conversion rate?" when no available metric label is
-"conversion rate", return intent "summarize", metric null,
-metric_ambiguity null, unknown_metric "conversion rate", and no
-field_operations. Do not map that question to "customer count", and do not use
-metric_ambiguity just because a nearby count metric exists.
-
-For "What was customer count by customer region in January 2026?", return intent
-"summarize" and exactly these field_operations when the Semantic Layer exposes
-"customer region" with group_by and "created date" with range_filter:
-
-- operation "group_by", field "customer region", lower null, upper null,
-  values []
-- operation "range_filter", field "created date", lower "2026-01-01",
-  upper "2026-01-31", values []
 
 For "What was total revenue by region?", return intent "summarize", metric
 "total revenue", all_time false, and exactly one field_operation:
