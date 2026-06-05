@@ -11,6 +11,7 @@ from data_assistant.openai_support import OpenAIInputMessage
 from data_assistant.question_interpreter.proposals import (
     ProviderFailure,
     ProviderFailureDiagnosticClass,
+    ProviderFieldOperation,
     ProviderProposal,
 )
 
@@ -97,9 +98,27 @@ class OpenAIQuestionInterpreterProvider:
 
 
 def _canonicalize_provider_proposal(proposal: ProviderProposal) -> ProviderProposal:
+    canonicalized_operations = tuple(
+        operation
+        for operation in proposal.field_operations
+        if not _is_vacuous_field_operation(operation)
+    )
+    updates: dict[str, object] = {}
     if proposal.unknown_metric and proposal.metric_ambiguity:
-        return proposal.model_copy(update={"metric_ambiguity": None})
-    return proposal
+        updates["metric_ambiguity"] = None
+    if canonicalized_operations != proposal.field_operations:
+        updates["field_operations"] = canonicalized_operations
+    if not updates:
+        return proposal
+    return proposal.model_copy(update=updates)
+
+
+def _is_vacuous_field_operation(operation: ProviderFieldOperation) -> bool:
+    if operation.operation == "range_filter":
+        return operation.lower is None and operation.upper is None
+    if operation.operation in {"include_filter", "exclude_filter"}:
+        return operation.values == ()
+    return False
 
 
 def _build_openai_input(
