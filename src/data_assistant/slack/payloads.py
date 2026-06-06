@@ -3,7 +3,7 @@
 Everything here READS a structure that came back from Slack -- an inbound
 ``block_actions`` body, a clicked message's blocks, a view-submission state --
 or runs a pure decision core over it. Block CONSTRUCTORS live in ``blocks``;
-this module imports from ``blocks`` (it consumes :func:`flag_status_block`)
+this module imports from ``blocks`` (it consumes the flag-button block builders)
 but ``blocks`` never imports this module, so the dependency is one-way and
 acyclic.
 """
@@ -11,6 +11,7 @@ acyclic.
 from __future__ import annotations
 
 import collections.abc as collections_abc
+import dataclasses
 import json
 import logging
 import typing
@@ -18,9 +19,8 @@ import typing
 import data_assistant.interaction_log as interaction_log
 import data_assistant.workflow.contracts as contracts
 from data_assistant.slack.blocks import (
-    FLAG_STATUS_BLOCK_ID,
-    FLAG_STATUS_PREFIX,
-    flag_status_block,
+    flag_action_blocks,
+    qa_action_blocks,
 )
 from data_assistant.slack.prompts import (
     ACTION_ID_TO_CATEGORY,
@@ -30,13 +30,23 @@ from data_assistant.slack.prompts import (
 )
 
 logger = logging.getLogger(__name__)
+_LEGACY_FLAG_STATUS_BLOCK_ID = "flag_status"
+_LEGACY_FLAG_STATUS_PREFIX = "✓ Flagged: "
 
 # Seam type for the pure block_actions core. ``FlagStore`` binds to
-# ``interaction_log.flag_interaction(.., path=log_path)`` (returns False on an
-# unknown id).
-FlagStore: typing.TypeAlias = collections_abc.Callable[[str, str], bool]
+# ``interaction_log.toggle_flag_interaction(.., path=log_path)``.
+FlagStore: typing.TypeAlias = collections_abc.Callable[
+    [str, str], interaction_log.ToggleFlagResult
+]
 DeleteMessage: typing.TypeAlias = collections_abc.Callable[[str, str], object | None]
 NoteStore: typing.TypeAlias = collections_abc.Callable[[str, str], bool]
+
+
+@dataclasses.dataclass(frozen=True)
+class _FlagRenderState:
+    selected_categories: tuple[str, ...] = ()
+    locked_categories: tuple[str, ...] = ()
+    qa_mode: bool = False
 
 
 def str_at(payload: object, *keys: str) -> str:
@@ -69,42 +79,110 @@ def _parse_flag_status(block: contracts.SlackBlock) -> tuple[str, ...]:
     if not isinstance(first, dict):
         return ()
     text = typing.cast("dict[str, object]", first).get("text", "")
-    if not isinstance(text, str) or not text.startswith(FLAG_STATUS_PREFIX):
+    if not isinstance(text, str) or not text.startswith(_LEGACY_FLAG_STATUS_PREFIX):
         return ()
-    body = text[len(FLAG_STATUS_PREFIX) :]
+    body = text[len(_LEGACY_FLAG_STATUS_PREFIX) :]
     found = {part.strip() for part in body.split(",")}
     return tuple(c for c in interaction_log.FLAG_VOCABULARY if c in found)
+
+
+def _ordered_categories(categories: collections_abc.Iterable[str]) -> tuple[str, ...]:
+    selected = set(categories)
+    return tuple(
+        category for category in interaction_log.FLAG_VOCABULARY if category in selected
+    )
+
+
+def _metadata_categories(
+    value: object,
+) -> collections_abc.Iterable[str]:
+    if not isinstance(value, list):
+        return ()
+    categories: list[str] = []
+    for item in typing.cast("list[object]", value):
+        if isinstance(item, str):
+            categories.append(item)
+    return categories
+
+
+def _flag_render_state(
+    blocks: collections_abc.Sequence[contracts.SlackBlock],
+) -> _FlagRenderState:
+    legacy_selected: tuple[str, ...] = ()
+    for block in blocks:
+        if block.get("block_id") == _LEGACY_FLAG_STATUS_BLOCK_ID:
+            legacy_selected = _parse_flag_status(block)
+            continue
+        if block.get("type") != "actions":
+            continue
+        block_id = block.get("block_id")
+        if not isinstance(block_id, str):
+            continue
+        if "|" in block_id:
+            prefix, raw_metadata = block_id.split("|", 1)
+            if prefix not in {"flag_actions", "qa_actions"}:
+                continue
+            try:
+                metadata = json.loads(raw_metadata)
+            except json.JSONDecodeError:
+                metadata = {}
+            if not isinstance(metadata, dict):
+                metadata = {}
+            metadata_dict = typing.cast("dict[str, object]", metadata)
+            selected = _metadata_categories(metadata_dict.get("selected"))
+            locked = _metadata_categories(metadata_dict.get("locked"))
+            return _FlagRenderState(
+                selected_categories=_ordered_categories(selected) or legacy_selected,
+                locked_categories=_ordered_categories(locked),
+                qa_mode=prefix == "qa_actions",
+            )
+        if block_id.startswith("qa_actions:"):
+            return _FlagRenderState(
+                selected_categories=legacy_selected,
+                qa_mode=True,
+            )
+        if block_id.startswith("flag_actions:"):
+            return _FlagRenderState(selected_categories=legacy_selected)
+    return _FlagRenderState(selected_categories=legacy_selected)
 
 
 def render_flagged_message_blocks(
     *,
     blocks: collections_abc.Sequence[contracts.SlackBlock],
-    category: str,
-    found: bool,
+    interaction_id: str,
+    selected_categories: collections_abc.Iterable[str],
+    locked_categories: collections_abc.Iterable[str],
+    qa_mode: bool,
 ) -> list[contracts.SlackBlock]:
-    """Re-render an Assistant reply's blocks with ``category`` marked flagged.
-
-    Keeps every original block (answer body AND the flag buttons, so the other
-    category stays clickable) and appends -- or refreshes -- a single status
-    context block listing the cumulative flagged categories in vocabulary order.
-    A second click on a different button merges, so the line reads
-    ``"✓ Flagged: correctness, formatting"``; a duplicate click is a no-op.
-
-    ``found is False`` (id not in the log -- e.g. a rotated record) leaves the
-    blocks untouched: re-rendering the message as-is is a benign no-op, far
-    better than crashing or leaking a stray notification on a dead click.
-    """
-    kept = [b for b in blocks if b.get("block_id") != FLAG_STATUS_BLOCK_ID]
-    if not found:
-        return kept
-    prior: tuple[str, ...] = ()
+    """Re-render an Assistant reply's blocks with updated flag-button state."""
+    rendered: list[contracts.SlackBlock] = []
+    replaced_actions = False
     for block in blocks:
-        if block.get("block_id") == FLAG_STATUS_BLOCK_ID:
-            prior = _parse_flag_status(block)
-            break
-    merged = {*prior, category}
-    ordered = tuple(c for c in interaction_log.FLAG_VOCABULARY if c in merged)
-    return [*kept, flag_status_block(ordered)]
+        if block.get("block_id") == _LEGACY_FLAG_STATUS_BLOCK_ID:
+            continue
+        block_id = block.get("block_id")
+        if isinstance(block_id, str) and (
+            block_id.startswith("flag_actions") or block_id.startswith("qa_actions")
+        ):
+            if not replaced_actions:
+                action_blocks = (
+                    qa_action_blocks(
+                        interaction_id,
+                        selected_categories=selected_categories,
+                        locked_categories=locked_categories,
+                    )
+                    if qa_mode
+                    else flag_action_blocks(
+                        interaction_id,
+                        selected_categories=selected_categories,
+                        locked_categories=locked_categories,
+                    )
+                )
+                rendered.extend(action_blocks)
+                replaced_actions = True
+            continue
+        rendered.append(block)
+    return rendered
 
 
 def apply_flag(
@@ -116,17 +194,39 @@ def apply_flag(
 ) -> list[contracts.SlackBlock] | None:
     """Pure block_actions core: flag the record, return the re-rendered blocks.
 
-    Maps ``action_id`` to its flag category, calls ``flag_store`` to persist the
-    flag, and returns the message's blocks re-rendered with the new flag status
-    (the caller hands these to ``respond(.., replace_original=True)``). An
-    unmapped ``action_id`` returns ``None`` -- a defensive no-op that updates
-    nothing and never crashes on a stray click.
+    Maps ``action_id`` to its flag category, calls ``flag_store`` to toggle the
+    stored category, and returns the message's blocks re-rendered with updated
+    selected buttons. An unmapped ``action_id`` returns ``None`` -- a defensive
+    no-op that updates nothing and never crashes on a stray click.
     """
     category = ACTION_ID_TO_CATEGORY.get(action_id)
     if category is None:
         return None
-    found = flag_store(interaction_id, category)
-    return render_flagged_message_blocks(blocks=blocks, category=category, found=found)
+    render_state = _flag_render_state(blocks)
+    selected = set(render_state.selected_categories)
+    locked = set(render_state.locked_categories)
+    if category in selected and category in locked:
+        return render_flagged_message_blocks(
+            blocks=blocks,
+            interaction_id=interaction_id,
+            selected_categories=render_state.selected_categories,
+            locked_categories=render_state.locked_categories,
+            qa_mode=render_state.qa_mode,
+        )
+    toggle_result = flag_store(interaction_id, category)
+    if toggle_result is interaction_log.ToggleFlagResult.NOT_FOUND:
+        return list(blocks)
+    if toggle_result is interaction_log.ToggleFlagResult.SELECTED:
+        selected.add(category)
+    else:
+        selected.discard(category)
+    return render_flagged_message_blocks(
+        blocks=blocks,
+        interaction_id=interaction_id,
+        selected_categories=_ordered_categories(selected),
+        locked_categories=render_state.locked_categories,
+        qa_mode=render_state.qa_mode,
+    )
 
 
 def action_target(body: dict[str, typing.Any]) -> tuple[str, str]:

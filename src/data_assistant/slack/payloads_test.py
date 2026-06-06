@@ -8,6 +8,7 @@ import typing
 
 import pytest
 
+import data_assistant.interaction_log as interaction_log
 import data_assistant.slack.blocks as blocks
 import data_assistant.slack.payloads as payloads
 import data_assistant.slack.prompts as prompts
@@ -50,13 +51,23 @@ def _context_text(block: contracts.SlackBlock) -> str:
 
 
 class _RecordingFlagStore:
-    """Fake ``flag_interaction`` seam: records calls, returns a fixed result."""
+    """Fake toggle seam: records calls, returns a fixed result."""
 
-    def __init__(self, *, result: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        result: interaction_log.ToggleFlagResult = (
+            interaction_log.ToggleFlagResult.SELECTED
+        ),
+    ) -> None:
         self.calls: list[tuple[str, str]] = []
         self._result = result
 
-    def __call__(self, interaction_id: str, category: str) -> bool:
+    def __call__(
+        self,
+        interaction_id: str,
+        category: str,
+    ) -> interaction_log.ToggleFlagResult:
         self.calls.append((interaction_id, category))
         return self._result
 
@@ -92,16 +103,18 @@ def _answer_blocks() -> list[dict[str, object]]:
     ]
 
 
-def _status_text(
+def _button_by_action_id(
     block_list: collections.abc.Sequence[contracts.SlackBlock],
-) -> str | None:
+) -> dict[str, dict[str, object]]:
+    buttons: dict[str, dict[str, object]] = {}
     for block in block_list:
-        if block.get("block_id") == blocks.FLAG_STATUS_BLOCK_ID:
-            elements = block["elements"]
-            assert isinstance(elements, list)
-            first = typing.cast("list[dict[str, object]]", elements)[0]
-            return str(first["text"])
-    return None
+        if block.get("type") != "actions":
+            continue
+        for element in _button_elements(block):
+            action_id = element["action_id"]
+            assert isinstance(action_id, str)
+            buttons[action_id] = element
+    return buttons
 
 
 def _qa_done_body(
@@ -140,7 +153,7 @@ def _qa_note_view_state(note: str) -> dict[str, object]:
     }
 
 
-def test_apply_flag_appends_status_line_and_keeps_answer_and_buttons() -> None:
+def test_apply_flag_toggles_on_selected_button_and_keeps_answer_and_buttons() -> None:
     store = _RecordingFlagStore()
     original = _answer_blocks()
 
@@ -160,10 +173,15 @@ def test_apply_flag_appends_status_line_and_keeps_answer_and_buttons() -> None:
         prompts.FLAG_FORMATTING_ACTION_ID,
         prompts.FLAG_INVESTIGATE_ACTION_ID,
     }
-    assert _status_text(new_blocks) == "✓ Flagged: correctness"
+    correctness_button = _button_by_action_id(new_blocks)[
+        prompts.FLAG_CORRECTNESS_ACTION_ID
+    ]
+    assert correctness_button["text"] == {"type": "plain_text", "text": "✓ Incorrect"}
+    assert correctness_button["style"] == "danger"
+    assert all(block.get("block_id") != "flag_status" for block in new_blocks)
 
 
-def test_apply_flag_second_category_merges_in_vocabulary_order() -> None:
+def test_apply_flag_second_category_marks_both_buttons_in_vocabulary_order() -> None:
     store = _RecordingFlagStore()
     after_first = payloads.apply_flag(
         action_id=prompts.FLAG_FORMATTING_ACTION_ID,
@@ -172,7 +190,13 @@ def test_apply_flag_second_category_merges_in_vocabulary_order() -> None:
         flag_store=store,
     )
     assert after_first is not None
-    assert _status_text(after_first) == "✓ Flagged: formatting"
+    formatting_button = _button_by_action_id(after_first)[
+        prompts.FLAG_FORMATTING_ACTION_ID
+    ]
+    assert formatting_button["text"] == {
+        "type": "plain_text",
+        "text": "✓ Formatting",
+    }
 
     after_second = payloads.apply_flag(
         action_id=prompts.FLAG_CORRECTNESS_ACTION_ID,
@@ -182,74 +206,72 @@ def test_apply_flag_second_category_merges_in_vocabulary_order() -> None:
     )
 
     assert after_second is not None
-    # Merged, deduped, ordered by FLAG_VOCABULARY -- not stacked, not overwritten.
-    assert _status_text(after_second) == "✓ Flagged: correctness, formatting"
-    status_blocks = [
-        b for b in after_second if b.get("block_id") == blocks.FLAG_STATUS_BLOCK_ID
+    buttons = _button_by_action_id(after_second)
+    assert buttons[prompts.FLAG_CORRECTNESS_ACTION_ID]["text"] == {
+        "type": "plain_text",
+        "text": "✓ Incorrect",
+    }
+    assert buttons[prompts.FLAG_FORMATTING_ACTION_ID]["text"] == {
+        "type": "plain_text",
+        "text": "✓ Formatting",
+    }
+
+
+def test_apply_flag_toggles_off_selected_current_run_category() -> None:
+    selected = blocks.flag_action_blocks(
+        "abc123",
+        selected_categories=("correctness",),
+    )
+    original: list[contracts.SlackBlock] = [
+        {"type": "section", "text": {"type": "mrkdwn", "text": "the answer"}},
+        *selected,
     ]
-    assert len(status_blocks) == 1
-
-
-def test_apply_flag_investigate_flags_and_renders_status() -> None:
-    store = _RecordingFlagStore()
-    original = _answer_blocks()
 
     new_blocks = payloads.apply_flag(
-        action_id=prompts.FLAG_INVESTIGATE_ACTION_ID,
+        action_id=prompts.FLAG_CORRECTNESS_ACTION_ID,
+        interaction_id="abc123",
+        blocks=original,
+        flag_store=_RecordingFlagStore(
+            result=interaction_log.ToggleFlagResult.UNSELECTED
+        ),
+    )
+
+    assert new_blocks is not None
+    correctness_button = _button_by_action_id(new_blocks)[
+        prompts.FLAG_CORRECTNESS_ACTION_ID
+    ]
+    assert correctness_button["text"] == {
+        "type": "plain_text",
+        "text": "🚩 Incorrect",
+    }
+    assert "style" not in correctness_button
+
+
+def test_apply_flag_known_only_qa_selection_is_visual_noop() -> None:
+    original: list[contracts.SlackBlock] = [
+        {"type": "context", "elements": [{"type": "mrkdwn", "text": "QA Review"}]},
+        {"type": "section", "text": {"type": "mrkdwn", "text": "the answer"}},
+        *blocks.qa_action_blocks(
+            "abc123",
+            selected_categories=("correctness",),
+            locked_categories=("correctness",),
+        ),
+    ]
+    store = _RecordingFlagStore()
+
+    new_blocks = payloads.apply_flag(
+        action_id=prompts.FLAG_CORRECTNESS_ACTION_ID,
         interaction_id="abc123",
         blocks=original,
         flag_store=store,
     )
 
-    assert store.calls == [("abc123", "investigate")]
-    assert new_blocks is not None
-    assert _status_text(new_blocks) == "✓ Flagged: investigate"
-
-
-def test_apply_flag_correctness_plus_investigate_merges_in_vocab_order() -> None:
-    store = _RecordingFlagStore()
-    after_first = payloads.apply_flag(
-        action_id=prompts.FLAG_INVESTIGATE_ACTION_ID,
-        interaction_id="abc123",
-        blocks=_answer_blocks(),
-        flag_store=store,
-    )
-    assert after_first is not None
-
-    after_second = payloads.apply_flag(
-        action_id=prompts.FLAG_CORRECTNESS_ACTION_ID,
-        interaction_id="abc123",
-        blocks=after_first,
-        flag_store=store,
-    )
-
-    assert after_second is not None
-    # Ordered by FLAG_VOCABULARY: correctness precedes investigate.
-    assert _status_text(after_second) == "✓ Flagged: correctness, investigate"
-
-
-def test_apply_flag_duplicate_click_is_idempotent() -> None:
-    store = _RecordingFlagStore()
-    first = payloads.apply_flag(
-        action_id=prompts.FLAG_CORRECTNESS_ACTION_ID,
-        interaction_id="abc123",
-        blocks=_answer_blocks(),
-        flag_store=store,
-    )
-    assert first is not None
-    second = payloads.apply_flag(
-        action_id=prompts.FLAG_CORRECTNESS_ACTION_ID,
-        interaction_id="abc123",
-        blocks=first,
-        flag_store=store,
-    )
-
-    assert second is not None
-    assert _status_text(second) == "✓ Flagged: correctness"
+    assert store.calls == []
+    assert new_blocks == original
 
 
 def test_apply_flag_unknown_id_leaves_blocks_unchanged() -> None:
-    store = _RecordingFlagStore(result=False)
+    store = _RecordingFlagStore(result=interaction_log.ToggleFlagResult.NOT_FOUND)
     original = _answer_blocks()
 
     new_blocks = payloads.apply_flag(
@@ -262,7 +284,7 @@ def test_apply_flag_unknown_id_leaves_blocks_unchanged() -> None:
     # Store was consulted, but an unknown id adds no status line (benign no-op).
     assert store.calls == [("missing", "correctness")]
     assert new_blocks is not None
-    assert _status_text(new_blocks) is None
+    assert new_blocks == original
     assert _action_ids_in(new_blocks) == {
         prompts.FLAG_CORRECTNESS_ACTION_ID,
         prompts.FLAG_FORMATTING_ACTION_ID,

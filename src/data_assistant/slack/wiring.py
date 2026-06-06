@@ -38,7 +38,7 @@ from data_assistant.slack.prompts import (
     QA_ADD_NOTE_ACTION_ID,
     QA_DONE_ACTION_ID,
     QA_REVIEW_NOTE_CALLBACK_ID,
-    flag_interaction_for_triage,
+    toggle_interaction_flag_for_triage,
 )
 
 
@@ -115,19 +115,19 @@ def _register_message_actions(
     For each flag ``action_id`` we register a Bolt action listener that, over
     Socket Mode: ``ack()``s first, reads the embedded ``interaction_id`` from
     the button ``value`` and the clicked message's ``blocks`` from ``body``,
-    binds the ``flag_store`` seam to ``interaction_log.flag_interaction`` (with
-    the adapter's ``log_path``), then delegates to the pure ``apply_flag`` for
-    the re-rendered blocks. All behavior lives in ``apply_flag``; this shim is
-    the only live-API-shaped code here and is intentionally untested.
+    binds the ``flag_store`` seam to the log-backed toggle helper, then
+    delegates to the pure ``apply_flag`` for the re-rendered blocks. All
+    behavior lives in ``apply_flag``; this shim is the only live-API-shaped
+    code here and is intentionally untested.
 
     Bolt's ``respond`` is bound to the action's ``response_url``; calling
     ``respond(blocks=..., replace_original=True)`` RE-RENDERS the same Assistant
-    reply in place -- the answer + buttons stay and a "✓ Flagged" status line is
-    appended. ``replace_original=True`` is deliberate: the Assistant surface does
-    NOT show ``response_url`` ephemerals inline (they leak into the History pane
-    as unread items), so editing the message is the only non-spammy way to
-    confirm. Verified against the ``slack_bolt`` 1.28.0 ``Respond.__call__``
-    signature (``blocks`` / ``replace_original`` keywords).
+    reply in place so the answer + buttons stay while button state updates.
+    ``replace_original=True`` is deliberate: the Assistant surface does NOT show
+    ``response_url`` ephemerals inline (they leak into the History pane as
+    unread items), so editing the message is the only non-spammy way to confirm.
+    Verified against the ``slack_bolt`` 1.28.0 ``Respond.__call__`` signature
+    (``blocks`` / ``replace_original`` keywords).
     """
 
     def _flag_action(
@@ -138,8 +138,11 @@ def _register_message_actions(
         ack()
         action_id, interaction_id = action_target(body)
 
-        def flag_store(target_id: str, category: str) -> bool:
-            return flag_interaction_for_triage(
+        def flag_store(
+            target_id: str,
+            category: str,
+        ) -> interaction_log.ToggleFlagResult:
+            return toggle_interaction_flag_for_triage(
                 interaction_id=target_id,
                 category=category,
                 log_path=adapter.log_path,
@@ -153,8 +156,8 @@ def _register_message_actions(
         )
         if new_blocks is None:
             return
-        # replace_original=True RE-RENDERS the same Assistant reply in place: the
-        # answer + buttons stay and a "✓ Flagged" status line is appended. The
+        # replace_original=True RE-RENDERS the same Assistant reply in place so
+        # the answer + buttons stay while the selected button state updates. The
         # Assistant surface does not show response_url ephemerals inline (they
         # leak into the History pane as unread items), so editing the message is
         # the only way to confirm without spamming a separate notification.

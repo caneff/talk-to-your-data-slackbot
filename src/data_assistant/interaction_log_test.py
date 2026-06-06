@@ -374,6 +374,55 @@ def test_flag_interaction_unknown_category_raises_value_error(
         interaction_log.flag_interaction("abc123", "nonsense", path=log_path)
 
 
+def test_toggle_flag_interaction_selects_missing_category(
+    tmp_path: pathlib.Path,
+) -> None:
+    log_path = _seed_log(tmp_path, _record(id="abc123", flags=[]))
+
+    result = interaction_log.toggle_flag_interaction(
+        "abc123",
+        "correctness",
+        path=log_path,
+    )
+
+    assert result is interaction_log.ToggleFlagResult.SELECTED
+    assert _read_json_records(log_path)[0]["flags"] == ["correctness"]
+
+
+def test_toggle_flag_interaction_unselects_existing_category(
+    tmp_path: pathlib.Path,
+) -> None:
+    log_path = _seed_log(
+        tmp_path,
+        _record(id="abc123", flags=["correctness", "formatting"]),
+    )
+
+    result = interaction_log.toggle_flag_interaction(
+        "abc123",
+        "correctness",
+        path=log_path,
+    )
+
+    assert result is interaction_log.ToggleFlagResult.UNSELECTED
+    assert _read_json_records(log_path)[0]["flags"] == ["formatting"]
+
+
+def test_toggle_flag_interaction_unknown_id_is_noop(
+    tmp_path: pathlib.Path,
+) -> None:
+    log_path = _seed_log(tmp_path, _record(id="abc123", flags=[]))
+    before = log_path.read_text(encoding="utf-8")
+
+    result = interaction_log.toggle_flag_interaction(
+        "missing",
+        "correctness",
+        path=log_path,
+    )
+
+    assert result is interaction_log.ToggleFlagResult.NOT_FOUND
+    assert log_path.read_text(encoding="utf-8") == before
+
+
 # --- clear_flags (triage clear-handled, skill follow-up) --------------------
 
 
