@@ -460,9 +460,7 @@ def test_response_composer_renders_non_answer_as_section_and_context_blocks() ->
         "elements": [
             {
                 "type": "plain_text",
-                "text": response_composer.render_trust_summary(
-                    response.trust_summary
-                ),
+                "text": response_composer.render_trust_summary(response.trust_summary),
             },
         ],
     }
@@ -569,7 +567,9 @@ def test_response_composer_renders_non_answer_copy_into_text() -> None:
     """
     non_answer = _non_answer(contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT)
     wording = non_answer_catalog.render_wording(non_answer)
-    lowercased_reason = wording.reason[0].lower() + wording.reason[1:]
+    # The catalog reason begins with the pronoun ``I`` (``I can't …``), which
+    # the leading-word lowercasing rule preserves verbatim (issue #276).
+    assert wording.reason.startswith("I ") or wording.reason.startswith("I'")
 
     response = response_composer.compose_non_answer_response(
         non_answer,
@@ -577,7 +577,7 @@ def test_response_composer_renders_non_answer_copy_into_text() -> None:
     )
 
     assert response.response_kind == contracts.ResponseKind.UNSUPPORTED
-    assert f"I cannot answer safely because {lowercased_reason}" in response.text
+    assert f"I cannot answer safely because {wording.reason}" in response.text
     assert f"Next step: {wording.next_step}" in response.text
     assert response.trust_summary == contracts.TrustSummary(
         limitations=(wording.reason,),

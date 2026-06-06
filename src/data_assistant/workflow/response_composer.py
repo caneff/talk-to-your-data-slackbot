@@ -107,7 +107,7 @@ def compose_non_answer_response(
     adverb = (
         " yet" if response_kind == contracts.ResponseKind.CLARIFICATION_NEEDED else ""
     )
-    reason = wording.reason[0].lower() + wording.reason[1:]
+    reason = _lowercase_leading_word(wording.reason)
     trust_summary = contracts.TrustSummary(
         datasets=non_answer.datasets,
         limitations=(wording.reason,),
@@ -217,6 +217,19 @@ def compose_catalog_discovery_response(
             },
         ),
     )
+
+
+def _lowercase_leading_word(reason: str) -> str:
+    """Lowercase the reason's first char for inline use after ``because``.
+
+    Skips the lowercasing when the first word is the standalone pronoun ``I``
+    so the body reads ``because I need …`` (not ``because i need …``). The
+    carve-out applies only to the bare pronoun (``I``, ``I'd``, ``I'm``), not
+    real leading words like ``Inventory`` (issue #276).
+    """
+    if reason[:1] == "I" and (len(reason) == 1 or reason[1] in (" ", "'")):
+        return reason
+    return reason[:1].lower() + reason[1:]
 
 
 def render_trust_summary(trust_summary: contracts.TrustSummary) -> str:
