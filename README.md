@@ -30,9 +30,10 @@ between. The decisions most worth calling out:
 
 - **It returns a Non-Answer instead of guessing.** A question with no time period
   is treated as a `Material Ambiguity` — the bot asks you to narrow it rather than
-  silently defaulting to all-time. v1 supports only the summarize intent; an
-  `Unsupported Intent Guard` cleanly rejects rank/compare/trend questions instead
-  of collapsing them into a grouped answer.
+  silently defaulting to all-time. v1 supports the summarize, rank, and
+  catalog-discovery intents; an `Unsupported Intent Guard` cleanly rejects
+  compare, trend, forecast, and explain questions instead of collapsing them
+  into a grouped answer.
 
 - **Meaning lives in versioned YAML, not a prompt.** The `Semantic Layer`
   (`examples/retail_ops_demo/semantic_layer/`) is the checked-in source of what the bot knows — datasets,
