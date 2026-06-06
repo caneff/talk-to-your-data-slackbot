@@ -16,6 +16,7 @@ def prepare_data(
     metric_source_column = data_request.metric.source_column
     group_by_field = data_request.group_by_field
     calendar_grouping = data_request.calendar_grouping
+    limit_sql = _limit_sql(data_request.result_limit)
     filter_sql, filter_parameters = _filter_sql(data_request.field_filters)
     filtered_rows_cte = f"""
         filtered_rows as (
@@ -60,7 +61,7 @@ def prepare_data(
             {data_request.metric.expression} as metric_value
         from metric_rows
         {group_and_order}
-        limit $result_limit
+        {limit_sql}
     """
     if group_by_field is None and calendar_grouping is None:
         missing_dimension_expression = "0"
@@ -87,10 +88,10 @@ def prepare_data(
 
     prepared_dataframe = connection.execute(
         metric_query,
-        {
-            **filter_parameters,
-            "result_limit": data_request.result_limit,
-        },
+        _metric_query_parameters(
+            filter_parameters=filter_parameters,
+            result_limit=data_request.result_limit,
+        ),
     ).df()
     quality_counts = connection.execute(quality_query, filter_parameters).fetchone()
     assert quality_counts is not None
@@ -166,6 +167,19 @@ def _filter_sql(
     return f"where {' and '.join(clauses)}", parameters
 
 
+def _metric_query_parameters(
+    *,
+    filter_parameters: dict[str, contracts.FieldValue],
+    result_limit: int | None,
+) -> dict[str, contracts.FieldValue | int]:
+    if result_limit is None:
+        return dict(filter_parameters)
+    return {
+        **filter_parameters,
+        "result_limit": result_limit,
+    }
+
+
 def _quality_notes(
     *,
     filtered_row_count: int,
@@ -194,6 +208,12 @@ def _row_word(count: int) -> str:
     if count == 1:
         return "row"
     return "rows"
+
+
+def _limit_sql(result_limit: int | None) -> str:
+    if result_limit is None:
+        return ""
+    return "limit $result_limit"
 
 
 def _grouped_dimension_sql(

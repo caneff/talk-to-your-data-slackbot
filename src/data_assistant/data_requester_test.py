@@ -1,3 +1,6 @@
+import dataclasses
+
+import data_assistant.data_requester as data_requester
 import data_assistant.workflow.contracts as contracts
 
 
@@ -50,3 +53,39 @@ def test_data_request_carries_calendar_grouping_separately_from_group_by_field(
     assert calendar_request.calendar_grouping is not None
     assert calendar_request.calendar_grouping.field.field_id == "order_date"
     assert calendar_request.output_shape == "total revenue grouped by order date month"
+
+
+def test_data_request_uses_no_default_limit_for_calendar_grouping(
+    question_frame: contracts.QuestionFrame,
+    available_data_resolution: contracts.AvailableDataResolution,
+) -> None:
+    order_date_field = question_frame.field_filters[0].field
+    calendar_question_frame = dataclasses.replace(
+        question_frame,
+        group_by_field=None,
+        calendar_grouping=contracts.CalendarGrouping(
+            field=order_date_field,
+            grain=contracts.CalendarGrain.MONTH,
+        ),
+    )
+    assert available_data_resolution.resolved_match.group_by_field is not None
+    calendar_match = dataclasses.replace(
+        available_data_resolution.resolved_match,
+        group_by_field=None,
+        calendar_grouping=contracts.CalendarGrouping(
+            field=available_data_resolution.resolved_match.field_filters[0].field,
+            grain=contracts.CalendarGrain.MONTH,
+        ),
+    )
+    calendar_resolution = dataclasses.replace(
+        available_data_resolution,
+        resolved_match=calendar_match,
+    )
+
+    calendar_request = data_requester.create_data_request(
+        calendar_question_frame,
+        calendar_resolution,
+    )
+
+    assert calendar_request.calendar_grouping is not None
+    assert calendar_request.result_limit is None

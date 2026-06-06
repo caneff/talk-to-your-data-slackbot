@@ -20,9 +20,7 @@ def create_data_request(
         calendar_grouping=resolved_match.calendar_grouping,
         field_filters=resolved_match.field_filters,
         output_shape=_output_shape(resolved_match),
-        result_limit=(
-            contracts.DEFAULT_RESULT_LIMIT if rank is None else rank.result_limit
-        ),
+        result_limit=_result_limit(rank=rank, resolved_match=resolved_match),
         rank=rank,
     )
 
@@ -37,3 +35,15 @@ def _output_shape(match: contracts.SemanticMatch) -> str:
     if match.group_by_field is None:
         return match.metric.label
     return f"{match.metric.label} grouped by {match.group_by_field.label}"
+
+
+def _result_limit(
+    *,
+    rank: contracts.RankSpec | None,
+    resolved_match: contracts.SemanticMatch,
+) -> int | None:
+    if resolved_match.calendar_grouping is not None:
+        return None
+    if rank is not None:
+        return rank.result_limit
+    return contracts.DEFAULT_RESULT_LIMIT

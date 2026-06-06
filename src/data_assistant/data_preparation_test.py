@@ -448,6 +448,40 @@ def test_prepared_data_groups_calendar_months_chronologically(
     pd_testing.assert_frame_equal(prepared_data.data, expected_data)
 
 
+def test_prepared_data_calendar_grouping_does_not_truncate_twelve_months(
+    data_request: contracts.DataRequest,
+    connect_orders: local_duckdb_fixture.OrdersConnector,
+) -> None:
+    order_date_field = data_request.field_filters[0].field
+    data_request = dataclasses.replace(
+        data_request,
+        group_by_field=None,
+        result_limit=None,
+        calendar_grouping=contracts.CalendarGrouping(
+            field=order_date_field,
+            grain=contracts.CalendarGrain.MONTH,
+        ),
+        field_filters=(
+            contracts.RangeFilter(
+                field=order_date_field,
+                lower=datetime.date(2026, 1, 1),
+                upper=datetime.date(2026, 12, 31),
+            ),
+        ),
+    )
+    order_rows = tuple(
+        (f"2026-{month:02d}-15", "North", f"{month * 100:.2f}")
+        for month in range(1, 13)
+    )
+    with connect_orders(order_rows) as connection:
+        prepared_data = data_preparation.prepare_data(data_request, connection)
+
+    assert len(prepared_data.data) == 12
+    assert tuple(prepared_data.data["dimension_value"]) == tuple(
+        f"2026-{month:02d}" for month in range(1, 13)
+    )
+
+
 def test_prepared_data_supports_scalar_all_time_aggregate_without_filters(
     data_request: contracts.DataRequest,
     connect_orders: local_duckdb_fixture.OrdersConnector,

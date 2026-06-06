@@ -361,6 +361,48 @@ def test_data_assistant_runs_month_calendar_grouping_end_to_end(
     assert "Time range: 2026." in run.final_response.text
 
 
+def test_data_assistant_month_calendar_grouping_preserves_twelve_months(
+    allowed_internal_identity: contracts.InternalIdentity,
+) -> None:
+    provider = _static_provider(
+        question_interpreter.ProviderProposal(
+            intent="summarize",
+            metric="total revenue",
+            calendar_grouping=question_interpreter.ProviderCalendarGrouping(
+                field="order date",
+                grain="month",
+            ),
+            field_operations=(
+                question_interpreter.ProviderFieldOperation(
+                    operation="range_filter",
+                    field="order date",
+                    lower="2026-01-01",
+                    upper="2026-12-31",
+                ),
+            ),
+        )
+    )
+    order_rows = tuple(
+        (f"2026-{month:02d}-15", "North", f"{month * 100:.2f}")
+        for month in range(1, 13)
+    )
+
+    with local_duckdb_fixture.connect_orders(order_rows) as connection:
+        run = workflow_runner.run_data_assistant(
+            connection,
+            "What was monthly revenue in 2026?",
+            question_interpreter_provider=provider,
+            internal_identity=allowed_internal_identity,
+        )
+
+    assert isinstance(run, contracts.DataAssistantRun)
+    assert run.data_request.result_limit is None
+    assert len(run.prepared_data.data) == 12
+    assert tuple(run.prepared_data.data["dimension_value"]) == tuple(
+        f"2026-{month:02d}" for month in range(1, 13)
+    )
+
+
 def test_data_assistant_runs_all_time_grouped_revenue_end_to_end(
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:

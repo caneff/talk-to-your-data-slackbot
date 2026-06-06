@@ -209,7 +209,7 @@ class DataRequest:
     group_by_field: schema.SemanticField | None
     field_filters: tuple[FieldFilter[schema.SemanticField], ...]
     output_shape: str
-    result_limit: int
+    result_limit: int | None
     calendar_grouping: CalendarGrouping[schema.SemanticField] | None = None
     rank: RankSpec | None = None
 
