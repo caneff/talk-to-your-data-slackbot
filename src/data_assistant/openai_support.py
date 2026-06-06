@@ -30,6 +30,16 @@ DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 DEFAULT_OPENAI_TIMEOUT_SECONDS = 15.0
 DEFAULT_OPENAI_MAX_RETRIES = 1
 
+_EXCEPTION_TYPE_DIAGNOSTIC_CLASSES = {
+    "AuthenticationError": "provider_authentication_error",
+    "PermissionDeniedError": "provider_permission_denied",
+    "RateLimitError": "provider_rate_limit",
+    "BadRequestError": "provider_bad_request",
+    "APIConnectionError": "provider_connection_error",
+    "APIStatusError": "provider_api_status_error",
+    "APIError": "provider_api_error",
+}
+
 OpenAIInputMessage: typing.TypeAlias = dict[str, str]
 
 ProposalT = typing.TypeVar("ProposalT")
@@ -214,7 +224,7 @@ def _run_parse_once(
         return _ParseFailure(
             reason=str(error) or "OpenAI provider failed",
             retryable=True,
-            diagnostic_class="provider_exception",
+            diagnostic_class=_classify_exception_diagnostic_class(error),
         )
 
     refusal = extract_response_refusal(response)
@@ -247,6 +257,13 @@ def _build_failure(
     if failure_with_diagnostic_factory is None:
         return failure_factory(reason)
     return failure_with_diagnostic_factory(reason, diagnostic_class)
+
+
+def _classify_exception_diagnostic_class(error: Exception) -> str:
+    return _EXCEPTION_TYPE_DIAGNOSTIC_CLASSES.get(
+        type(error).__name__,
+        "provider_exception",
+    )
 
 
 def extract_response_refusal(response: object) -> str | None:

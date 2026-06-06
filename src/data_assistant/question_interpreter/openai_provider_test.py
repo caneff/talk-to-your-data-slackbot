@@ -599,6 +599,36 @@ def test_openai_provider_maps_parse_exception_to_provider_failure_diagnostic() -
     assert len(parse_calls) == 2
 
 
+def test_openai_provider_maps_authentication_error_to_specific_failure_diagnostic() -> (
+    None
+):
+    parse_calls: list[dict[str, object]] = []
+
+    class AuthenticationError(Exception):
+        pass
+
+    provider = _openai_provider_returning_results(
+        (
+            AuthenticationError("boom"),
+            AuthenticationError("boom"),
+        ),
+        parse_calls=parse_calls,
+    )
+
+    result = provider.propose_question_frame(
+        question=test_support.CANONICAL_DATA_QUESTION,
+        semantic_layer_context={"datasets": []},
+    )
+
+    assert result == question_interpreter.ProviderFailure(
+        reason="OpenAI provider failed after 2 structured output attempts: boom",
+        diagnostic_class=(
+            question_interpreter.ProviderFailureDiagnosticClass.PROVIDER_AUTHENTICATION_ERROR
+        ),
+    )
+    assert len(parse_calls) == 2
+
+
 def test_openai_provider_maps_mixed_retryable_failures_to_retry_exhausted() -> None:
     parse_calls: list[dict[str, object]] = []
 

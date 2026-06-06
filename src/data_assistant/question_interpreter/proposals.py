@@ -190,6 +190,13 @@ class ProviderProposal(pydantic.BaseModel):
 class ProviderFailureDiagnosticClass(enum.StrEnum):
     """Safe maintainer-facing classes for provider failure diagnosis."""
 
+    PROVIDER_AUTHENTICATION_ERROR = "provider_authentication_error"
+    PROVIDER_PERMISSION_DENIED = "provider_permission_denied"
+    PROVIDER_RATE_LIMIT = "provider_rate_limit"
+    PROVIDER_BAD_REQUEST = "provider_bad_request"
+    PROVIDER_CONNECTION_ERROR = "provider_connection_error"
+    PROVIDER_API_STATUS_ERROR = "provider_api_status_error"
+    PROVIDER_API_ERROR = "provider_api_error"
     PROVIDER_EXCEPTION = "provider_exception"
     PROVIDER_REFUSAL = "provider_refusal"
     MISSING_PARSED_OUTPUT = "missing_parsed_output"

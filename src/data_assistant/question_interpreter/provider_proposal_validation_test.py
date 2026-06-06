@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime
 
 import data_assistant.question_interpreter as question_interpreter
+import data_assistant.question_interpreter.testing_support as interpreter_test_support
 import data_assistant.semantic_layer.catalog as semantic_layer_catalog
 import data_assistant.semantic_layer.schema as schema
 import data_assistant.semantic_layer.testing_support as semantic_layer_testing
@@ -92,6 +93,24 @@ def test_provider_exception_returns_provider_failure_non_answer() -> None:
 
     assert isinstance(result, contracts.NonAnswer)
     assert result.reason_code == contracts.NonAnswerReasonCode.PROVIDER_FAILURE
+
+
+def test_provider_failure_preserves_specific_safe_diagnostic_context() -> None:
+    result = question_interpreter.interpret_question(
+        question="What data do I have?",
+        semantic_layer=_retail_style_semantic_layer(),
+        provider=interpreter_test_support.provider_failure_provider(
+            diagnostic_class=(
+                question_interpreter.ProviderFailureDiagnosticClass.PROVIDER_AUTHENTICATION_ERROR
+            ),
+        ),
+    )
+
+    assert result == contracts.NonAnswer(
+        stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        reason_code=contracts.NonAnswerReasonCode.PROVIDER_FAILURE,
+        context=("provider_authentication_error",),
+    )
 
 
 def test_exact_net_revenue_label_validates_to_question_frame() -> None:
