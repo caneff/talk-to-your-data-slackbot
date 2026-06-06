@@ -107,21 +107,26 @@ def compose_non_answer_response(
     adverb = (
         " yet" if response_kind == contracts.ResponseKind.CLARIFICATION_NEEDED else ""
     )
-    reason = wording.reason[0].lower() + wording.reason[1:]
+    reason = _lowercase_leading_word(wording.reason)
     trust_summary = contracts.TrustSummary(
         datasets=non_answer.datasets,
         limitations=(wording.reason,),
     )
-    text = (
+    rendered_trust_summary = render_trust_summary(trust_summary)
+    body = (
         f"I cannot answer safely{adverb} because {reason}\n\n"
-        f"Next step: {wording.next_step}\n\n"
-        f"{render_trust_summary(trust_summary)}"
+        f"Next step: {wording.next_step}"
     )
+    text = f"{body}\n\n{rendered_trust_summary}"
     return contracts.FinalResponse(
         text=text,
         trust_summary=trust_summary,
         response_kind=response_kind,
         non_answer=non_answer,
+        blocks=_render_body_with_trust_blocks(
+            body=body,
+            trust_summary=rendered_trust_summary,
+        ),
     )
 
 
@@ -214,6 +219,19 @@ def compose_catalog_discovery_response(
     )
 
 
+def _lowercase_leading_word(reason: str) -> str:
+    """Lowercase the reason's first char for inline use after ``because``.
+
+    Skips the lowercasing when the first word is the standalone pronoun ``I``
+    so the body reads ``because I need …`` (not ``because i need …``). The
+    carve-out applies only to the bare pronoun (``I``, ``I'd``, ``I'm``), not
+    real leading words like ``Inventory`` (issue #276).
+    """
+    if reason[:1] == "I" and (len(reason) == 1 or reason[1] in (" ", "'")):
+        return reason
+    return reason[:1].lower() + reason[1:]
+
+
 def render_trust_summary(trust_summary: contracts.TrustSummary) -> str:
     """Render structured trust summary data for Slack-facing plain text."""
     segments: list[str] = []
@@ -239,11 +257,27 @@ def _render_answer_blocks(
     table_blocks: tuple[contracts.SlackBlock, ...],
 ) -> tuple[contracts.SlackBlock, ...]:
     return (
+        *_render_body_with_trust_blocks(body=summary, trust_summary=trust_summary),
+        *table_blocks,
+    )
+
+
+def _render_body_with_trust_blocks(
+    *,
+    body: str,
+    trust_summary: str,
+) -> tuple[contracts.SlackBlock, ...]:
+    """Render a body ``section`` plus the Trust Summary ``context`` footer.
+
+    Shared by the answer and Non-Answer paths so both present the Trust Summary
+    in the same small grey ``context`` block (issue #276).
+    """
+    return (
         {
             "type": "section",
             "text": {
                 "type": "plain_text",
-                "text": summary,
+                "text": body,
             },
         },
         {
@@ -255,7 +289,6 @@ def _render_answer_blocks(
                 },
             ],
         },
-        *table_blocks,
     )
 
 
