@@ -73,9 +73,10 @@ the Question Interpreter provider before falling through to the existing typed
 Non-Answer path. Live provider failures and refusals also use that Non-Answer
 path; the runtime does not fall back to a deterministic interpreter.
 
-For local development, the runtime uses a tiny in-memory DuckDB `orders` table.
-It is only there to support a [manual Slack acceptance
-check](evaluation.md#manual-slack-acceptance-check). No DuckDB database file
+With no data flags, the runtime loads the Retail Operations Semantic Layer
+(`examples/retail_ops_demo/semantic_layer`) and seeds the retail demo data into
+an in-memory DuckDB — the same default the [manual Slack acceptance
+check](evaluation.md#manual-slack-acceptance-check) uses. No DuckDB database file
 is committed.
 
 To run the same Slack bot against a different Semantic Layer and DuckDB
@@ -117,12 +118,6 @@ standalone Semantic Layer and deterministic DuckDB seed under
 `slack-app-manifest.yaml` is still required. Socket Mode opens an outbound
 connection to Slack and binds no inbound port, so no `-p` flag is needed for
 local Docker runs.
-
-Override the command only if you want the tiny local acceptance-check fixture instead:
-
-```bash
-docker run --env-file .env talk-to-your-data-slackbot:local python -m data_assistant.slack.runtime_main
-```
 
 ## Host on Render (time-boxed demo)
 
