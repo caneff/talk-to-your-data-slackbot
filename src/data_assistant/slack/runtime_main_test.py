@@ -543,6 +543,43 @@ def test_run_socket_mode_skips_status_when_status_user_unset() -> None:
     assert handler.starts == 1
 
 
+def test_run_socket_mode_starts_assistant_when_online_post_fails() -> None:
+    """A failing startup online-post must not block the assistant from starting.
+
+    Lifecycle status is an opt-in cosmetic feature: a transient Slack failure
+    during the startup online-post must be best-effort, exactly like shutdown.
+    The injected ``post_online`` raises, but ``handler.start()`` must still run
+    and no exception may propagate out of startup.
+    """
+    app = object()
+    runtime_factories = RecordingRuntimeFactories(app=app)
+
+    offline_calls: list[int] = []
+
+    def failing_post_online(*, user_id: str) -> None:
+        del user_id
+        raise RuntimeError("transient Slack failure during online post")
+
+    def fake_mark_offline() -> None:
+        offline_calls.append(1)
+
+    handler = typing.cast(
+        FakeSocketModeHandler,
+        slack_runtime.run_socket_mode_from_env(
+            VALID_SLACK_ENV | {"SLACK_STATUS_DM_USER_ID": "U-OPERATOR"},
+            app_factory=runtime_factories.app_factory,
+            socket_mode_handler_factory=(runtime_factories.socket_mode_handler_factory),
+            post_online=failing_post_online,
+            mark_offline=fake_mark_offline,
+        ),
+    )
+
+    # The assistant started despite the failed online post, and the normal
+    # (non-raising) handler still reaches the best-effort offline path.
+    assert handler.starts == 1
+    assert offline_calls == [1]
+
+
 def test_main_threads_explicit_interaction_log_path(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: pathlib.Path,

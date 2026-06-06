@@ -163,7 +163,13 @@ def run_socket_mode_from_env(
         post_online=post_online,
         mark_offline=mark_offline,
     )
-    active_post_online(user_id=status_user_id)
+    # Best-effort: the opt-in online post must never block the assistant from
+    # starting, mirroring the offline guard in the finally below. lifecycle_status
+    # .post_online stays honest (it raises); we guard here at the wiring layer.
+    try:
+        active_post_online(user_id=status_user_id)
+    except Exception:  # noqa: BLE001 -- startup status report is best-effort.
+        logger.exception("Failed to post online lifecycle status")
     with _graceful_sigterm_unwinds_like_sigint():
         try:
             handler.start()
