@@ -28,6 +28,24 @@ def _stub_failure(reason: str) -> _StubFailure:
     return _StubFailure(reason=reason)
 
 
+@dataclasses.dataclass(frozen=True)
+class _StubFailureWithDiagnostic:
+    """Stub component-specific provider failure with safe diagnostic class."""
+
+    reason: str
+    diagnostic_class: str
+
+
+def _stub_failure_with_diagnostic(
+    reason: str,
+    diagnostic_class: str,
+) -> _StubFailureWithDiagnostic:
+    return _StubFailureWithDiagnostic(
+        reason=reason,
+        diagnostic_class=diagnostic_class,
+    )
+
+
 def test_require_api_key_raises_passed_error_class_with_exact_message() -> None:
     with pytest.raises(_StubConfigError) as error_info:
         openai_support.require_api_key({}, _StubConfigError)
@@ -264,6 +282,53 @@ def test_run_parse_maps_exception_to_failure_via_factory() -> None:
     )
 
     assert result == _StubFailure(reason="boom")
+
+
+@pytest.mark.parametrize(
+    ("exception_type_name", "expected_diagnostic_class"),
+    (
+        ("AuthenticationError", "provider_authentication_error"),
+        ("PermissionDeniedError", "provider_permission_denied"),
+        ("RateLimitError", "provider_rate_limit"),
+        ("BadRequestError", "provider_bad_request"),
+        ("APIConnectionError", "provider_connection_error"),
+        ("APIStatusError", "provider_api_status_error"),
+        ("APIError", "provider_api_error"),
+        ("RuntimeError", "provider_exception"),
+    ),
+)
+def test_run_parse_classifies_exception_type_to_safe_diagnostic_class(
+    exception_type_name: str,
+    expected_diagnostic_class: str,
+) -> None:
+    exception_type = type(exception_type_name, (Exception,), {})
+
+    class FailingResponsesClient:
+        def parse(self, **kwargs: object) -> object:
+            del kwargs
+            raise exception_type("boom")
+
+    class FakeOpenAIClient:
+        responses = FailingResponsesClient()
+
+    client = typing.cast(
+        openai_support.OpenAIClient,
+        FakeOpenAIClient(),
+    )
+
+    result = openai_support.run_parse(
+        client=client,
+        model="gpt-test-mini",
+        input_messages=[{"role": "user", "content": "{}"}],
+        text_format=_StubProposal,
+        failure_factory=_stub_failure,
+        failure_with_diagnostic_factory=_stub_failure_with_diagnostic,
+    )
+
+    assert result == _StubFailureWithDiagnostic(
+        reason="boom",
+        diagnostic_class=expected_diagnostic_class,
+    )
 
 
 def test_developer_message_reads_prompt_file() -> None:
