@@ -93,3 +93,40 @@ def test_flag_interaction_for_triage_unknown_id_logs_nothing(
         message.startswith(prompts.FLAGGED_INTERACTION_LOG_PREFIX)
         for message in caplog.messages
     )
+
+
+def test_toggle_interaction_flag_for_triage_logs_unflagged_record(
+    caplog: pytest.LogCaptureFixture,
+    tmp_path: pathlib.Path,
+) -> None:
+    log_path = tmp_path / "interactions.jsonl"
+    record: dict[str, object] = {
+        "id": "abc123",
+        "timestamp": "2026-06-01T12:00:00+00:00",
+        "user": "U123",
+        "question": "What was revenue by region?",
+        "latency_ms": 42,
+        "outcome": "answer",
+        "response_text": "answer",
+        "model": "gpt-4o-mini",
+        "flags": ["correctness"],
+    }
+    interaction_log.append_interaction(record, path=log_path)
+
+    with caplog.at_level(logging.WARNING, logger=prompts.logger.name):
+        result = prompts.toggle_interaction_flag_for_triage(
+            interaction_id="abc123",
+            category="correctness",
+            log_path=log_path,
+        )
+
+    assert result is interaction_log.ToggleFlagResult.UNSELECTED
+    messages = [
+        message
+        for message in caplog.messages
+        if message.startswith(prompts.FLAGGED_INTERACTION_LOG_PREFIX)
+    ]
+    assert len(messages) == 1
+    payload = messages[0][len(prompts.FLAGGED_INTERACTION_LOG_PREFIX) :]
+    mirrored_record = json.loads(payload)
+    assert mirrored_record == {**record, "flags": []}

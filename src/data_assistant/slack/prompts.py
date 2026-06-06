@@ -95,6 +95,26 @@ def flag_interaction_for_triage(
     return changed
 
 
+def toggle_interaction_flag_for_triage(
+    *,
+    interaction_id: str,
+    category: str,
+    log_path: pathlib.Path,
+) -> interaction_log.ToggleFlagResult:
+    """Toggle one record flag and mirror the updated payload into app logs."""
+    result = interaction_log.toggle_flag_interaction(
+        interaction_id,
+        category,
+        path=log_path,
+    )
+    if result is not interaction_log.ToggleFlagResult.NOT_FOUND:
+        _log_flagged_interaction_for_triage(
+            interaction_id=interaction_id,
+            log_path=log_path,
+        )
+    return result
+
+
 def _log_flagged_interaction_for_triage(
     *,
     interaction_id: str,

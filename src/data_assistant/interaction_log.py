@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import enum
 import json
 import os
 import pathlib
@@ -43,6 +44,12 @@ FLAG_VOCABULARY: typing.Final[tuple[str, ...]] = (
 )
 
 InteractionRecord: typing.TypeAlias = typing.Mapping[str, object]
+
+
+class ToggleFlagResult(enum.Enum):
+    SELECTED = "selected"
+    UNSELECTED = "unselected"
+    NOT_FOUND = "not_found"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -186,6 +193,44 @@ def clear_flags(
         _empty_flags,
         retention_policy=retention_policy,
     )
+
+
+def toggle_flag_interaction(
+    interaction_id: str,
+    category: str,
+    *,
+    path: pathlib.Path = DEFAULT_LOG_PATH,
+    retention_policy: RetentionPolicy = DEFAULT_RETENTION_POLICY,
+) -> ToggleFlagResult:
+    """Toggle one category on one record and report resulting selected state."""
+    if category not in FLAG_VOCABULARY:
+        raise ValueError(
+            f"Unknown flag category {category!r}; expected one of {FLAG_VOCABULARY}."
+        )
+
+    result = ToggleFlagResult.NOT_FOUND
+
+    def _toggle(record: dict[str, object]) -> bool:
+        nonlocal result
+        flags = _record_flags(record)
+        if category in flags:
+            record["flags"] = [flag for flag in flags if flag != category]
+            result = ToggleFlagResult.UNSELECTED
+        else:
+            flags.append(category)
+            record["flags"] = flags
+            result = ToggleFlagResult.SELECTED
+        return True
+
+    changed = _rewrite_matching_record(
+        path,
+        interaction_id,
+        _toggle,
+        retention_policy=retention_policy,
+    )
+    if not changed:
+        return ToggleFlagResult.NOT_FOUND
+    return result
 
 
 def save_qa_review_note(

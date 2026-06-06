@@ -2,7 +2,7 @@
 
 Everything here BUILDS Slack blocks; nothing here READS an inbound Slack
 payload (that lives in ``payloads``). Dependency flows one way: ``payloads``
-imports from ``blocks`` (it consumes :func:`flag_status_block`); ``blocks``
+imports from ``blocks`` (it consumes the flag-button block constructors); ``blocks``
 must never import ``payloads`` -- that would create a cycle.
 
 # response_composer is core pipeline, NOT edge chrome: it stays out of slack/
@@ -12,6 +12,7 @@ must never import ``payloads`` -- that would create a cycle.
 from __future__ import annotations
 
 import collections.abc as collections_abc
+import json
 import typing
 
 import data_assistant.workflow.contracts as contracts
@@ -27,52 +28,91 @@ from data_assistant.slack.prompts import (
     QA_DONE_ACTION_ID,
 )
 
-# block_id of the context block that shows which categories a reply has been
-# flagged with. We RE-RENDER the Assistant reply in place on each click (Slack's
-# Assistant surface does not show ``response_url`` ephemerals inline -- they leak
-# into the History pane as unread items), so the confirmation lives as a status
-# line appended to the same message. A stable block_id lets a second click find
-# and replace the prior status block instead of stacking duplicates.
-FLAG_STATUS_BLOCK_ID: typing.Final[str] = "flag_status"
-FLAG_STATUS_PREFIX: typing.Final[str] = "✓ Flagged: "
-
 # Every reply leads with a small grey echo of the question so a reader can pair a
 # response back to what was asked. We cap the echoed text to keep the context
 # line short; the FULL question still lands in the Interaction Log ``question``
 # field, so truncation here is purely cosmetic.
 QUESTION_ECHO_MAX_CHARS: typing.Final[int] = 200
 _QUESTION_ECHO_PREFIX: typing.Final[str] = "❓ "
+_FLAG_ACTIONS_BLOCK_PREFIX: typing.Final[str] = "flag_actions"
+_QA_ACTIONS_BLOCK_PREFIX: typing.Final[str] = "qa_actions"
 _QA_FLAG_CATEGORY_EMOJI: typing.Final[dict[str, str]] = {
     "correctness": "🚩",
     "formatting": "🎨",
     "investigate": "🔎",
 }
+_FLAG_BUTTON_SPECS: typing.Final[tuple[tuple[str, str, str, str, str], ...]] = (
+    ("correctness", FLAG_CORRECTNESS_ACTION_ID, "🚩 Incorrect", "Incorrect", "danger"),
+    ("formatting", FLAG_FORMATTING_ACTION_ID, "🎨 Formatting", "Formatting", "primary"),
+    (
+        "investigate",
+        FLAG_INVESTIGATE_ACTION_ID,
+        "🔎 Investigate",
+        "Investigate",
+        "primary",
+    ),
+)
 
 
-def _flag_button_elements(interaction_id: str) -> list[dict[str, object]]:
-    return [
-        {
+def _ordered_categories(categories: collections_abc.Iterable[str]) -> tuple[str, ...]:
+    selected = set(categories)
+    return tuple(
+        category for category, *_ in _FLAG_BUTTON_SPECS if category in selected
+    )
+
+
+def _actions_block_id(
+    prefix: str,
+    *,
+    interaction_id: str,
+    selected_categories: collections_abc.Iterable[str],
+    locked_categories: collections_abc.Iterable[str],
+) -> str:
+    metadata = {
+        "interaction_id": interaction_id,
+        "selected": list(_ordered_categories(selected_categories)),
+        "locked": list(_ordered_categories(locked_categories)),
+    }
+    return f"{prefix}|{json.dumps(metadata, separators=(',', ':'))}"
+
+
+def _flag_button_elements(
+    interaction_id: str,
+    *,
+    selected_categories: collections_abc.Iterable[str] = (),
+) -> list[dict[str, object]]:
+    selected = set(selected_categories)
+    elements: list[dict[str, object]] = []
+    for (
+        category,
+        action_id,
+        default_label,
+        selected_label,
+        selected_style,
+    ) in _FLAG_BUTTON_SPECS:
+        button: dict[str, object] = {
             "type": "button",
-            "action_id": FLAG_CORRECTNESS_ACTION_ID,
-            "text": {"type": "plain_text", "text": "🚩 Incorrect"},
+            "action_id": action_id,
+            "text": {
+                "type": "plain_text",
+                "text": (
+                    f"✓ {selected_label}" if category in selected else default_label
+                ),
+            },
             "value": interaction_id,
-        },
-        {
-            "type": "button",
-            "action_id": FLAG_FORMATTING_ACTION_ID,
-            "text": {"type": "plain_text", "text": "🎨 Formatting"},
-            "value": interaction_id,
-        },
-        {
-            "type": "button",
-            "action_id": FLAG_INVESTIGATE_ACTION_ID,
-            "text": {"type": "plain_text", "text": "🔎 Investigate"},
-            "value": interaction_id,
-        },
-    ]
+        }
+        if category in selected:
+            button["style"] = selected_style
+        elements.append(button)
+    return elements
 
 
-def flag_action_blocks(interaction_id: str) -> tuple[contracts.SlackBlock, ...]:
+def flag_action_blocks(
+    interaction_id: str,
+    *,
+    selected_categories: collections_abc.Iterable[str] = (),
+    locked_categories: collections_abc.Iterable[str] = (),
+) -> tuple[contracts.SlackBlock, ...]:
     """Build the Slack ``actions`` block with the three flag buttons.
 
     Each button carries ``interaction_id`` in its ``value`` so the
@@ -84,19 +124,42 @@ def flag_action_blocks(interaction_id: str) -> tuple[contracts.SlackBlock, ...]:
     return (
         {
             "type": "actions",
-            "block_id": f"flag_actions:{interaction_id}",
-            "elements": _flag_button_elements(interaction_id),
+            "block_id": _actions_block_id(
+                _FLAG_ACTIONS_BLOCK_PREFIX,
+                interaction_id=interaction_id,
+                selected_categories=selected_categories,
+                locked_categories=locked_categories,
+            ),
+            "elements": _flag_button_elements(
+                interaction_id,
+                selected_categories=selected_categories,
+            ),
         },
     )
 
 
-def qa_action_blocks(interaction_id: str) -> tuple[contracts.SlackBlock, ...]:
+def qa_action_blocks(
+    interaction_id: str,
+    *,
+    selected_categories: collections_abc.Iterable[str] = (),
+    locked_categories: collections_abc.Iterable[str] = (),
+) -> tuple[contracts.SlackBlock, ...]:
     return (
         {
             "type": "actions",
-            "block_id": f"qa_actions:{interaction_id}",
+            "block_id": _actions_block_id(
+                _QA_ACTIONS_BLOCK_PREFIX,
+                interaction_id=interaction_id,
+                selected_categories=selected_categories,
+                locked_categories=locked_categories,
+            ),
             "elements": [
-                *_flag_button_elements(interaction_id),
+                *(
+                    _flag_button_elements(
+                        interaction_id,
+                        selected_categories=selected_categories,
+                    )
+                ),
                 {
                     "type": "button",
                     "action_id": QA_ADD_NOTE_ACTION_ID,
@@ -112,20 +175,6 @@ def qa_action_blocks(interaction_id: str) -> tuple[contracts.SlackBlock, ...]:
             ],
         },
     )
-
-
-def flag_status_block(categories: tuple[str, ...]) -> contracts.SlackBlock:
-    """Build the context block summarizing which categories were flagged."""
-    return {
-        "type": "context",
-        "block_id": FLAG_STATUS_BLOCK_ID,
-        "elements": [
-            {
-                "type": "mrkdwn",
-                "text": FLAG_STATUS_PREFIX + ", ".join(categories),
-            }
-        ],
-    }
 
 
 def _question_echo_block(question: str) -> contracts.SlackBlock:
@@ -203,8 +252,15 @@ def reply_blocks(
         leading_blocks = ()
         action_blocks = flag_action_blocks(interaction_id)
     else:
+        known_categories = tuple(
+            issue.flag_category for issue in qa_review_context.known_issues
+        )
         leading_blocks = (_qa_review_header_block(qa_review_context),)
-        action_blocks = qa_action_blocks(interaction_id)
+        action_blocks = qa_action_blocks(
+            interaction_id,
+            selected_categories=known_categories,
+            locked_categories=known_categories,
+        )
     return (
         leading_blocks
         + (_question_echo_block(question),)
