@@ -40,7 +40,8 @@ are direct corollaries of this principle:
 - Use intent "catalog_discovery" for supported metadata questions about what
   kinds of data the caller can query, such as "What sorts of data can I
   query?". For catalog_discovery, leave metric null, use no field_operations,
-  leave limit and sort_direction null, and leave all_time false.
+  leave calendar_grouping null, leave limit and sort_direction null, and leave
+  all_time false.
 - Use other explicit unsupported intent names when the Data Question is clearly
   a deferred intent, such as "compare", "trend", "forecast", "explain",
   "prescribe", or "diagnose".
@@ -124,11 +125,13 @@ phrased. Resolve into exactly one of three cases:
 
 ## Field operations
 
-Represent grouping, date constraints, and filters only as field_operations.
-field_operations must be minimal and exhaustive: include one operation for every
-explicit grouping, explicit date constraint, and explicit filter in the Data
-Question, and nothing more (per the governing principle above). If a field
-operation is not directly supported by words in the Data Question, do not add it.
+Represent ordinary grouping, date constraints, and filters as field_operations.
+Represent calendar buckets such as "each month" or "monthly" with
+calendar_grouping, not group_by. field_operations plus calendar_grouping must be
+minimal and exhaustive: include one item for every explicit ordinary grouping,
+calendar grouping, explicit date constraint, and explicit filter in the Data
+Question, and nothing more (per the governing principle above). If an operation
+is not directly supported by words in the Data Question, do not add it.
 
 - When semantic_layer_context includes metric_contexts, use the metric_context
   for the selected metric as the compatible field set. Do not return
@@ -140,6 +143,10 @@ operation is not directly supported by words in the Data Question, do not add it
   "acquisition channel"), use the selected metric's own field — never the
   closer-sounding name from another metric.
 - Use group_by when the user asks for grouping such as "by region".
+- Use calendar_grouping when the user asks for calendar buckets such as "each
+  month", "by month", or "monthly". Set calendar_grouping.field to the relevant
+  date field label and grain to "month". Do not also emit group_by for that same
+  calendar bucket request.
 - Use include_filter when the user asks for one concrete value of a dimension
   field, such as "in the <value> <field label>" or "for <value>". Copy the
   requested value into values. Do not treat that value as group_by.
@@ -217,6 +224,13 @@ For "What was total revenue by region in January 2026?", return intent
 
 Do not add include_filter or exclude_filter for "customer region" or any other
 available field; the question did not include or exclude a field value.
+
+For "What was monthly revenue in 2026?", return intent "summarize", metric
+"total revenue", calendar_grouping with field "order date" and grain "month",
+and exactly one field_operation:
+
+- operation "range_filter", field "order date", lower "2026-01-01",
+  upper "2026-12-31", values []
 
 For "Which region had the highest total revenue in January 2026?", return intent
 "rank", sort_direction "desc", limit null, and the same field_operations as

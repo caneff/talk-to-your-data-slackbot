@@ -304,6 +304,63 @@ def test_data_assistant_runs_order_date_grouping_end_to_end(
     assert "2026-01-03 00:00:00" not in run.final_response.text
 
 
+def test_data_assistant_runs_month_calendar_grouping_end_to_end(
+    allowed_internal_identity: contracts.InternalIdentity,
+) -> None:
+    provider = _static_provider(
+        question_interpreter.ProviderProposal(
+            intent="summarize",
+            metric="total revenue",
+            calendar_grouping=question_interpreter.ProviderCalendarGrouping(
+                field="order date",
+                grain="month",
+            ),
+            field_operations=(
+                question_interpreter.ProviderFieldOperation(
+                    operation="range_filter",
+                    field="order date",
+                    lower="2026-01-01",
+                    upper="2026-12-31",
+                ),
+            ),
+        )
+    )
+    order_rows = (
+        ("2026-02-03", "North", "1200.00"),
+        ("2026-01-08", "South", "850.00"),
+        ("2026-01-15", "West", "1600.00"),
+        ("2026-03-22", "North", "300.00"),
+        ("2026-02-28", "East", "950.00"),
+    )
+
+    with local_duckdb_fixture.connect_orders(order_rows) as connection:
+        run = workflow_runner.run_data_assistant(
+            connection,
+            "What was monthly revenue in 2026?",
+            question_interpreter_provider=provider,
+            internal_identity=allowed_internal_identity,
+        )
+
+    assert isinstance(run, contracts.DataAssistantRun)
+    assert run.question_frame.group_by_field is None
+    assert run.question_frame.calendar_grouping == contracts.CalendarGrouping(
+        field="order date",
+        grain=contracts.CalendarGrain.MONTH,
+    )
+    assert run.data_request.group_by_field is None
+    assert run.data_request.calendar_grouping is not None
+    assert run.data_request.calendar_grouping.field.label == "order date"
+    assert tuple(run.prepared_data.data["dimension_value"]) == (
+        "2026-01",
+        "2026-02",
+        "2026-03",
+    )
+    assert tuple(run.prepared_data.data["metric_value"]) == (2450.0, 2150.0, 300.0)
+    assert "grouped across 3 months" in run.final_response.text
+    assert "- 2026-01: $2,450.00" in run.final_response.text
+    assert "Time range: 2026." in run.final_response.text
+
+
 def test_data_assistant_runs_all_time_grouped_revenue_end_to_end(
     allowed_internal_identity: contracts.InternalIdentity,
 ) -> None:

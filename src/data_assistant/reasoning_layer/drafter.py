@@ -62,7 +62,10 @@ def _template_summary(
     prepared_data: contracts.PreparedData,
     slot_values: dict[str, object],
 ) -> str:
-    if prepared_data.request.group_by_field is not None:
+    if (
+        prepared_data.request.group_by_field is not None
+        or prepared_data.request.calendar_grouping is not None
+    ):
         template = (
             "{metric} in {time_range} was {metric_total}, grouped across "
             "{dimension_count} {dimension}."
@@ -89,9 +92,7 @@ def _answer_draft(
         time_range=time_range,
         filters=request.filter_labels,
         caveats=prepared_data.quality_notes,
-        group_by_label=(
-            request.group_by_field.label if request.group_by_field else None
-        ),
+        group_by_label=_group_by_label(request),
         rank=request.rank,
     )
 
@@ -103,3 +104,11 @@ def _with_withheld_caveat(
         answer_draft,
         caveats=(*answer_draft.caveats, WITHHELD_WORDING_CAVEAT),
     )
+
+
+def _group_by_label(request: contracts.DataRequest) -> str | None:
+    if request.calendar_grouping is not None:
+        return request.calendar_grouping.grain.value
+    if request.group_by_field is not None:
+        return request.group_by_field.label
+    return None

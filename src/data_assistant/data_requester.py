@@ -17,6 +17,7 @@ def create_data_request(
         table=resolved_match.table,
         metric=resolved_match.metric,
         group_by_field=resolved_match.group_by_field,
+        calendar_grouping=resolved_match.calendar_grouping,
         field_filters=resolved_match.field_filters,
         output_shape=_output_shape(resolved_match),
         result_limit=(
@@ -27,6 +28,12 @@ def create_data_request(
 
 
 def _output_shape(match: contracts.SemanticMatch) -> str:
+    if match.calendar_grouping is not None:
+        return (
+            f"{match.metric.label} grouped by "
+            f"{match.calendar_grouping.field.label} "
+            f"{match.calendar_grouping.grain.value}"
+        )
     if match.group_by_field is None:
         return match.metric.label
     return f"{match.metric.label} grouped by {match.group_by_field.label}"

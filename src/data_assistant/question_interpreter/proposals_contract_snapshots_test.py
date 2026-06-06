@@ -197,6 +197,46 @@ CONTRACT_SNAPSHOT_CASES = (
         question="What was total revenue in the West region for all time?",
     ),
     snapshot_case(
+        name="calendar_grouping_month_with_bounded_time_filter",
+        proposal=question_interpreter.ProviderProposal(
+            intent="summarize",
+            metric="total revenue",
+            calendar_grouping=question_interpreter.ProviderCalendarGrouping(
+                field="order date",
+                grain="month",
+            ),
+            field_operations=(
+                question_interpreter.ProviderFieldOperation(
+                    operation="range_filter",
+                    field="order date",
+                    lower="2026-01-01",
+                    upper="2026-12-31",
+                ),
+            ),
+        ),
+        expected=contracts.Success(
+            contracts.QuestionFrame(
+                intent="summarize",
+                metric="total revenue",
+                time_scope=contracts.TimeScope.BOUNDED,
+                group_by_field=None,
+                field_filters=(
+                    contracts.RangeFilter(
+                        field="order date",
+                        lower=datetime.date(2026, 1, 1),
+                        upper=datetime.date(2026, 12, 31),
+                    ),
+                ),
+                unresolved_ambiguities=(),
+                calendar_grouping=contracts.CalendarGrouping(
+                    field="order date",
+                    grain=contracts.CalendarGrain.MONTH,
+                ),
+            )
+        ),
+        question="What was monthly revenue in 2026?",
+    ),
+    snapshot_case(
         name="exact_date_include_filter",
         proposal=interpreter_support.question_frame_proposal(
             field_operations=(

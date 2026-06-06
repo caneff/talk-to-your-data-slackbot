@@ -122,6 +122,19 @@ def _validate_provider_result(
     if isinstance(field_filters_result, contracts.NonAnswer):
         return field_filters_result
     group_by_field, validated_filters = field_filters_result
+    calendar_grouping = field_operations.validate_calendar_grouping(
+        proposal.calendar_grouping,
+        semantic_layer,
+    )
+    if isinstance(calendar_grouping, contracts.NonAnswer):
+        return calendar_grouping
+    shape_validation = _validate_grouping_shape(
+        intent_value=intent_value,
+        group_by_field=group_by_field,
+        calendar_grouping=calendar_grouping,
+    )
+    if isinstance(shape_validation, contracts.NonAnswer):
+        return shape_validation
 
     validated_time_scope = time_scope.derive_time_scope(
         proposal=proposal,
@@ -134,6 +147,7 @@ def _validate_provider_result(
         proposal=proposal,
         intent_value=intent_value,
         group_by_field=group_by_field,
+        calendar_grouping=calendar_grouping,
     )
     if isinstance(rank, contracts.NonAnswer):
         return rank
@@ -143,6 +157,7 @@ def _validate_provider_result(
             intent=intent_value,
             metric=metric_value,
             group_by_field=group_by_field,
+            calendar_grouping=calendar_grouping,
             field_filters=validated_filters,
             unresolved_ambiguities=(),
             time_scope=validated_time_scope,
@@ -173,10 +188,11 @@ def _validate_rank(
     proposal: proposals.ProviderProposal,
     intent_value: str,
     group_by_field: str | None,
+    calendar_grouping: contracts.CalendarGrouping[str] | None,
 ) -> contracts.RankSpec | None | contracts.NonAnswer:
     if intent_value != "rank":
         return None
-    if group_by_field is None:
+    if group_by_field is None or calendar_grouping is not None:
         return non_answer_catalog.non_answer(
             contracts.NonAnswerReasonCode.UNSUPPORTED_SHAPE,
             stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
@@ -197,6 +213,21 @@ def _validate_rank(
     )
 
 
+def _validate_grouping_shape(
+    *,
+    intent_value: str,
+    group_by_field: str | None,
+    calendar_grouping: contracts.CalendarGrouping[str] | None,
+) -> contracts.NonAnswer | None:
+    del intent_value
+    if group_by_field is not None and calendar_grouping is not None:
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.UNSUPPORTED_SHAPE,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
+    return None
+
+
 def _validate_catalog_discovery(
     proposal: proposals.ProviderProposal,
 ) -> contracts.StageResult[contracts.QuestionFrame]:
@@ -205,6 +236,7 @@ def _validate_catalog_discovery(
         or proposal.metric_ambiguity is not None
         or proposal.unknown_metric is not None
         or proposal.field_operations
+        or proposal.calendar_grouping is not None
         or proposal.limit is not None
         or proposal.sort_direction is not None
         or proposal.all_time
@@ -220,6 +252,7 @@ def _validate_catalog_discovery(
             metric=None,
             time_scope=None,
             group_by_field=None,
+            calendar_grouping=None,
             field_filters=(),
             unresolved_ambiguities=(),
         )

@@ -90,6 +90,12 @@ def resolve_semantic_match(
 
 
 def _build_match_rationale(match: contracts.SemanticMatch) -> str:
+    if match.calendar_grouping is not None:
+        return (
+            f"{match.dataset.name} contains the {match.metric.label} metric and "
+            f"{match.calendar_grouping.grain.value} buckets on "
+            f"{match.calendar_grouping.field.label} needed for the Data Question."
+        )
     if match.group_by_field is None:
         return f"{match.dataset.name} contains the {match.metric.label} metric."
     return (

@@ -93,6 +93,22 @@ class ProviderFieldOperation(pydantic.BaseModel):
     )
 
 
+class ProviderCalendarGrouping(pydantic.BaseModel):
+    """Untrusted provider proposal for calendar-bucket grouping."""
+
+    model_config = pydantic.ConfigDict(extra="forbid")
+
+    field: str = pydantic.Field(
+        description="Business-facing Semantic Field label from semantic_layer_context.",
+    )
+    grain: typing.Literal["month"] = pydantic.Field(
+        description=(
+            "Calendar grain requested by the Data Question. Only month is "
+            "currently supported."
+        ),
+    )
+
+
 class ProviderProposal(pydantic.BaseModel):
     """Untrusted provider proposal shape for a Question Frame."""
 
@@ -160,6 +176,14 @@ class ProviderProposal(pydantic.BaseModel):
             "Data Question, represented with Semantic Field labels. Do not add "
             "operations for fields that are merely available in context or "
             "examples. If the question omits time, omit date operations."
+        ),
+    )
+    calendar_grouping: ProviderCalendarGrouping | None = pydantic.Field(
+        default=None,
+        description=(
+            "Optional first-class calendar grouping request, separate from "
+            "field_operations. Use only when the question asks for calendar "
+            "buckets such as each month."
         ),
     )
     limit: int | None = pydantic.Field(

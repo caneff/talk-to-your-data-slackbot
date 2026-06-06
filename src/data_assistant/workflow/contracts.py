@@ -43,6 +43,12 @@ class SortDirection(enum.StrEnum):
     DESC = "desc"
 
 
+class CalendarGrain(enum.StrEnum):
+    """Trusted calendar bucket granularity."""
+
+    MONTH = "month"
+
+
 DEFAULT_RESULT_LIMIT = 10
 
 
@@ -55,6 +61,14 @@ class RankSpec:
 
 
 @dataclasses.dataclass(frozen=True)
+class CalendarGrouping(typing.Generic[T]):
+    """Trusted calendar grouping carried through workflow contracts."""
+
+    field: T
+    grain: CalendarGrain
+
+
+@dataclasses.dataclass(frozen=True)
 class QuestionFrame:
     """Structured interpretation of a Data Question."""
 
@@ -64,6 +78,7 @@ class QuestionFrame:
     group_by_field: str | None
     field_filters: tuple[FieldFilter[str], ...]
     unresolved_ambiguities: tuple[str, ...]
+    calendar_grouping: CalendarGrouping[str] | None = None
     rank: RankSpec | None = None
 
     @property
@@ -173,6 +188,7 @@ class SemanticMatch:
     metric: schema.Metric
     group_by_field: schema.SemanticField | None
     field_filters: tuple[FieldFilter[schema.SemanticField], ...]
+    calendar_grouping: CalendarGrouping[schema.SemanticField] | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -194,6 +210,7 @@ class DataRequest:
     field_filters: tuple[FieldFilter[schema.SemanticField], ...]
     output_shape: str
     result_limit: int
+    calendar_grouping: CalendarGrouping[schema.SemanticField] | None = None
     rank: RankSpec | None = None
 
     @property

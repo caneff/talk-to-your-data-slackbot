@@ -59,6 +59,7 @@ def _proposal(
     intent: str | None,
     metric: str | None,
     field_operations: tuple[question_interpreter.ProviderFieldOperation, ...],
+    calendar_grouping: question_interpreter.ProviderCalendarGrouping | None = None,
     all_time: bool = False,
     metric_ambiguity: str | None = None,
     unknown_metric: str | None = None,
@@ -70,6 +71,7 @@ def _proposal(
         metric=metric,
         metric_ambiguity=metric_ambiguity,
         unknown_metric=unknown_metric,
+        calendar_grouping=calendar_grouping,
         limit=limit,
         sort_direction=sort_direction,
         field_operations=field_operations,
@@ -80,12 +82,14 @@ def _proposal(
 def _summarize(
     metric: str,
     *field_operations: question_interpreter.ProviderFieldOperation,
+    calendar_grouping: question_interpreter.ProviderCalendarGrouping | None = None,
     all_time: bool = False,
 ) -> question_interpreter.ProviderProposal:
     return _proposal(
         intent="summarize",
         metric=metric,
         field_operations=field_operations,
+        calendar_grouping=calendar_grouping,
         all_time=all_time,
     )
 
@@ -181,6 +185,13 @@ def _exclude_filter(
     )
 
 
+def _calendar_month(field: str) -> question_interpreter.ProviderCalendarGrouping:
+    return question_interpreter.ProviderCalendarGrouping(
+        field=field,
+        grain="month",
+    )
+
+
 SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
     # --- Existing pinned cases (names + questions + expected preserved) ---
     SharedProviderProposalCase(
@@ -236,6 +247,24 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
         expected=_summarize(
             "order count",
             _during("order date", JANUARY_2026),
+        ),
+    ),
+    SharedProviderProposalCase(
+        name="monthly_revenue_in_2026",
+        question="What was monthly revenue in 2026?",
+        expected=_summarize(
+            "total revenue",
+            _during("order date", YEAR_2026),
+            calendar_grouping=_calendar_month("order date"),
+        ),
+    ),
+    SharedProviderProposalCase(
+        name="stores_opened_each_month_all_time",
+        question="How many stores opened each month for all time?",
+        expected=_summarize(
+            "store count",
+            calendar_grouping=_calendar_month("store opened date"),
+            all_time=True,
         ),
     ),
     SharedProviderProposalCase(

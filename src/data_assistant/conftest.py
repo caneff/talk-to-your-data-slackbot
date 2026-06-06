@@ -138,6 +138,7 @@ def canonical_test_semantic_layer() -> semantic_layer_catalog.SemanticLayerCatal
                         data_type=schema.DataType.DATE,
                         operations=(
                             schema.FieldOperation.GROUP_BY,
+                            schema.FieldOperation.CALENDAR_GROUP_BY,
                             schema.FieldOperation.INCLUDE_FILTER,
                             schema.FieldOperation.EXCLUDE_FILTER,
                             schema.FieldOperation.RANGE_FILTER,

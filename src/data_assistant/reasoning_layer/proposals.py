@@ -80,6 +80,7 @@ def compute_slot_values(
     """
     request = prepared_data.request
     group_by_field = request.group_by_field
+    calendar_grouping = request.calendar_grouping
     data = prepared_data.data
 
     metric_total = metric_formatter.format_metric_value(
@@ -87,8 +88,8 @@ def compute_slot_values(
         request.metric.kind,
     )
 
-    if group_by_field is not None:
-        dimension = _pluralize(group_by_field.label)
+    if group_by_field is not None or calendar_grouping is not None:
+        dimension = _pluralize(_grouping_label(request))
         if data.empty:
             top_dimension = ""
             top_value = ""
@@ -112,6 +113,13 @@ def compute_slot_values(
         "top_dimension": top_dimension,
         "top_value": top_value,
     }
+
+
+def _grouping_label(data_request: contracts.DataRequest) -> str:
+    if data_request.calendar_grouping is not None:
+        return data_request.calendar_grouping.grain.value
+    assert data_request.group_by_field is not None
+    return data_request.group_by_field.label
 
 
 def figure_free_result_shape(slot_values: dict[str, object]) -> dict[str, object]:

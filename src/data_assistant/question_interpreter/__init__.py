@@ -8,6 +8,7 @@ from data_assistant.question_interpreter.openai_provider import (
     load_openai_question_interpreter_config,
 )
 from data_assistant.question_interpreter.proposals import (
+    ProviderCalendarGrouping,
     ProviderFailure,
     ProviderFailureDiagnosticClass,
     ProviderFieldOperation,
@@ -25,6 +26,7 @@ __all__ = [
     "OpenAIQuestionInterpreterConfig",
     "OpenAIQuestionInterpreterConfigError",
     "OpenAIQuestionInterpreterProvider",
+    "ProviderCalendarGrouping",
     "ProviderFailure",
     "ProviderFailureDiagnosticClass",
     "ProviderFieldOperation",

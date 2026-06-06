@@ -44,6 +44,41 @@ def test_semantic_matcher_uses_exact_labels_not_semantic_ids(
     assert matches == ()
 
 
+def test_semantic_matcher_resolves_month_calendar_grouping_on_date_field(
+    active_semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
+) -> None:
+    question_frame = contracts.QuestionFrame(
+        intent="summarize",
+        metric="total revenue",
+        time_scope=contracts.TimeScope.BOUNDED,
+        group_by_field=None,
+        field_filters=(
+            contracts.RangeFilter(
+                field="order date",
+                lower=datetime.date(2026, 1, 1),
+                upper=datetime.date(2026, 12, 31),
+            ),
+        ),
+        unresolved_ambiguities=(),
+        calendar_grouping=contracts.CalendarGrouping(
+            field="order date",
+            grain=contracts.CalendarGrain.MONTH,
+        ),
+    )
+
+    matches = semantic_matcher.find_semantic_matches(
+        question_frame,
+        active_semantic_layer,
+    )
+
+    assert len(matches) == 1
+    match = matches[0]
+    assert match.group_by_field is None
+    assert match.calendar_grouping is not None
+    assert match.calendar_grouping.field.field_id == "order_date"
+    assert match.calendar_grouping.grain == contracts.CalendarGrain.MONTH
+
+
 def _question_frame(
     *,
     metric: str,

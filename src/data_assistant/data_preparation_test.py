@@ -409,6 +409,45 @@ def test_prepared_data_contains_all_time_grouped_revenue_results(
     pd_testing.assert_frame_equal(prepared_data.data, expected_data)
 
 
+def test_prepared_data_groups_calendar_months_chronologically(
+    data_request: contracts.DataRequest,
+    connect_orders: local_duckdb_fixture.OrdersConnector,
+) -> None:
+    order_date_field = data_request.field_filters[0].field
+    data_request = dataclasses.replace(
+        data_request,
+        group_by_field=None,
+        calendar_grouping=contracts.CalendarGrouping(
+            field=order_date_field,
+            grain=contracts.CalendarGrain.MONTH,
+        ),
+        field_filters=(
+            contracts.RangeFilter(
+                field=order_date_field,
+                lower=datetime.date(2026, 1, 1),
+                upper=datetime.date(2026, 12, 31),
+            ),
+        ),
+    )
+    order_rows = (
+        ("2026-02-03", "North", "1200.00"),
+        ("2026-01-08", "South", "850.00"),
+        ("2026-01-15", "West", "1600.00"),
+        ("2026-03-22", "North", "300.00"),
+        ("2026-02-28", "East", "950.00"),
+    )
+    with connect_orders(order_rows) as connection:
+        prepared_data = data_preparation.prepare_data(data_request, connection)
+
+    expected_data = pd.DataFrame(
+        {
+            "dimension_value": ("2026-01", "2026-02", "2026-03"),
+            "metric_value": (2450.0, 2150.0, 300.0),
+        },
+    )
+    pd_testing.assert_frame_equal(prepared_data.data, expected_data)
+
+
 def test_prepared_data_supports_scalar_all_time_aggregate_without_filters(
     data_request: contracts.DataRequest,
     connect_orders: local_duckdb_fixture.OrdersConnector,

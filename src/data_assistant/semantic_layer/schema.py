@@ -61,6 +61,7 @@ class FieldOperation(enum.StrEnum):
     """Allowed business operation kinds for a Semantic Field."""
 
     GROUP_BY = "group_by"
+    CALENDAR_GROUP_BY = "calendar_group_by"
     RANGE_FILTER = "range_filter"
     INCLUDE_FILTER = "include_filter"
     EXCLUDE_FILTER = "exclude_filter"

@@ -82,6 +82,7 @@ fields:
     source_column: order_date
     data_type: date
     operations:
+      - calendar_group_by
       - include_filter
       - exclude_filter
       - range_filter

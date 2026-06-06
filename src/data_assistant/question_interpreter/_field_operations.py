@@ -71,6 +71,40 @@ def validate_field_filters(
     return group_by_field, tuple(validated_filters)
 
 
+def validate_calendar_grouping(
+    calendar_grouping_proposal: proposals.ProviderCalendarGrouping | None,
+    semantic_layer: semantic_layer_catalog.SemanticLayerCatalog,
+) -> contracts.NonAnswer | contracts.CalendarGrouping[str] | None:
+    if calendar_grouping_proposal is None:
+        return None
+    field_candidates = _field_candidates_by_label(semantic_layer).get(
+        calendar_grouping_proposal.field
+    )
+    if field_candidates is None:
+        return non_answer_catalog.unknown_semantic_label_non_answer(
+            "field",
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
+    field = _collapse_field_candidates(field_candidates)
+    if field is None:
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.AMBIGUOUS_FIELD_CONFIG,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
+    if (
+        field.data_type != schema.DataType.DATE
+        or schema.FieldOperation.CALENDAR_GROUP_BY not in field.operations
+    ):
+        return non_answer_catalog.non_answer(
+            contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION,
+            stage=contracts.NonAnswerStage.QUESTION_INTERPRETER,
+        )
+    return contracts.CalendarGrouping(
+        field=field.label,
+        grain=contracts.CalendarGrain(calendar_grouping_proposal.grain),
+    )
+
+
 def _collapse_field_candidates(
     field_candidates: list[schema.SemanticField],
 ) -> schema.SemanticField | None:

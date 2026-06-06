@@ -15,6 +15,7 @@ def prepare_data(
     """Produce bounded grouped Prepared Data from local DuckDB rows."""
     metric_source_column = data_request.metric.source_column
     group_by_field = data_request.group_by_field
+    calendar_grouping = data_request.calendar_grouping
     filter_sql, filter_parameters = _filter_sql(data_request.field_filters)
     filtered_rows_cte = f"""
         filtered_rows as (
@@ -23,21 +24,30 @@ def prepare_data(
             {filter_sql}
         )
     """
-    if group_by_field is None:
+    if group_by_field is None and calendar_grouping is None:
         dimension_select = "'All'"
         group_and_order = "having count(*) > 0"
     else:
-        dimension_select = _grouped_dimension_sql(group_by_field)
-        metric_order_direction = (
-            "desc"
-            if data_request.rank is None
-            else data_request.rank.sort_direction.value
+        grouped_field = (
+            group_by_field if calendar_grouping is None else calendar_grouping.field
         )
-        group_and_order = (
-            "group by dimension_value\n"
-            f"        order by metric_value {metric_order_direction}, "
-            "dimension_value asc"
-        )
+        assert grouped_field is not None
+        dimension_select = _grouped_dimension_sql(grouped_field, calendar_grouping)
+        if calendar_grouping is not None:
+            group_and_order = (
+                "group by dimension_value\n        order by dimension_value asc"
+            )
+        else:
+            metric_order_direction = (
+                "desc"
+                if data_request.rank is None
+                else data_request.rank.sort_direction.value
+            )
+            group_and_order = (
+                "group by dimension_value\n"
+                f"        order by metric_value {metric_order_direction}, "
+                "dimension_value asc"
+            )
     metric_query = f"""
         with {filtered_rows_cte},
         metric_rows as (
@@ -52,9 +62,14 @@ def prepare_data(
         {group_and_order}
         limit $result_limit
     """
-    missing_dimension_expression = (
-        "0" if group_by_field is None else _missing_dimension_sql(group_by_field)
-    )
+    if group_by_field is None and calendar_grouping is None:
+        missing_dimension_expression = "0"
+    else:
+        grouped_field = (
+            group_by_field if calendar_grouping is None else calendar_grouping.field
+        )
+        assert grouped_field is not None
+        missing_dimension_expression = _missing_dimension_sql(grouped_field)
     quality_query = f"""
         with {filtered_rows_cte}
         select
@@ -89,7 +104,10 @@ def prepare_data(
         quality_notes=_quality_notes(
             filtered_row_count=filtered_row_count,
             metric_column=metric_source_column,
-            dimension_label=group_by_field.label if group_by_field else "",
+            dimension_label=_dimension_label(
+                group_by_field=group_by_field,
+                calendar_grouping=calendar_grouping,
+            ),
             missing_metric_count=missing_metric_count,
             missing_dimension_count=missing_dimension_count,
         ),
@@ -178,8 +196,13 @@ def _row_word(count: int) -> str:
     return "rows"
 
 
-def _grouped_dimension_sql(group_by_field: schema.SemanticField) -> str:
+def _grouped_dimension_sql(
+    group_by_field: schema.SemanticField,
+    calendar_grouping: contracts.CalendarGrouping[schema.SemanticField] | None = None,
+) -> str:
     column = group_by_field.source_column
+    if calendar_grouping is not None:
+        return f"coalesce(strftime(date_trunc('month', {column}), '%Y-%m'), 'Unknown')"
     if group_by_field.data_type == schema.DataType.STRING:
         return f"coalesce(nullif(trim({column}), ''), 'Unknown')"
     if group_by_field.data_type == schema.DataType.DATE:
@@ -203,3 +226,15 @@ def _missing_dimension_sql(group_by_field: schema.SemanticField) -> str:
                     else 0
                 end
     """
+
+
+def _dimension_label(
+    *,
+    group_by_field: schema.SemanticField | None,
+    calendar_grouping: contracts.CalendarGrouping[schema.SemanticField] | None,
+) -> str:
+    if calendar_grouping is not None:
+        return calendar_grouping.grain.value
+    if group_by_field is not None:
+        return group_by_field.label
+    return ""

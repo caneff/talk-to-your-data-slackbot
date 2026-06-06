@@ -17,11 +17,16 @@ def find_semantic_matches(
         for table in semantic_layer.tables_for_dataset_id(dataset.dataset_id):
             metric = _find_metric(question_frame, table)
             group_by_field = _find_group_by_field(question_frame, table)
+            calendar_grouping = _find_calendar_grouping(question_frame, table)
             resolved_filters = _resolve_field_filters(question_frame, table)
             if (
                 metric is not None
                 and (
                     question_frame.group_by_field is None or group_by_field is not None
+                )
+                and (
+                    question_frame.calendar_grouping is None
+                    or calendar_grouping is not None
                 )
                 and resolved_filters is not None
             ):
@@ -31,6 +36,7 @@ def find_semantic_matches(
                         table=table,
                         metric=metric,
                         group_by_field=group_by_field,
+                        calendar_grouping=calendar_grouping,
                         field_filters=resolved_filters,
                     ),
                 )
@@ -62,6 +68,29 @@ def _find_group_by_field(
             and schema.FieldOperation.GROUP_BY in table_field.operations
         ),
         None,
+    )
+
+
+def _find_calendar_grouping(
+    question_frame: contracts.QuestionFrame,
+    table: schema.DatasetTable,
+) -> contracts.CalendarGrouping[schema.SemanticField] | None:
+    if question_frame.calendar_grouping is None:
+        return None
+    field = next(
+        (
+            table_field
+            for table_field in table.fields
+            if table_field.label == question_frame.calendar_grouping.field
+            and schema.FieldOperation.CALENDAR_GROUP_BY in table_field.operations
+        ),
+        None,
+    )
+    if field is None:
+        return None
+    return contracts.CalendarGrouping(
+        field=field,
+        grain=question_frame.calendar_grouping.grain,
     )
 
 

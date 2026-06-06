@@ -146,6 +146,79 @@ def test_exact_net_revenue_label_validates_to_question_frame() -> None:
     )
 
 
+def test_calendar_grouping_month_on_date_field_validates_to_question_frame() -> None:
+    proposal = question_interpreter.ProviderProposal(
+        intent="summarize",
+        metric="total revenue",
+        calendar_grouping=question_interpreter.ProviderCalendarGrouping(
+            field="order date",
+            grain="month",
+        ),
+        field_operations=(
+            question_interpreter.ProviderFieldOperation(
+                operation="range_filter",
+                field="order date",
+                lower="2026-01-01",
+                upper="2026-12-31",
+            ),
+        ),
+    )
+
+    result = question_interpreter.interpret_question(
+        question="What was monthly revenue in 2026?",
+        semantic_layer=_retail_style_semantic_layer(),
+        provider=_StaticProvider(proposal),
+    )
+
+    assert isinstance(result, contracts.Success)
+    assert result.value.group_by_field is None
+    assert result.value.calendar_grouping == contracts.CalendarGrouping(
+        field="order date",
+        grain=contracts.CalendarGrain.MONTH,
+    )
+    assert result.value.field_filters == (
+        contracts.RangeFilter(
+            field="order date",
+            lower=datetime.date(2026, 1, 1),
+            upper=datetime.date(2026, 12, 31),
+        ),
+    )
+
+
+def test_calendar_grouping_requires_supported_calendar_operation() -> None:
+    proposal = question_interpreter.ProviderProposal(
+        intent="summarize",
+        metric="total revenue",
+        calendar_grouping=question_interpreter.ProviderCalendarGrouping(
+            field="order date",
+            grain="month",
+        ),
+        field_operations=(),
+    )
+    semantic_layer = semantic_layer_testing.semantic_layer_with_table(
+        fields=(
+            schema.SemanticField(
+                field_id="order_date",
+                label="order date",
+                source_column="order_date",
+                data_type=schema.DataType.DATE,
+                operations=(schema.FieldOperation.RANGE_FILTER,),
+            ),
+        ),
+    )
+
+    result = question_interpreter.interpret_question(
+        question="What was monthly revenue?",
+        semantic_layer=semantic_layer,
+        provider=_StaticProvider(proposal),
+    )
+
+    assert isinstance(result, contracts.NonAnswer)
+    assert (
+        result.reason_code == contracts.NonAnswerReasonCode.UNSUPPORTED_FIELD_OPERATION
+    )
+
+
 def test_metric_alias_question_wording_can_resolve_to_canonical_metric_label() -> None:
     proposal = question_interpreter.ProviderProposal(
         intent="summarize",
