@@ -11,6 +11,11 @@ Turn maintainer flags on Data Assistant responses into root-caused, actionable w
 
 - Log file: `logs/interactions.jsonl` (gitignored, append-only, one JSON object per Data Question). Written by `interaction_log.append_interaction`; flagged in place by `interaction_log.flag_interaction`.
 - Hosted Render Worker file: `/var/data/interactions.jsonl` when `DATA_ASSISTANT_INTERACTION_LOG_PATH=/var/data/interactions.jsonl` is configured from `render.yaml`.
+- When the user says "Render logs" in this workflow, interpret that as the
+  hosted **Interaction Log** at `/var/data/interactions.jsonl` unless they
+  explicitly ask for Render application logs. The Interaction Log is the thing
+  they care about; Render application logs are only a transport/visibility
+  fallback.
 - Hosted Render flags are mirrored into Render application logs with prefix `data_assistant.flagged_interaction ` followed by the full sanitized JSON record. Use Render log tooling to fetch these records when the user asks about the Render/hosted instance or the local log has no flags.
 - A **flagged** record has a non-empty `flags` array. Categories (exact): `correctness`, `formatting`, `investigate` (= `interaction_log.FLAG_VOCABULARY`).
 - If the file does not exist or has no flagged records, say so plainly and stop — do not fabricate cases.
@@ -45,7 +50,17 @@ The log deliberately **excludes raw Prepared Data cell values** (ADR-0016). You 
 ### 1. Load the flagged set
 Read `logs/interactions.jsonl`, parse each line, keep records with non-empty `flags`. If the user named a category (`correctness` / `formatting` / `investigate`), filter to it. Report the count and the category split.
 
-For Render/hosted triage, query application logs for `data_assistant.flagged_interaction `, parse the JSON payload after that prefix, and treat those payloads as the flagged set. If multiple log entries exist for the same `id`, keep the newest payload because later clicks may add categories. Render log access is an observation path, not a write path: do not claim flags were cleared from the hosted file unless you actually ran `interaction_log.clear_flags` against `/var/data/interactions.jsonl` in the Worker.
+For Render/hosted triage, prefer the hosted Interaction Log file
+`/var/data/interactions.jsonl` when a worker-side read path is available. If
+the file is not directly readable, query application logs for
+`data_assistant.flagged_interaction `, parse the JSON payload after that prefix,
+and treat those payloads as an observation copy of the flagged set. If multiple
+log entries exist for the same `id`, keep the newest payload because later
+clicks may add categories. Render application log access is an observation
+path, not the source of truth and not what the user means by "Render logs" in
+this workflow. Do not claim flags were cleared from the hosted Interaction Log
+unless you actually ran `interaction_log.clear_flags` against
+`/var/data/interactions.jsonl` in the Worker.
 
 ### 2. Present each flagged case
 For every flagged record show, compactly:
