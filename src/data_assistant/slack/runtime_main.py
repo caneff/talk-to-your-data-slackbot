@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import collections.abc as collections_abc
+import contextlib
 import dataclasses
 import logging
 import os
 import pathlib
+import signal
 import sys
 import typing
 
@@ -18,6 +20,7 @@ import data_assistant.semantic_layer.loader as semantic_layer_loader
 import data_assistant.slack as slack_assistant
 import data_assistant.slack.cli_common as cli_common
 import data_assistant.slack.composition as composition
+import data_assistant.slack.lifecycle_status as lifecycle_status
 
 if typing.TYPE_CHECKING:
     from slack_bolt import App as SlackBoltApp
@@ -48,6 +51,11 @@ AppFactory: typing.TypeAlias = collections_abc.Callable[..., object]
 SocketModeHandlerFactory: typing.TypeAlias = collections_abc.Callable[
     ..., SocketModeHandler
 ]
+PostOnline: typing.TypeAlias = collections_abc.Callable[..., None]
+MarkOffline: typing.TypeAlias = collections_abc.Callable[[], None]
+
+STATUS_DM_USER_ID_ENV_VAR = "SLACK_STATUS_DM_USER_ID"
+DEFAULT_STATUS_STATE_PATH = pathlib.Path("logs/status_message.json")
 
 
 def _load_env_file(
@@ -108,8 +116,20 @@ def run_socket_mode_from_env(
     ),
     answer_path: slack_assistant.AnswerPath | None = None,
     interaction_log_path: pathlib.Path | None = None,
+    status_state_path: pathlib.Path = DEFAULT_STATUS_STATE_PATH,
+    post_online: PostOnline | None = None,
+    mark_offline: MarkOffline | None = None,
 ) -> SocketModeHandler:
-    """Build and start the local Slack Runtime Adapter from environment config."""
+    """Build and start the local Slack Runtime Adapter from environment config.
+
+    Lifecycle status (``SLACK_STATUS_DM_USER_ID``) is OPT-IN: when the operator
+    Slack user id is unset, no status is posted and startup/shutdown are
+    unchanged. When set, ``🟢 Data Assistant online`` is posted to the operator
+    DM on startup and ``chat.update``d to ``🔴 Data Assistant offline`` on a
+    graceful (SIGINT/SIGTERM) shutdown, via the ``finally`` path. The
+    ``post_online``/``mark_offline`` callbacks are injectable for tests; when
+    omitted they bind to :mod:`lifecycle_status` against the live ``app.client``.
+    """
     config = load_slack_runtime_config(environ)
     # Build the adapter (and validate OpenAI config) before constructing the
     # Slack Bolt app, so a misconfigured run fails before any runtime objects
@@ -130,8 +150,99 @@ def run_socket_mode_from_env(
     if adapter is not None:
         slack_assistant.register_assistant_handlers(app=app, adapter=adapter)
     handler = socket_mode_handler_factory(app_token=config.app_token, app=app)
-    handler.start()
+
+    status_user_id = environ.get(STATUS_DM_USER_ID_ENV_VAR)
+    if not status_user_id:
+        # Feature is opt-in: no operator id means current behavior, unchanged.
+        handler.start()
+        return handler
+
+    active_post_online, active_mark_offline = _resolve_status_reporters(
+        app=app,
+        state_path=status_state_path,
+        post_online=post_online,
+        mark_offline=mark_offline,
+    )
+    active_post_online(user_id=status_user_id)
+    with _graceful_sigterm_unwinds_like_sigint():
+        try:
+            handler.start()
+        finally:
+            # Best-effort: lifecycle_status.mark_offline never raises, but guard
+            # any injected reporter so a graceful shutdown is never blocked.
+            try:
+                active_mark_offline()
+            except Exception:  # noqa: BLE001 -- shutdown report is best-effort.
+                logger.exception("Failed to post offline lifecycle status")
     return handler
+
+
+def _resolve_status_reporters(
+    *,
+    app: object,
+    state_path: pathlib.Path,
+    post_online: PostOnline | None,
+    mark_offline: MarkOffline | None,
+) -> tuple[PostOnline, MarkOffline]:
+    """Bind default lifecycle reporters to the live ``app.client`` when omitted.
+
+    Tests inject pre-bound callbacks; production binds :mod:`lifecycle_status`
+    against the Bolt ``App.client``.
+    """
+    if post_online is not None and mark_offline is not None:
+        return post_online, mark_offline
+    client = typing.cast(
+        lifecycle_status.SlackStatusClient,
+        getattr(app, "client", None),
+    )
+
+    def default_post_online(*, user_id: str) -> None:
+        lifecycle_status.post_online(
+            client=client,
+            user_id=user_id,
+            state_path=state_path,
+        )
+
+    def default_mark_offline() -> None:
+        lifecycle_status.mark_offline(client=client, state_path=state_path)
+
+    return (
+        post_online or default_post_online,
+        mark_offline or default_mark_offline,
+    )
+
+
+@contextlib.contextmanager
+def _graceful_sigterm_unwinds_like_sigint() -> collections_abc.Generator[None]:
+    """Make SIGTERM unwind ``handler.start()`` the way SIGINT already does.
+
+    Bolt's handler raises ``KeyboardInterrupt`` on SIGINT (Ctrl-C); install a
+    matching SIGTERM handler that raises ``KeyboardInterrupt`` so the same
+    ``finally`` path posts offline. Restore the prior handler on exit. Skipped
+    when not on the main thread (``signal.signal`` would raise) so tests and
+    embedded use are unaffected.
+    """
+
+    def _raise_keyboard_interrupt(signum: int, frame: object) -> None:
+        del signum, frame
+        raise KeyboardInterrupt
+
+    previous: object = None
+    installed = False
+    try:
+        previous = signal.signal(signal.SIGTERM, _raise_keyboard_interrupt)
+        installed = True
+    except (ValueError, OSError):
+        # Not on the main thread (e.g. under pytest): leave signals untouched.
+        installed = False
+    try:
+        yield
+    finally:
+        if installed:
+            signal.signal(
+                signal.SIGTERM,
+                typing.cast(typing.Any, previous),
+            )
 
 
 def main(

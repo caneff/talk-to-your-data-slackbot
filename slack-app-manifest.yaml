@@ -20,6 +20,7 @@ oauth_config:
       - assistant:write
       - chat:write
       - im:history
+      - im:write
 settings:
   event_subscriptions:
     bot_events:

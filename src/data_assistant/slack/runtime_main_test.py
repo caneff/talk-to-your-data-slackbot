@@ -465,6 +465,84 @@ def test_main_no_flags_wires_retail_default(
     assert row[0] > 0
 
 
+class RaisingKeyboardInterruptHandler(FakeSocketModeHandler):
+    """A handler whose blocking ``start()`` unwinds via ``KeyboardInterrupt``.
+
+    Mirrors Bolt's real handler, which raises ``KeyboardInterrupt`` on SIGINT.
+    """
+
+    def start(self) -> None:
+        self.starts += 1
+        raise KeyboardInterrupt
+
+
+def test_run_socket_mode_posts_online_then_offline_when_status_user_set() -> None:
+    """With the operator id set, startup posts online and shutdown posts offline.
+
+    The injected status reporter records online/offline calls; the fake handler
+    raises ``KeyboardInterrupt`` from ``start()`` to simulate graceful shutdown.
+    Offline must be posted exactly once via the ``finally`` path.
+    """
+    app = object()
+    runtime_factories = RecordingRuntimeFactories(app=app)
+
+    def handler_factory(*, app_token: str, app: object) -> FakeSocketModeHandler:
+        handler = RaisingKeyboardInterruptHandler(app_token=app_token, app=app)
+        runtime_factories.created_handlers.append(handler)
+        return handler
+
+    online_calls: list[str] = []
+    offline_calls: list[int] = []
+
+    def fake_post_online(*, user_id: str) -> None:
+        online_calls.append(user_id)
+
+    def fake_mark_offline() -> None:
+        offline_calls.append(1)
+
+    with pytest.raises(KeyboardInterrupt):
+        slack_runtime.run_socket_mode_from_env(
+            VALID_SLACK_ENV | {"SLACK_STATUS_DM_USER_ID": "U-OPERATOR"},
+            app_factory=runtime_factories.app_factory,
+            socket_mode_handler_factory=handler_factory,
+            post_online=fake_post_online,
+            mark_offline=fake_mark_offline,
+        )
+
+    assert online_calls == ["U-OPERATOR"]
+    assert offline_calls == [1]
+
+
+def test_run_socket_mode_skips_status_when_status_user_unset() -> None:
+    """With the operator id unset, no status calls happen and startup is normal."""
+    app = object()
+    runtime_factories = RecordingRuntimeFactories(app=app)
+
+    online_calls: list[str] = []
+    offline_calls: list[int] = []
+
+    def fake_post_online(*, user_id: str) -> None:
+        online_calls.append(user_id)
+
+    def fake_mark_offline() -> None:
+        offline_calls.append(1)
+
+    handler = typing.cast(
+        FakeSocketModeHandler,
+        slack_runtime.run_socket_mode_from_env(
+            VALID_SLACK_ENV,
+            app_factory=runtime_factories.app_factory,
+            socket_mode_handler_factory=(runtime_factories.socket_mode_handler_factory),
+            post_online=fake_post_online,
+            mark_offline=fake_mark_offline,
+        ),
+    )
+
+    assert online_calls == []
+    assert offline_calls == []
+    assert handler.starts == 1
+
+
 def test_main_threads_explicit_interaction_log_path(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: pathlib.Path,
