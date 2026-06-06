@@ -112,16 +112,21 @@ def compose_non_answer_response(
         datasets=non_answer.datasets,
         limitations=(wording.reason,),
     )
-    text = (
+    rendered_trust_summary = render_trust_summary(trust_summary)
+    body = (
         f"I cannot answer safely{adverb} because {reason}\n\n"
-        f"Next step: {wording.next_step}\n\n"
-        f"{render_trust_summary(trust_summary)}"
+        f"Next step: {wording.next_step}"
     )
+    text = f"{body}\n\n{rendered_trust_summary}"
     return contracts.FinalResponse(
         text=text,
         trust_summary=trust_summary,
         response_kind=response_kind,
         non_answer=non_answer,
+        blocks=_render_body_with_trust_blocks(
+            body=body,
+            trust_summary=rendered_trust_summary,
+        ),
     )
 
 
@@ -239,11 +244,27 @@ def _render_answer_blocks(
     table_blocks: tuple[contracts.SlackBlock, ...],
 ) -> tuple[contracts.SlackBlock, ...]:
     return (
+        *_render_body_with_trust_blocks(body=summary, trust_summary=trust_summary),
+        *table_blocks,
+    )
+
+
+def _render_body_with_trust_blocks(
+    *,
+    body: str,
+    trust_summary: str,
+) -> tuple[contracts.SlackBlock, ...]:
+    """Render a body ``section`` plus the Trust Summary ``context`` footer.
+
+    Shared by the answer and Non-Answer paths so both present the Trust Summary
+    in the same small grey ``context`` block (issue #276).
+    """
+    return (
         {
             "type": "section",
             "text": {
                 "type": "plain_text",
-                "text": summary,
+                "text": body,
             },
         },
         {
@@ -255,7 +276,6 @@ def _render_answer_blocks(
                 },
             ],
         },
-        *table_blocks,
     )
 
 

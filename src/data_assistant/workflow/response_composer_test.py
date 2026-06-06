@@ -421,6 +421,103 @@ def test_response_composer_renders_through_injected_wording_provider() -> None:
     assert response.trust_summary.limitations == ("Sentinel reason.",)
 
 
+def test_response_composer_renders_non_answer_as_section_and_context_blocks() -> None:
+    """Non-Answer blocks mirror the answer footer: body section + trust context.
+
+    The answer path renders the body in a ``section`` and the Trust Summary in a
+    small grey ``context`` block. The Non-Answer path must converge on that shape
+    so the Trust Summary is not flattened into one inline section (issue #276).
+    """
+
+    class _SentinelWordingProvider:
+        def render_wording(
+            self,
+            non_answer: contracts.NonAnswer,
+        ) -> non_answer_catalog.NonAnswerWording:
+            del non_answer
+            return non_answer_catalog.NonAnswerWording(
+                reason="Sentinel reason.",
+                next_step="Sentinel step.",
+            )
+
+    response = response_composer.compose_non_answer_response(
+        _non_answer(contracts.NonAnswerReasonCode.UNSUPPORTED_INTENT),
+        wording_provider=_SentinelWordingProvider(),
+    )
+
+    assert response.blocks[0] == {
+        "type": "section",
+        "text": {
+            "type": "plain_text",
+            "text": (
+                "I cannot answer safely because sentinel reason.\n\n"
+                "Next step: Sentinel step."
+            ),
+        },
+    }
+    assert response.blocks[1] == {
+        "type": "context",
+        "elements": [
+            {
+                "type": "plain_text",
+                "text": response_composer.render_trust_summary(
+                    response.trust_summary
+                ),
+            },
+        ],
+    }
+
+
+def test_response_composer_keeps_standalone_pronoun_i_capitalized() -> None:
+    """A reason beginning with the pronoun ``I`` is not lowercased (issue #276).
+
+    The leading-char lowercasing rule must skip the standalone pronoun so the
+    body reads ``because I need …`` rather than ``because i need …``.
+    """
+
+    class _PronounWordingProvider:
+        def render_wording(
+            self,
+            non_answer: contracts.NonAnswer,
+        ) -> non_answer_catalog.NonAnswerWording:
+            del non_answer
+            return non_answer_catalog.NonAnswerWording(
+                reason="I need a time period to answer.",
+                next_step="Add a time period.",
+            )
+
+    response = response_composer.compose_non_answer_response(
+        _non_answer(contracts.NonAnswerReasonCode.MISSING_TIME_SCOPE),
+        wording_provider=_PronounWordingProvider(),
+    )
+
+    assert "because I need" in response.text
+    assert "because i need" not in response.text
+
+
+def test_response_composer_lowercases_non_pronoun_leading_word() -> None:
+    """A non-pronoun leading word still lowercases (guards the ``I`` carve-out)."""
+
+    class _NounWordingProvider:
+        def render_wording(
+            self,
+            non_answer: contracts.NonAnswer,
+        ) -> non_answer_catalog.NonAnswerWording:
+            del non_answer
+            return non_answer_catalog.NonAnswerWording(
+                reason="Inventory data is not approved.",
+                next_step="Pick an approved dataset.",
+            )
+
+    response = response_composer.compose_non_answer_response(
+        _non_answer(contracts.NonAnswerReasonCode.NO_MATCHING_DATASET),
+        wording_provider=_NounWordingProvider(),
+    )
+
+    assert "because inventory data" in response.text
+    assert "because Inventory data" not in response.text
+
+
 def test_response_composer_carries_non_answer_on_final_response() -> None:
     """The Non-Answer is carried on ``FinalResponse.non_answer`` for the log.
 
