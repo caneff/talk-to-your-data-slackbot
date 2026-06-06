@@ -226,8 +226,8 @@ Do not add include_filter or exclude_filter for "customer region" or any other
 available field; the question did not include or exclude a field value.
 
 For "What was monthly revenue in 2026?", return intent "summarize", metric
-"total revenue", calendar_grouping with field "order date" and grain "month",
-and exactly one field_operation:
+"total net revenue", calendar_grouping with field "order date" and grain
+"month", and exactly one field_operation:
 
 - operation "range_filter", field "order date", lower "2026-01-01",
   upper "2026-12-31", values []

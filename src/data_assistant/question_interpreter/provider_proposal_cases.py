@@ -253,7 +253,7 @@ SHARED_PROVIDER_PROPOSAL_CASES: tuple[SharedProviderProposalCase, ...] = (
         name="monthly_revenue_in_2026",
         question="What was monthly revenue in 2026?",
         expected=_summarize(
-            "total revenue",
+            "total net revenue",
             _during("order date", YEAR_2026),
             calendar_grouping=_calendar_month("order date"),
         ),

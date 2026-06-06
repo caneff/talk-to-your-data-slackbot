@@ -102,6 +102,8 @@ def _canonicalize_provider_proposal(proposal: ProviderProposal) -> ProviderPropo
         operation
         for operation in proposal.field_operations
         if not _is_vacuous_field_operation(operation)
+        and not _duplicates_calendar_grouping(operation, proposal)
+        and not _contradicts_all_time_calendar_grouping(operation, proposal)
     )
     updates: dict[str, object] = {}
     if proposal.unknown_metric and proposal.metric_ambiguity:
@@ -124,6 +126,31 @@ def _is_vacuous_field_operation(operation: ProviderFieldOperation) -> bool:
     if operation.operation in {"include_filter", "exclude_filter"}:
         return operation.values == ()
     return False
+
+
+def _duplicates_calendar_grouping(
+    operation: ProviderFieldOperation,
+    proposal: ProviderProposal,
+) -> bool:
+    """Drop legacy date group_by when calendar_grouping already carries it."""
+    return (
+        proposal.calendar_grouping is not None
+        and operation.operation == "group_by"
+        and operation.field == proposal.calendar_grouping.field
+    )
+
+
+def _contradicts_all_time_calendar_grouping(
+    operation: ProviderFieldOperation,
+    proposal: ProviderProposal,
+) -> bool:
+    """Drop provider-invented date bounds for all-time calendar bucket asks."""
+    return (
+        proposal.calendar_grouping is not None
+        and proposal.all_time
+        and operation.operation == "range_filter"
+        and operation.field == proposal.calendar_grouping.field
+    )
 
 
 def _build_openai_input(

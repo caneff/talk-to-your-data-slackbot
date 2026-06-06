@@ -164,6 +164,24 @@ def test_run_provider_proposal_eval_records_mismatch_failure_and_streams_payload
     assert record["actual"]["field_operations"][0]["operation"] == "group_by"
 
 
+def test_compare_provider_proposal_meaning_detects_calendar_grouping_mismatch() -> None:
+    expected = test_support.question_frame_proposal(
+        field_operations=(),
+        calendar_grouping=question_interpreter.ProviderCalendarGrouping(
+            field="order date",
+            grain="month",
+        ),
+    )
+    actual = test_support.question_frame_proposal(field_operations=())
+
+    reasons = proposal_eval.compare_provider_proposal_meaning(
+        expected=expected,
+        actual=actual,
+    )
+
+    assert any(reason.startswith("calendar_grouping:") for reason in reasons)
+
+
 def test_run_provider_proposal_eval_records_provider_failure_reason_and_payload() -> (
     None
 ):

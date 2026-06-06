@@ -21,14 +21,16 @@ class ProviderFieldOperation(pydantic.BaseModel):
         "exclude_filter",
     ] = pydantic.Field(
         description=(
-            "Use group_by for requested grouping, range_filter for explicit "
-            "calendar months, explicit date ranges, or an as_of-anchored "
-            "relative window (set source accordingly), include_filter for exact "
-            "dates or explicitly included dimension values, and exclude_filter "
-            "only for explicitly excluded values with non-empty values. Do not "
-            "emit operations for fields that are merely available in "
-            "semantic_layer_context, and never use include_filter or "
-            "exclude_filter with empty values."
+            "Use group_by only for ordinary non-calendar grouping such as by "
+            "region, channel, or category. Never use group_by for calendar "
+            "buckets such as monthly, each month, or by month; those belong in "
+            "calendar_grouping. Use range_filter for explicit calendar months, "
+            "explicit date ranges, or an as_of-anchored relative window (set "
+            "source accordingly), include_filter for exact dates or explicitly "
+            "included dimension values, and exclude_filter only for explicitly "
+            "excluded values with non-empty values. Do not emit operations for "
+            "fields that are merely available in semantic_layer_context, and "
+            "never use include_filter or exclude_filter with empty values."
         ),
     )
     field: str = pydantic.Field(
@@ -172,18 +174,23 @@ class ProviderProposal(pydantic.BaseModel):
     )
     field_operations: tuple[ProviderFieldOperation, ...] = pydantic.Field(
         description=(
-            "Every explicit grouping, date constraint, and filter from the "
-            "Data Question, represented with Semantic Field labels. Do not add "
-            "operations for fields that are merely available in context or "
-            "examples. If the question omits time, omit date operations."
+            "Every explicit ordinary non-calendar grouping, date constraint, "
+            "and filter from the Data Question, represented with Semantic Field "
+            "labels. Exclude calendar bucket requests such as monthly, each "
+            "month, or by month; represent those with calendar_grouping instead "
+            "of group_by. Do not add operations for fields that are merely "
+            "available in context or examples. If the question omits time, omit "
+            "date operations."
         ),
     )
     calendar_grouping: ProviderCalendarGrouping | None = pydantic.Field(
         default=None,
         description=(
             "Optional first-class calendar grouping request, separate from "
-            "field_operations. Use only when the question asks for calendar "
-            "buckets such as each month."
+            "field_operations. Required when the question asks for calendar "
+            "buckets such as monthly, each month, or by month. Set field to the "
+            "relevant date Semantic Field label and grain to month. Do not also "
+            "emit a group_by field_operation for that calendar bucket."
         ),
     )
     limit: int | None = pydantic.Field(

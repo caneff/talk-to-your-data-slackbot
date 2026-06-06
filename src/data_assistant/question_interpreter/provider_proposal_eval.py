@@ -156,6 +156,12 @@ def compare_provider_proposal_meaning(
         expected=expected.all_time,
         actual=actual.all_time,
     )
+    _append_scalar_mismatch(
+        mismatches=mismatches,
+        field="calendar_grouping",
+        expected=expected.calendar_grouping,
+        actual=actual.calendar_grouping,
+    )
     _append_field_operations_mismatches(
         mismatches=mismatches,
         expected=expected.field_operations,

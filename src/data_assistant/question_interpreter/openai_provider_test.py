@@ -330,6 +330,85 @@ def test_openai_provider_strips_vacuous_field_operations() -> None:
     )
 
 
+def test_openai_provider_strips_redundant_calendar_grouping_operations() -> None:
+    class FakeParsedResponse:
+        output_parsed = question_interpreter.ProviderProposal(
+            intent="summarize",
+            metric="total net revenue",
+            calendar_grouping=question_interpreter.ProviderCalendarGrouping(
+                field="order date",
+                grain="month",
+            ),
+            field_operations=(
+                question_interpreter.ProviderFieldOperation(
+                    operation="range_filter",
+                    field="order date",
+                    lower="2026-01-01",
+                    upper="2026-12-31",
+                ),
+                question_interpreter.ProviderFieldOperation(
+                    operation="group_by",
+                    field="order date",
+                ),
+            ),
+        )
+
+    provider = _openai_provider_returning(FakeParsedResponse())
+
+    result = provider.propose_question_frame(
+        question="What was monthly revenue in 2026?",
+        semantic_layer_context={"datasets": []},
+    )
+
+    assert result == FakeParsedResponse.output_parsed.model_copy(
+        update={
+            "field_operations": (
+                question_interpreter.ProviderFieldOperation(
+                    operation="range_filter",
+                    field="order date",
+                    lower="2026-01-01",
+                    upper="2026-12-31",
+                ),
+            )
+        }
+    )
+
+
+def test_openai_provider_strips_all_time_calendar_grouping_date_bounds() -> None:
+    class FakeParsedResponse:
+        output_parsed = question_interpreter.ProviderProposal(
+            intent="summarize",
+            metric="store count",
+            all_time=True,
+            calendar_grouping=question_interpreter.ProviderCalendarGrouping(
+                field="store opened date",
+                grain="month",
+            ),
+            field_operations=(
+                question_interpreter.ProviderFieldOperation(
+                    operation="range_filter",
+                    field="store opened date",
+                    upper="2026-06-30",
+                ),
+                question_interpreter.ProviderFieldOperation(
+                    operation="group_by",
+                    field="store opened date",
+                ),
+            ),
+        )
+
+    provider = _openai_provider_returning(FakeParsedResponse())
+
+    result = provider.propose_question_frame(
+        question="How many stores opened each month for all time?",
+        semantic_layer_context={"datasets": []},
+    )
+
+    assert result == FakeParsedResponse.output_parsed.model_copy(
+        update={"field_operations": ()}
+    )
+
+
 def test_openai_provider_keeps_relative_range_filter_with_null_bounds() -> None:
     # A source="relative" range_filter carries unit+count and has null bounds by
     # design (ADR-0026); canonicalization must NOT strip it as vacuous, or the
@@ -403,6 +482,33 @@ def test_openai_provider_schema_rejects_empty_implicit_filters() -> None:
     assert (
         "never emit include_filter or exclude_filter with empty values"
         in (values_schema["description"])
+    )
+
+
+def test_openai_provider_schema_guides_calendar_grouping_out_of_field_operations() -> (
+    None
+):
+    response_schema = question_interpreter.ProviderProposal.model_json_schema()
+    field_operation_schema = response_schema["$defs"]["ProviderFieldOperation"]
+    field_operations_schema = response_schema["properties"]["field_operations"]
+    calendar_grouping_schema = response_schema["properties"]["calendar_grouping"]
+    operation_schema = field_operation_schema["properties"]["operation"]
+
+    assert "ordinary non-calendar grouping" in operation_schema["description"]
+    assert "Never use group_by for calendar buckets" in operation_schema["description"]
+    assert "calendar_grouping" in operation_schema["description"]
+    assert "Exclude calendar bucket requests" in field_operations_schema["description"]
+    assert (
+        "represent those with calendar_grouping instead"
+        in (field_operations_schema["description"])
+    )
+    assert (
+        "Required when the question asks for calendar buckets"
+        in (calendar_grouping_schema["description"])
+    )
+    assert (
+        "Do not also emit a group_by field_operation"
+        in (calendar_grouping_schema["description"])
     )
 
 
