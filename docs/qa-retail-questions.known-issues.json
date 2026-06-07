@@ -1,4 +1,11 @@
 {
   "version": 1,
-  "questions": {}
+  "questions": {
+    "inventory-stockout-days-by-subcategory-april-2026": [
+      {
+        "issue_number": 295,
+        "flag_category": "investigate"
+      }
+    ]
+  }
 }
