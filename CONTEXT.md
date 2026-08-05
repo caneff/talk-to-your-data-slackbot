@@ -18,14 +18,15 @@ _Avoid_: Query, prompt, report request
 
 **Supported Intent**:
 A type of **Data Question** the **Data Assistant** is expected to handle in v1,
-including summarize and rank.
+including summarize, rank, and catalog discovery.
 _Avoid_: Capability, command, query type
 
 **Deferred Intent**:
 A type of **Data Question** intentionally left out of v1, including compare,
 explain, list top or bottom results, trend, forecast, prescribe, automated
 root-cause analysis, background anomaly detection, and data-availability or
-coverage lookups (which periods or dimensions have data).
+coverage lookups (which periods or dimensions have data). A **Catalog Discovery
+Request** is not a **Deferred Intent**.
 _Avoid_: Unsupported feature, backlog item, advanced query
 
 **Unsupported Intent**:
@@ -114,6 +115,12 @@ The discoverable registry inside the **Semantic Layer** that the **Data
 Assistant** uses to choose which **Curated Datasets** can answer a **Data
 Question**.
 _Avoid_: Table list, data dictionary, source registry
+
+**Catalog Discovery Request**:
+A team member's request to learn which caller-accessible **Curated Datasets**
+and example **Data Questions** the **Data Assistant** can support, without
+reading **Prepared Data** or reporting coverage inside the data.
+_Avoid_: Data availability lookup, schema browser, list all tables
 
 **Workflow Orchestrator**:
 The coordinator that moves a **Data Question** through five top-level phases:
